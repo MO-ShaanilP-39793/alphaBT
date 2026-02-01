@@ -1,0 +1,282 @@
+# =============================================================================
+# OPTUNA HYPERPARAMETER TUNING CONFIGURATION
+# =============================================================================
+# This file defines the search space for backtesting strategy optimization.
+# Parameters are either fixed (passed through) or tunable (sampled by Optuna).
+
+# =============================================================================
+# FIXED PARAMETERS (not sampled)
+# =============================================================================
+fixed:
+  # Data paths
+  # Input data format depends on run_stock_selection setting:
+  # - If run_stock_selection: true  → csv/parquet with quarter, co_name, prob, and either volatility or category
+  # - If run_stock_selection: false → csv/parquet with quarter, co_name, stock_weight, and optionally category
+  input_data_path: "../data/dummy_data.csv"
+  # csv/parquet with date, co_name, open, high, low, close
+  price_data_path: "../data/ohlcv2.parquet"
+  # csv/parquet with date, value
+  index_data_path: "../data/index_data_validated.csv"
+  
+  # Quarter range for tuning (both inclusive)
+  # These define the validation period over which the objective value is computed
+  first_quarter: 202202
+  last_quarter: 202405
+  
+  # Specify if stock selection is required
+  run_stock_selection: true
+  
+  # Report generation (keep disabled during tuning for speed)
+  generate_analysis_report: false
+  generate_detailed_report: false
+
+# =============================================================================
+# SEARCH SPACE DEFINITION
+# =============================================================================
+# Each parameter specifies its type and either choices (categorical) or 
+# low/high bounds (int/float).
+#
+# Types:
+#   - categorical: discrete choices (use 'choices' list)
+#   - int: integer range (use 'low' and 'high')
+#   - float: float range (use 'low', 'high', and optionally 'step')
+
+search_space:
+  # -------------------------------------------------------------------------
+  # Stock Selection Parameters
+  # -------------------------------------------------------------------------
+  
+  # Selection type: 'category_based' selects from volatility/mcap buckets,
+  # 'top_k' simply selects top k stocks by probability or risk-adjusted score
+  selection_type:
+    type: categorical
+    choices: ['category_based', 'top_k']
+  
+  # Category scheme (used by category_based selection and for TP/SL lookup)
+  category_scheme:
+    type: categorical
+    choices: ['volatility', 'mcap']
+  
+  # Number of stocks to select per category (only used when selection_type: 'category_based')
+  # Format: [cat1, cat2, cat3] where categories depend on category_scheme:
+  #   volatility: [high_vol, medium_vol, low_vol]
+  #   mcap: [largecap, midcap, smallcap]
+  category_counts:
+    type: categorical
+    choices:
+      - [10, 10, 10]
+      - [5, 10, 15]
+      - [15, 15, 15]
+      - [10, 15, 20]
+      - [20, 20, 20]
+  
+  # Portfolio weight allocation per category (only used when selection_type: 'category_based')
+  category_weights:
+    type: categorical
+    choices:
+      - [0.33, 0.33, 0.34]
+      - [0.20, 0.40, 0.40]
+      - [0.40, 0.40, 0.20]
+      - [0.25, 0.50, 0.25]
+      - [0.50, 0.30, 0.20]
+  
+  # Stock ranking method
+  selection_method:
+    type: categorical
+    choices: ['probability', 'risk_adjusted']
+  
+  # Minimum probability threshold (null = no filter)
+  min_prob_threshold:
+    type: categorical
+    choices: [null, 0.45, 0.50, 0.55, 0.60]
+  
+  # -------------------------------------------------------------------------
+  # TP/SL Configuration
+  # -------------------------------------------------------------------------
+  # Enable/disable take profit and stop loss independently
+  tp_enabled:
+    type: categorical
+    choices: [true, false]
+  
+  sl_enabled:
+    type: categorical
+    choices: [true, false]
+  
+  # TP/SL calculation mode
+  # - fixed: category-based thresholds 
+  # - flat: uniform percentage for all stocks
+  # - atr: ATR-based dynamic thresholds
+  # - pivot: pivot point based thresholds
+  tpsl_mode:
+    type: categorical
+    choices: ['fixed', 'flat', 'atr', 'pivot']
+
+# =============================================================================
+# SELECTION TYPE-SPECIFIC SEARCH SPACES
+# =============================================================================
+# These are only sampled when the corresponding selection_type is selected.
+
+# Top-k selection parameters (sampled when selection_type: 'top_k')
+top_k:
+  # Number of top stocks to select per quarter
+  k:
+    type: int
+    low: 10
+    high: 50
+  
+  # Weighting scheme for selected stocks
+  weighting_scheme:
+    type: categorical
+    choices: ['equal']  # Currently only 'equal' supported
+
+# =============================================================================
+# TPSL MODE-SPECIFIC SEARCH SPACES
+# =============================================================================
+# These are only sampled when the corresponding tpsl_mode is selected.
+
+# Fixed TP/SL thresholds (sampled when tpsl_mode: 'fixed')
+# Format: [cat1, cat2, cat3] matching category_scheme order
+fixed_tpsl:
+  tp_thresholds:
+    type: categorical
+    choices:
+      - [0.10, 0.05, 0.02]   
+      - [0.08, 0.06, 0.04]   
+      - [0.12, 0.08, 0.05]   
+      - [0.06, 0.04, 0.03]   
+      - [0.15, 0.10, 0.05]
+  
+  sl_thresholds:
+    type: categorical
+    choices:
+      - [0.10, 0.10, 0.10] 
+      - [0.08, 0.06, 0.04] 
+      - [0.12, 0.08, 0.05] 
+      - [0.05, 0.05, 0.05] 
+      - [0.15, 0.10, 0.08] 
+
+# Flat TP/SL (sampled when tpsl_mode: 'flat')
+# Single uniform percentage applied to ALL stocks (no category dependency)
+flat_tpsl:
+  tp:
+    type: float
+    low: 0.02
+    high: 0.15
+    step: 0.01
+  
+  sl:
+    type: float
+    low: 0.02
+    high: 0.15
+    step: 0.01
+
+# ATR-based TP/SL (sampled when tpsl_mode: 'atr')
+atr_tpsl:
+  period:
+    type: int
+    low: 7
+    high: 21
+  
+  tp_multiplier:
+    type: float
+    low: 1.5
+    high: 3.5
+  
+  sl_multiplier:
+    type: float
+    low: 1.0
+    high: 2.5
+
+# Pivot-based TP/SL (sampled when tpsl_mode: 'pivot')
+pivot_tpsl:
+  lookback_days:
+    type: int
+    low: 30
+    high: 90
+  
+  tp_level:
+    type: categorical
+    choices: ['R1', 'R2', 'R3']
+  
+  sl_level:
+    type: categorical
+    choices: ['S1', 'S2', 'S3']
+
+# =============================================================================
+# INDEX EXIT CONFIGURATION
+# =============================================================================
+# Index-guided exit strategy parameters
+
+index_exit:
+  # Regime filter: exit when index is below moving average
+  regime_filter_enabled:
+    type: categorical
+    choices: [true, false]
+  
+  # Sub-parameters (sampled when regime_filter_enabled is true)
+  regime_ma_period:
+    type: int
+    low: 10
+    high: 50
+  
+  regime_exit_threshold:
+    type: float
+    low: -0.05
+    high: -0.01
+  
+  # Volatility adjustment: adjust TP/SL based on market volatility
+  vol_adjustment_enabled:
+    type: categorical
+    choices: [true, false]
+  
+  # Sub-parameters (sampled when vol_adjustment_enabled is true)
+  vol_lookback:
+    type: int
+    low: 10
+    high: 30
+  
+  high_vol_threshold:
+    type: float
+    low: 0.20
+    high: 0.35
+  
+  low_vol_threshold:
+    type: float
+    low: 0.10
+    high: 0.20
+  
+  high_vol_multiplier:
+    type: float
+    low: 1.2
+    high: 2.0
+  
+  low_vol_multiplier:
+    type: float
+    low: 0.6
+    high: 0.9
+
+# =============================================================================
+# OPTUNA SETTINGS
+# =============================================================================
+optuna:
+  # Study identifier
+  study_name: "backtest_calmar_optimization"
+  
+  # Number of trials
+  n_trials: 100
+  
+  # Sampler algorithm: TPE, Random, CmaEs (Covariance matrix adaptation evolution strategy)
+  sampler: "TPE"
+  
+  # Optimization direction (maximize Calmar ratio)
+  direction: "maximize"
+  
+  # Resume existing study if it exists, or start fresh
+  load_if_exists: true
+  
+  # Cap Calmar ratio to avoid inflated values from tiny drawdowns
+  # Values above this will be clamped
+  calmar_cap: 10.0
+  
+  # Penalty value for failed trials (no trades, errors, etc.)
+  failure_penalty: -999.0

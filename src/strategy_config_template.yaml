@@ -1,0 +1,183 @@
+# Specify paths to DATA:
+
+# Input data format depends on run_stock_selection setting:
+# - If run_stock_selection: true  → csv/parquet with quarter, co_name, prob, and either volatility or category
+# - If run_stock_selection: false → csv/parquet with quarter, co_name, stock_weight, and optionally category
+input_data_path: "../data/dummy_data.csv"
+# csv/parquet with date, co_name, open, high, low, close
+price_data_path: "../data/ohlcv2.parquet"
+# csv/parquet with date, value
+index_data_path: "../data/index_data_validated.csv"
+
+# Specify the first and last quarters (both are inclusive):
+# set both to null if all available data is to be used
+first_quarter: 202402
+last_quarter: 202405
+
+# =============================================================================
+# STOCK SELECTION CONFIGURATION
+# =============================================================================
+
+# Whether to run stock selection or use preselected portfolio
+# - true: Run stock selection (input needs: quarter, co_name, prob, volatility/category)
+# - false: Use preselected portfolio (input needs: quarter, co_name, stock_weight, and optionally category)
+run_stock_selection: true
+
+# Selection type (only used when run_stock_selection: true):
+# - 'category_based': Select stocks from volatility/mcap categories (original behavior)
+# - 'top_k': Simply select top k stocks by probability or risk-adjusted score
+selection_type: 'category_based'
+
+# Specify category scheme (how to bucket stocks before selection from each bucket)
+# Used when selection_type is 'category_based'
+# Also used for TP/SL threshold lookup when tpsl_mode is 'fixed' and category column exists
+category_scheme: 'volatility'  # choose from 'volatility' or 'mcap'
+
+# -----------------------------------------------------------------------------
+# Category-based selection config (used when selection_type: 'category_based')
+# -----------------------------------------------------------------------------
+
+# Specify how many stocks to pick from each category
+# and the weight for each category
+# Format the counts and weights as follows:
+# either [high_volatility, medium_volatility, low_volatility] or 
+# [largecap, midcap, smallcap]
+category_counts: [10, 10, 10]  
+category_weights: [0.2, 0.4, 0.4]
+
+# -----------------------------------------------------------------------------
+# Top-k selection config (used when selection_type: 'top_k')
+# -----------------------------------------------------------------------------
+
+top_k_config:
+  k: 30                        # Number of top stocks to select per quarter
+  weighting_scheme: 'equal'    # How to weight stocks ('equal' = 1/k weight each)
+
+# -----------------------------------------------------------------------------
+# Common selection options (used by both selection types)
+# -----------------------------------------------------------------------------
+
+# Stock selection method:
+# - 'probability': Rank by ML model probability
+# - 'risk_adjusted': Rank by probability/volatility (better risk/return tradeoff)
+selection_method: 'probability'
+
+# Minimum probability threshold (optional):
+# Only consider stocks with probability >= this value
+# Set to null to disable filtering (default)
+min_prob_threshold: null  # e.g., 0.5 to only consider stocks with >50% probability
+
+# =============================================================================
+# TP/SL MODE CONFIGURATION
+# =============================================================================
+
+# Enable/disable Take Profit and Stop Loss independently
+# Set both to false for a "hold until quarter end" strategy
+tp_enabled: true    # Set to false to disable take profit exits
+sl_enabled: true    # Set to false to disable stop loss exits
+
+# TP/SL calculation mode (only used when tp_enabled or sl_enabled is true):
+# - 'fixed': Static percentage per category (requires category column or default_tpsl)
+# - 'flat': Single percentage for all stocks (no category required - simplest)
+# - 'atr': Thresholds based on Average True Range (volatility-adaptive)
+# - 'pivot': Thresholds based on support/resistance pivot points
+tpsl_mode: 'fixed'
+
+# ATR-based configuration (used when tpsl_mode: 'atr')
+# TP = entry_price + (tp_multiplier × ATR)
+# SL = entry_price - (sl_multiplier × ATR)
+atr_config:
+  period: 14            # Number of days for ATR calculation
+  tp_multiplier: 2.0    # Multiplier for take profit distance
+  sl_multiplier: 1.5    # Multiplier for stop loss distance
+
+# Pivot-based configuration (used when tpsl_mode: 'pivot')
+# Uses classic pivot point formula with resistance (R1-R3) and support (S1-S3) levels
+pivot_config:
+  lookback_days: 60     # Days of price history for pivot calculation
+  tp_level: 'R1'        # Which resistance level for TP: 'R1', 'R2', or 'R3'
+  sl_level: 'S1'        # Which support level for SL: 'S1', 'S2', or 'S3'
+
+# Flat configuration (used when tpsl_mode: 'flat')
+# Same threshold for ALL stocks regardless of category - simplest mode
+flat_config:
+  tp_pct: 0.05          # 5% take profit for all stocks
+  sl_pct: 0.05          # 5% stop loss for all stocks
+
+# =============================================================================
+# INDEX-GUIDED EXIT CONFIGURATION
+# =============================================================================
+
+# Use market index information to guide exit decisions
+index_exit:
+  # Regime filter: Exit positions when market is in downturn
+  # (index falls below its moving average)
+  regime_filter:
+    enabled: false      # Set to true to enable regime-based exits
+    ma_period: 20       # Moving average period (trading days)
+    exit_threshold: -0.02  # Exit if index is this % below MA (e.g., -0.02 = 2% below)
+  
+  # Volatility adjustment: Widen/tighten TP/SL based on market volatility
+  # In high volatility, widen thresholds to avoid premature exits
+  # In low volatility, tighten thresholds to capture smaller moves
+  vol_adjustment:
+    enabled: false      # Set to true to enable volatility adjustment
+    lookback: 20        # Days to measure index volatility
+    high_vol_threshold: 0.25   # Annualized vol above this is "high" (25%)
+    low_vol_threshold: 0.15    # Annualized vol below this is "low" (15%)
+    high_vol_multiplier: 1.5   # Widen TP/SL by 50% in high vol markets
+    low_vol_multiplier: 0.8    # Tighten TP/SL by 20% in low vol markets
+
+# =============================================================================
+# FIXED TP/SL THRESHOLDS (used when tpsl_mode: 'fixed')
+# =============================================================================
+
+# Default TP/SL thresholds used when:
+# - run_stock_selection: false AND
+# - category column is not provided in input AND
+# - tpsl_mode: 'fixed'
+default_tpsl:
+  tp_pct: 0.05    # 5% take profit
+  sl_pct: 0.05    # 5% stop loss
+
+# Set thresholds for Take Profit for each category
+TP_CONFIG:
+  volatility:
+    high_volatility: 0.10
+    medium_volatility: 0.05
+    low_volatility: 0.02
+  mcap:
+    largecap: 0.04
+    midcap: 0.06
+    smallcap: 0.08
+
+# Set thresholds for Stop Loss for each category
+SL_CONFIG:
+  volatility:
+    high_volatility: 0.10
+    medium_volatility: 0.10
+    low_volatility: 0.10
+  mcap:
+    largecap: 0.02
+    midcap: 0.03
+    smallcap: 0.04
+
+# =============================================================================
+# ANALYSIS REPORT CONFIGURATION
+# =============================================================================
+
+# Generate comprehensive analysis report after backtest completes
+# Creates an Excel file with multiple sheets and a plots folder
+generate_analysis_report: true
+
+# Generate detailed MO-style summary statistics report
+# Creates an Excel file with periodic, rolling, calendar year returns,
+# regime analysis, and embedded charts
+generate_detailed_report: true
+
+# Sub-periods for detailed report analysis (list of [start_year, end_year] pairs)
+# Each sub-period will get its own performance analysis section
+# Set to null or empty list to skip sub-period analysis
+detailed_report_sub_periods:
+  - [2020, 2022]
+  - [2023, 2025]
