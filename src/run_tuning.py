@@ -73,7 +73,7 @@ class DataCache:
         print("Data loading complete.\n")
 
 
-def create_objective(tuning_config: dict, data_cache: DataCache):
+def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnings: bool = True):
     """
     Create the objective function for Optuna optimization.
     
@@ -83,6 +83,7 @@ def create_objective(tuning_config: dict, data_cache: DataCache):
     Parameters:
         tuning_config: Full tuning configuration
         data_cache: Cached data files
+        suppress_warnings: If True, suppress warnings during trials (default: True)
         
     Returns:
         Objective function for Optuna
@@ -97,62 +98,67 @@ def create_objective(tuning_config: dict, data_cache: DataCache):
         Objective function that samples parameters, runs backtest, 
         and returns Calmar ratio.
         """
-        try:
-            # 1. Sample parameters from search space
-            sampled_params = sample_parameters(trial, tuning_config)
+        # Suppress warnings during trial execution to avoid cluttering output
+        with warnings.catch_warnings():
+            if suppress_warnings:
+                warnings.simplefilter("ignore")
             
-            # 2. Build full config
-            config = build_config(fixed_config, sampled_params)
-            
-            # 3. Run backtest core
-            results = backtest_core(
-                config=config,
-                input_data=data_cache.input_data,
-                price_data=data_cache.price_data,
-                index_data=data_cache.index_data
-            )
-            
-            # 4. Compute and return Calmar ratio
-            if results is None:
-                return failure_penalty
-            
-            daily_pf_values = results.get('daily_pf_values')
-            if daily_pf_values is None or daily_pf_values.empty:
-                return failure_penalty
-            
-            # Prepare daily_pf in expected format
-            daily_pf = daily_pf_values.reset_index()
-            daily_pf.columns = ['date', 'portfolio_value', 'quarter']
-            
-            calmar = compute_calmar_ratio(daily_pf, cap=calmar_cap)
-            
-            if calmar is None:
-                return failure_penalty
-            
-            # Store additional metrics as trial user attributes for analysis
-            trade_results = results.get('trade_results')
-            if trade_results is not None and not trade_results.empty:
-                trial.set_user_attr('n_trades', len(trade_results))
+            try:
+                # 1. Sample parameters from search space
+                sampled_params = sample_parameters(trial, tuning_config)
                 
-                # Win rate
-                if 'stock_return' in trade_results.columns:
-                    valid_returns = trade_results['stock_return'].dropna()
-                    if len(valid_returns) > 0:
-                        win_rate = (valid_returns > 0).mean()
-                        trial.set_user_attr('win_rate', round(win_rate, 4))
+                # 2. Build full config
+                config = build_config(fixed_config, sampled_params)
                 
-                # Total return
-                initial_val = daily_pf['portfolio_value'].iloc[0]
-                final_val = daily_pf['portfolio_value'].iloc[-1]
-                total_return = (final_val - initial_val) / initial_val
-                trial.set_user_attr('total_return', round(total_return, 4))
-            
-            return calmar
-            
-        except Exception as e:
-            # Log error but don't crash the optimization
-            warnings.warn(f"Trial {trial.number} failed with error: {str(e)}")
-            return failure_penalty
+                # 3. Run backtest core
+                results = backtest_core(
+                    config=config,
+                    input_data=data_cache.input_data,
+                    price_data=data_cache.price_data,
+                    index_data=data_cache.index_data
+                )
+                
+                # 4. Compute and return Calmar ratio
+                if results is None:
+                    return failure_penalty
+                
+                daily_pf_values = results.get('daily_pf_values')
+                if daily_pf_values is None or daily_pf_values.empty:
+                    return failure_penalty
+                
+                # Prepare daily_pf in expected format
+                daily_pf = daily_pf_values.reset_index()
+                daily_pf.columns = ['date', 'portfolio_value', 'quarter']
+                
+                calmar = compute_calmar_ratio(daily_pf, cap=calmar_cap)
+                
+                if calmar is None:
+                    return failure_penalty
+                
+                # Store additional metrics as trial user attributes for analysis
+                trade_results = results.get('trade_results')
+                if trade_results is not None and not trade_results.empty:
+                    trial.set_user_attr('n_trades', len(trade_results))
+                    
+                    # Win rate
+                    if 'stock_return' in trade_results.columns:
+                        valid_returns = trade_results['stock_return'].dropna()
+                        if len(valid_returns) > 0:
+                            win_rate = (valid_returns > 0).mean()
+                            trial.set_user_attr('win_rate', round(win_rate, 4))
+                    
+                    # Total return
+                    initial_val = daily_pf['portfolio_value'].iloc[0]
+                    final_val = daily_pf['portfolio_value'].iloc[-1]
+                    total_return = (final_val - initial_val) / initial_val
+                    trial.set_user_attr('total_return', round(total_return, 4))
+                
+                return calmar
+                
+            except Exception as e:
+                # Log error but don't crash the optimization
+                warnings.warn(f"Trial {trial.number} failed with error: {str(e)}")
+                return failure_penalty
     
     return objective
 
