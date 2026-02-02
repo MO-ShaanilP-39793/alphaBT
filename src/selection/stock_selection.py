@@ -351,3 +351,153 @@ def select_and_weight_stocks_mcap(
         if selection_method == 'risk_adjusted':
             return pd.DataFrame(columns=['quarter', 'co_name', 'cat', 'cat_weight', 'risk_adj_score'])
         return pd.DataFrame(columns=['quarter', 'co_name', 'cat', 'cat_weight'])
+
+
+# =============================================================================
+# PRICE DATA VALIDATION FUNCTIONS
+# =============================================================================
+
+def get_entry_start_date(quarter):
+    """
+    Get the entry search start date for a quarter.
+    
+    This mirrors the logic in backtest/tpsl.py get_date_params().
+    Entry price is calculated as the average of the first 3 trading days
+    starting from this date.
+    
+    Parameters:
+        quarter: Quarter in YYYYMM format (int or str), e.g., 202402
+        
+    Returns:
+        pd.Timestamp of the entry search start date
+    """
+    quarter_str = str(quarter)
+    year = int(quarter_str[:4])
+    mm = int(quarter_str[4:])
+    
+    if mm == 2:  # Feb quarter: entry starts Feb 15
+        return pd.Timestamp(year, 2, 15)
+    elif mm == 5:  # May quarter: entry starts May 31
+        return pd.Timestamp(year, 5, 31)
+    elif mm == 8:  # Aug quarter: entry starts Aug 15
+        return pd.Timestamp(year, 8, 15)
+    elif mm == 11:  # Nov quarter: entry starts Nov 15
+        return pd.Timestamp(year, 11, 15)
+    else:
+        raise ValueError(f"Invalid quarter month: {mm}. Expected 2, 5, 8, or 11.")
+
+
+def validate_price_data_coverage(input_data, price_data, first_quarter=None, last_quarter=None):
+    """
+    Identify stock-quarter combinations with insufficient price data for trading.
+    
+    A stock-quarter is considered invalid if:
+    1. There are fewer than 3 trading days available from the entry start date
+    2. Any of the first 3 trading days have NaN close prices
+    
+    Parameters:
+        input_data: DataFrame with stocks to validate (must have 'quarter', 'co_name')
+        price_data: DataFrame with OHLCV data (must have 'date', 'co_name', 'close')
+        first_quarter: Start quarter (inclusive). If None, uses min quarter in input_data.
+        last_quarter: End quarter (inclusive). If None, uses max quarter in input_data.
+    
+    Returns:
+        DataFrame with columns: [quarter, co_name, entry_start_date, issue, detail]
+        Empty DataFrame if no issues found.
+    """
+    # Ensure date column is datetime
+    price_data = price_data.copy()
+    price_data['date'] = pd.to_datetime(price_data['date'])
+    
+    # Determine quarter range
+    if first_quarter is None:
+        first_quarter = input_data['quarter'].min()
+    if last_quarter is None:
+        last_quarter = input_data['quarter'].max()
+    
+    # Filter input data to quarter range
+    filtered_input = input_data[
+        (input_data['quarter'] >= first_quarter) & 
+        (input_data['quarter'] <= last_quarter)
+    ]
+    
+    issues = []
+    
+    # Get unique stock-quarter combinations
+    stock_quarters = filtered_input[['quarter', 'co_name']].drop_duplicates()
+    
+    for _, row in stock_quarters.iterrows():
+        quarter = row['quarter']
+        stock = row['co_name']
+        
+        entry_start = get_entry_start_date(quarter)
+        
+        # Get price data for this stock from entry_start onwards
+        stock_prices = price_data[
+            (price_data['co_name'] == stock) & 
+            (price_data['date'] >= entry_start)
+        ].sort_values('date')
+        
+        # Check 1: Enough trading days?
+        if len(stock_prices) < 3:
+            issues.append({
+                'quarter': quarter,
+                'co_name': stock,
+                'entry_start_date': entry_start.strftime('%Y-%m-%d'),
+                'issue': 'insufficient_trading_days',
+                'detail': f'Found {len(stock_prices)} days, need at least 3'
+            })
+            continue
+        
+        # Check 2: Are the first 3 days' close prices valid (non-NaN)?
+        entry_closes = stock_prices.iloc[:3]['close']
+        nan_count = entry_closes.isna().sum()
+        if nan_count > 0:
+            issues.append({
+                'quarter': quarter,
+                'co_name': stock,
+                'entry_start_date': entry_start.strftime('%Y-%m-%d'),
+                'issue': 'nan_close_price',
+                'detail': f'{nan_count}/3 entry days have NaN close price'
+            })
+    
+    return pd.DataFrame(issues)
+
+
+def filter_tradeable_stocks(input_data, price_data, first_quarter=None, last_quarter=None):
+    """
+    Remove stock-quarter combinations that cannot be traded due to price data issues.
+    
+    This function validates price data coverage and filters out problematic
+    stock-quarter combinations from the input data.
+    
+    Parameters:
+        input_data: DataFrame with candidate stocks (must have 'quarter', 'co_name')
+        price_data: DataFrame with OHLCV data (must have 'date', 'co_name', 'close')
+        first_quarter: Start quarter (inclusive). If None, uses min quarter in input_data.
+        last_quarter: End quarter (inclusive). If None, uses max quarter in input_data.
+    
+    Returns:
+        Tuple of (filtered_input_data, issues_df):
+        - filtered_input_data: input_data with problematic rows removed
+        - issues_df: DataFrame describing what was filtered and why
+    """
+    # Get issues
+    issues_df = validate_price_data_coverage(
+        input_data, price_data, first_quarter, last_quarter
+    )
+    
+    if issues_df.empty:
+        return input_data.copy(), issues_df
+    
+    # Create a set of (quarter, co_name) tuples to filter out
+    invalid_pairs = set(zip(issues_df['quarter'], issues_df['co_name']))
+    
+    # Filter out invalid stock-quarter combinations
+    mask = input_data.apply(
+        lambda row: (row['quarter'], row['co_name']) not in invalid_pairs, 
+        axis=1
+    )
+    filtered_data = input_data[mask].copy()
+    
+    return filtered_data, issues_df

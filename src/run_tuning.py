@@ -38,6 +38,11 @@ from backtest_strategy import (
     backtest_core,
 )
 
+from selection import (
+    filter_tradeable_stocks,
+    validate_price_data_coverage,
+)
+
 
 class DataCache:
     """
@@ -110,12 +115,13 @@ def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnin
                 # 2. Build full config
                 config = build_config(fixed_config, sampled_params)
                 
-                # 3. Run backtest core
+                # 3. Run backtest core (skip_validation=True since we pre-validated)
                 results = backtest_core(
                     config=config,
                     input_data=data_cache.input_data,
                     price_data=data_cache.price_data,
-                    index_data=data_cache.index_data
+                    index_data=data_cache.index_data,
+                    skip_validation=True
                 )
                 
                 # 4. Compute and return Calmar ratio
@@ -262,6 +268,75 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     # Initialize data cache and load data
     data_cache = DataCache()
     data_cache.load(fixed_config)
+    
+    # -------------------------------------------------------------------------
+    # Data Quality Validation
+    # -------------------------------------------------------------------------
+    run_stock_selection_flag = fixed_config.get('run_stock_selection', True)
+    first_quarter = fixed_config['first_quarter']
+    last_quarter = fixed_config['last_quarter']
+    
+    if run_stock_selection_flag:
+        # Mode A: Filter out stocks with price data issues before selection
+        print("Validating price data coverage...")
+        filtered_input, data_issues = filter_tradeable_stocks(
+            data_cache.input_data,
+            data_cache.price_data,
+            first_quarter,
+            last_quarter
+        )
+        
+        if not data_issues.empty:
+            # Save detailed report
+            detailed_path = study_folder / 'data_quality_issues_detailed.csv'
+            data_issues.to_csv(detailed_path, index=False)
+            
+            # Save summary (count by stock)
+            summary = data_issues.groupby('co_name').agg(
+                affected_quarters=('quarter', 'count'),
+                issues=('issue', lambda x: ', '.join(x.unique()))
+            ).reset_index().sort_values('affected_quarters', ascending=False)
+            summary_path = study_folder / 'data_quality_issues_summary.csv'
+            summary.to_csv(summary_path, index=False)
+            
+            original_count = len(data_cache.input_data)
+            filtered_count = len(filtered_input)
+            removed_count = original_count - filtered_count
+            
+            print(f"  Data Quality Check Results:")
+            print(f"    - Found {len(data_issues)} stock-quarter issues")
+            print(f"    - Affecting {data_issues['co_name'].nunique()} unique stocks")
+            print(f"    - Filtered {removed_count} rows from input data ({original_count} → {filtered_count})")
+            print(f"    - Detailed report: {detailed_path}")
+            print(f"    - Summary report: {summary_path}")
+        else:
+            print("  No price data issues found. All stocks are tradeable.")
+        
+        # Replace cached input_data with filtered version
+        data_cache.input_data = filtered_input
+        print()
+    else:
+        # Mode B: Report issues but don't filter (user's preselected portfolio)
+        print("Validating price data coverage for preselected portfolio...")
+        data_issues = validate_price_data_coverage(
+            data_cache.input_data,
+            data_cache.price_data,
+            first_quarter,
+            last_quarter
+        )
+        
+        if not data_issues.empty:
+            # Save report for user to review
+            issues_path = study_folder / 'data_quality_issues.csv'
+            data_issues.to_csv(issues_path, index=False)
+            
+            print(f"  WARNING: Found {len(data_issues)} stock-quarter issues in preselected portfolio")
+            print(f"    - Affecting {data_issues['co_name'].nunique()} unique stocks")
+            print(f"    - These positions will be held as cash during simulation")
+            print(f"    - Report saved: {issues_path}")
+        else:
+            print("  No price data issues found. All stocks are tradeable.")
+        print()
     
     # Copy tuning config to study folder
     shutil.copy2(config_path, tuning_config_copy_path)

@@ -23,6 +23,8 @@ from selection import (
     select_and_weight_stocks_volatility, 
     select_and_weight_stocks_mcap,
     select_top_k_stocks,
+    filter_tradeable_stocks,
+    validate_price_data_coverage,
 )
 from backtest import (
     simulate_trades,
@@ -400,7 +402,8 @@ def backtest_core(
         input_data: pd.DataFrame, 
         price_data: pd.DataFrame, 
         index_data: pd.DataFrame = None,
-        verbose: bool = False) -> dict:
+        verbose: bool = False,
+        skip_validation: bool = False) -> dict:
     """
     Core backtesting logic.
     
@@ -410,6 +413,7 @@ def backtest_core(
     - price_data: DataFrame with OHLCV price data
     - index_data: DataFrame with index data (optional)
     - verbose: If True, print progress messages (default: False)
+    - skip_validation: If True, skip price data validation (use when data is pre-validated)
     
     Returns:
     - Dictionary with:
@@ -472,9 +476,25 @@ def backtest_core(
         # ---------------------------------------------------------------------
         # Run Stock Selection OR Use Preselected Portfolio
         # ---------------------------------------------------------------------
+        data_issues = None  # Will store validation issues for return
+        
         if run_stock_selection_flag:
             if verbose:
                 print("\n[2/4] Running stock selection...")
+            
+            # Validate and filter price data before selection (unless pre-validated)
+            if not skip_validation:
+                input_data_filtered, data_issues = filter_tradeable_stocks(
+                    input_data_filtered,
+                    price_data,
+                    first_quarter,
+                    last_quarter
+                )
+                
+                if data_issues is not None and not data_issues.empty:
+                    if verbose:
+                        print(f"  - Filtered {len(data_issues)} stock-quarter combinations with price data issues")
+            
             selected_stocks = run_stock_selection(
                 input_data_filtered,
                 category_scheme,
@@ -568,6 +588,7 @@ def backtest_core(
             'trade_results': trade_results,
             'first_quarter': first_quarter,
             'last_quarter': last_quarter,
+            'data_issues': data_issues,  # Price data validation issues (None if no issues)
         }
         
     except Exception as e:
@@ -699,9 +720,10 @@ def run_backtest(config_path='strategy_config.yaml'):
     
     # Extract results
     trade_results = results['trade_results']
-    equity_curve = results['equity_curve']
+    equity_curve = results['daily_pf_values']  # Key is daily_pf_values in backtest_core
     first_quarter = results['first_quarter']
     last_quarter = results['last_quarter']
+    data_issues = results.get('data_issues')  # Price data validation issues
     
     print("-" * 60)
     
@@ -731,6 +753,12 @@ def run_backtest(config_path='strategy_config.yaml'):
         print(f"  - Daily portfolio values saved to: {equity_curve_path}")
     else:
         print("  - Warning: No equity curve data to save")
+    
+    # Save data quality issues report (if any issues were found)
+    if data_issues is not None and not data_issues.empty:
+        data_issues_path = os.path.join(output_dir, 'filtered_stocks_data_issues.csv')
+        data_issues.to_csv(data_issues_path, index=False)
+        print(f"  - Data quality issues saved to: {data_issues_path}")
     
     # -------------------------------------------------------------------------
     # 5. Generate Comparison Plot (if index data available)
@@ -830,6 +858,8 @@ def run_backtest(config_path='strategy_config.yaml'):
     print(f"  - config_used.yaml (configuration traceability)")
     print(f"  - trade_results.csv (trade-level results)")
     print(f"  - daily_portfolio_values.csv (daily equity curve)")
+    if data_issues is not None and not data_issues.empty:
+        print(f"  - filtered_stocks_data_issues.csv (stocks filtered due to price data issues)")
     if index_data_path:
         print(f"  - portfolio_vs_index.csv (comparison data)")
         print(f"  - portfolio_vs_index.png (comparison plot)")
