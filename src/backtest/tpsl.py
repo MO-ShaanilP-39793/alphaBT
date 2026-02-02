@@ -386,6 +386,7 @@ def simulate_trades(
     custom_sl_config: dict = None,
     custom_atr_config: dict = None,
     custom_pivot_config: dict = None,
+    custom_flat_config: dict = None,
     custom_index_exit_config: dict = None):
     """
     Calculate portfolio performance with TP/SL simulation.
@@ -406,18 +407,20 @@ def simulate_trades(
     - custom_sl_config: Custom SL config dict to override global config (for fixed mode optimization)
     - custom_atr_config: Custom ATR config dict with 'period', 'tp_multiplier', 'sl_multiplier'
     - custom_pivot_config: Custom pivot config dict with 'lookback_days', 'tp_level', 'sl_level'
+    - custom_flat_config: Custom flat config dict with 'tp_pct', 'sl_pct'
     - custom_index_exit_config: Custom index exit config dict with 'regime_filter' and 'vol_adjustment'
     
     Returns:
     - DataFrame with trade results including entry/exit details
     """
-    global TP_CONFIG, SL_CONFIG, ATR_CONFIG, PIVOT_CONFIG, INDEX_EXIT_CONFIG
+    global TP_CONFIG, SL_CONFIG, ATR_CONFIG, PIVOT_CONFIG, FLAT_CONFIG, INDEX_EXIT_CONFIG
     
     # Override global config if custom values provided
     original_tp_config = TP_CONFIG.copy() if custom_tp_config else None
     original_sl_config = SL_CONFIG.copy() if custom_sl_config else None
     original_atr_config = ATR_CONFIG.copy() if custom_atr_config else None
     original_pivot_config = PIVOT_CONFIG.copy() if custom_pivot_config else None
+    original_flat_config = FLAT_CONFIG.copy() if custom_flat_config else None
     original_index_exit_config = INDEX_EXIT_CONFIG.copy() if custom_index_exit_config else None
     
     if custom_tp_config:
@@ -428,6 +431,8 @@ def simulate_trades(
         ATR_CONFIG = custom_atr_config
     if custom_pivot_config:
         PIVOT_CONFIG = custom_pivot_config
+    if custom_flat_config:
+        FLAT_CONFIG = custom_flat_config
     if custom_index_exit_config:
         INDEX_EXIT_CONFIG = custom_index_exit_config
     
@@ -505,6 +510,8 @@ def simulate_trades(
             ATR_CONFIG = original_atr_config
         if original_pivot_config is not None:
             PIVOT_CONFIG = original_pivot_config
+        if original_flat_config is not None:
+            FLAT_CONFIG = original_flat_config
         if original_index_exit_config is not None:
             INDEX_EXIT_CONFIG = original_index_exit_config
 

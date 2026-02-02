@@ -519,6 +519,7 @@ def backtest_core(
         custom_sl_config = config.get('SL_CONFIG')
         custom_atr_config = config.get('atr_config')
         custom_pivot_config = config.get('pivot_config')
+        custom_flat_config = config.get('flat_config')
         custom_index_exit_config = config.get('index_exit')
         
         trade_results = simulate_trades(
@@ -533,6 +534,7 @@ def backtest_core(
             custom_sl_config=custom_sl_config,
             custom_atr_config=custom_atr_config,
             custom_pivot_config=custom_pivot_config,
+            custom_flat_config=custom_flat_config,
             custom_index_exit_config=custom_index_exit_config
         )
         
