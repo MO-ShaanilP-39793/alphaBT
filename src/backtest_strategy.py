@@ -403,7 +403,7 @@ def backtest_core(
         price_data: pd.DataFrame, 
         index_data: pd.DataFrame = None,
         verbose: bool = False,
-        skip_validation: bool = False) -> dict:
+        skip_price_data_validation: bool = True) -> dict:
     """
     Core backtesting logic.
     
@@ -413,7 +413,7 @@ def backtest_core(
     - price_data: DataFrame with OHLCV price data
     - index_data: DataFrame with index data (optional)
     - verbose: If True, print progress messages (default: False)
-    - skip_validation: If True, skip price data validation (use when data is pre-validated)
+    - skip_price_data_validation: If True, skip price data validation (use when data is pre-validated)
     
     Returns:
     - Dictionary with:
@@ -421,6 +421,8 @@ def backtest_core(
         - 'trade_results': DataFrame with trade-level results
         - 'first_quarter': First quarter used
         - 'last_quarter': Last quarter used
+        and optionally,
+        - 'data_issues': Price data validation issues (None if no issues)
       Returns None if backtest fails
     """
     try:
@@ -483,7 +485,7 @@ def backtest_core(
                 print("\n[2/4] Running stock selection...")
             
             # Validate and filter price data before selection (unless pre-validated)
-            if not skip_validation:
+            if not skip_price_data_validation:
                 input_data_filtered, data_issues = filter_tradeable_stocks(
                     input_data_filtered,
                     price_data,
@@ -510,6 +512,21 @@ def backtest_core(
         else:
             if verbose:
                 print("\n[2/4] Using preselected portfolio...")
+            
+            # Validate price data coverage (but don't filter, since it's preselected)
+            if not skip_price_data_validation:
+                data_issues = validate_price_data_coverage(
+                    input_data_filtered,
+                    price_data,
+                    first_quarter,
+                    last_quarter
+                )
+                
+                if data_issues is not None and not data_issues.empty:
+                    if verbose:
+                        print(f"  - Warning: Found {len(data_issues)} stock-quarter combinations with price data issues")
+                        print(f"            (Issues logged but stocks not filtered since using preselected portfolio)")
+            
             selected_stocks, has_category = validate_preselected_input(
                 input_data_filtered,
                 category_scheme,
