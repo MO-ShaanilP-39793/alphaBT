@@ -737,10 +737,10 @@ def run_backtest(config_path='strategy_config.yaml'):
     
     # Extract results
     trade_results = results['trade_results']
-    equity_curve = results['daily_pf_values']  # Key is daily_pf_values in backtest_core
+    equity_curve = results['daily_pf_values']
     first_quarter = results['first_quarter']
     last_quarter = results['last_quarter']
-    data_issues = results.get('data_issues')  # Price data validation issues
+    data_issues = results.get('data_issues')
     
     print("-" * 60)
     
@@ -773,7 +773,7 @@ def run_backtest(config_path='strategy_config.yaml'):
     
     # Save data quality issues report (if any issues were found)
     if data_issues is not None and not data_issues.empty:
-        data_issues_path = os.path.join(output_dir, 'filtered_stocks_data_issues.csv')
+        data_issues_path = os.path.join(output_dir, 'data_issues.csv')
         data_issues.to_csv(data_issues_path, index=False)
         print(f"  - Data quality issues saved to: {data_issues_path}")
     
@@ -876,7 +876,7 @@ def run_backtest(config_path='strategy_config.yaml'):
     print(f"  - trade_results.csv (trade-level results)")
     print(f"  - daily_portfolio_values.csv (daily equity curve)")
     if data_issues is not None and not data_issues.empty:
-        print(f"  - filtered_stocks_data_issues.csv (stocks filtered due to price data issues)")
+        print(f"  - data_issues.csv (gaps in price data))")
     if index_data_path:
         print(f"  - portfolio_vs_index.csv (comparison data)")
         print(f"  - portfolio_vs_index.png (comparison plot)")
