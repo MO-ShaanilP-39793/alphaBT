@@ -398,7 +398,14 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     
     if summary['best_value'] is not None:
         objective_name = optuna_config.get('objective', 'calmar')
-        objective_label = 'Calmar ratio' if objective_name == 'calmar' else 'CAGR'
+        
+        # Map objective names to display labels
+        objective_labels = {
+            'calmar': 'Calmar ratio',
+            'cagr': 'CAGR',
+            'mdd': 'Maximum Drawdown'
+        }
+        objective_label = objective_labels.get(objective_name, objective_name)
         
         print(f"\nBest Trial:")
         print(f"  Trial number: {summary['best_trial_number']}")

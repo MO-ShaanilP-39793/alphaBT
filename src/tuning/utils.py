@@ -336,6 +336,39 @@ def compute_cagr(daily_pf_values: pd.DataFrame) -> float:
     return cagr
 
 
+def compute_max_drawdown(daily_pf_values: pd.DataFrame) -> float:
+    """
+    Compute Maximum Drawdown (MDD) from daily portfolio values.
+    
+    MDD = min((Portfolio Value - Cumulative Max) / Cumulative Max)
+    
+    Returns the magnitude (positive value) of the maximum drawdown.
+    
+    Parameters:
+        daily_pf_values: DataFrame with columns ['date', 'portfolio_value', 'quarter']
+        
+    Returns:
+        Maximum drawdown as a positive float, or None if computation fails
+    """
+    if daily_pf_values is None or daily_pf_values.empty:
+        return None
+    
+    df = daily_pf_values.copy()
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.sort_values('date', ignore_index=True)
+    
+    if len(df) < 2:
+        return None
+    
+    # Compute Maximum Drawdown
+    df['cummax'] = df['portfolio_value'].cummax()
+    df['drawdown'] = (df['portfolio_value'] - df['cummax']) / df['cummax']
+    max_drawdown = df['drawdown'].min()
+    
+    # Return magnitude (positive value)
+    return abs(max_drawdown)
+
+
 def compute_calmar_ratio(daily_pf_values: pd.DataFrame, cap: float = 10.0) -> float:
     """
     Compute Calmar ratio from daily portfolio values.
@@ -352,11 +385,7 @@ def compute_calmar_ratio(daily_pf_values: pd.DataFrame, cap: float = 10.0) -> fl
     if daily_pf_values is None or daily_pf_values.empty:
         return None
     
-    df = daily_pf_values.copy()
-    df['date'] = pd.to_datetime(df['date'])
-    df = df.sort_values('date', ignore_index=True)
-    
-    if len(df) < 2:
+    if len(daily_pf_values) < 2:
         return None
     
     # Compute CAGR using dedicated function
@@ -364,17 +393,17 @@ def compute_calmar_ratio(daily_pf_values: pd.DataFrame, cap: float = 10.0) -> fl
     if cagr is None:
         return None
     
-    # Compute Maximum Drawdown
-    df['cummax'] = df['portfolio_value'].cummax()
-    df['drawdown'] = (df['portfolio_value'] - df['cummax']) / df['cummax']
-    max_drawdown = df['drawdown'].min()
+    # Compute Maximum Drawdown using dedicated function
+    max_drawdown = compute_max_drawdown(daily_pf_values)
+    if max_drawdown is None:
+        return None
     
     # Compute Calmar Ratio
     if max_drawdown == 0:
         # cap at maximum
         calmar = cap
     else:
-        calmar = cagr / abs(max_drawdown)
+        calmar = cagr / max_drawdown
     
     # Clip
     calmar = min(calmar, cap)
@@ -389,7 +418,7 @@ def compute_objective(objective_name: str, daily_pf_values: pd.DataFrame, **kwar
     This is a dispatcher function that routes to the appropriate objective computation.
     
     Parameters:
-        objective_name: Name of the objective ('calmar', 'cagr')
+        objective_name: Name of the objective ('calmar', 'cagr', 'mdd')
         daily_pf_values: DataFrame with columns ['date', 'portfolio_value', 'quarter']
         **kwargs: Additional objective-specific parameters:
             - cap (float): For 'calmar', maximum ratio value (default: 10.0)
@@ -407,10 +436,13 @@ def compute_objective(objective_name: str, daily_pf_values: pd.DataFrame, **kwar
     elif objective_name == 'cagr':
         return compute_cagr(daily_pf_values)
     
+    elif objective_name == 'mdd':
+        return compute_max_drawdown(daily_pf_values)
+    
     else:
         raise ValueError(
             f"Unknown objective: '{objective_name}'. "
-            f"Supported objectives: 'calmar', 'cagr'"
+            f"Supported objectives: 'calmar', 'cagr', 'mdd'"
         )
 
 

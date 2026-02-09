@@ -269,6 +269,7 @@ optuna:
   # Optimization objective
   # - 'calmar': Maximize Calmar ratio (CAGR / |Max Drawdown|)
   # - 'cagr': Maximize Compound Annual Growth Rate
+  # - 'mdd': Minimize Maximum Drawdown
   # Default: 'calmar' (if not specified)
   objective: "calmar"
   
@@ -279,7 +280,8 @@ optuna:
   sampler: "TPE"
   
   # Optimization direction
-  # Use 'maximize' for both calmar and cagr objectives
+  # - Use 'maximize' for 'calmar' and 'cagr' objectives
+  # - Use 'minimize' for 'mdd' objective
   direction: "maximize"
   
   # Resume existing study if it exists, or start fresh
@@ -291,4 +293,6 @@ optuna:
   calmar_cap: 10.0
   
   # Penalty value for failed trials (no trades, errors, etc.)
+  # Use a large negative value when maximizing (if objective is 'calmar' or 'cagr')
+  # Use a large positive value when minimizing (if objective is 'mdd')
   failure_penalty: -999.0

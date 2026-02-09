@@ -5,6 +5,7 @@ from tuning.utils import (
     sample_parameters,
     build_config,
     compute_cagr,
+    compute_max_drawdown,
     compute_calmar_ratio,
     compute_objective,
     export_best_config,
