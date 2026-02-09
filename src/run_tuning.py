@@ -29,6 +29,8 @@ from tuning import (
     sample_parameters,
     build_config,
     compute_objective,
+    compute_cagr,
+    compute_max_drawdown,
     export_best_config,
     get_study_summary,
 )
@@ -157,13 +159,23 @@ def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnin
                         valid_returns = trade_results['stock_return'].dropna()
                         if len(valid_returns) > 0:
                             win_rate = (valid_returns > 0).mean()
-                            trial.set_user_attr('win_rate', round(win_rate, 4))
+                            trial.set_user_attr('win_rate', round(win_rate * 100, 2))
                     
-                    # Total return
+                    # Total return (as percentage)
                     initial_val = daily_pf['portfolio_value'].iloc[0]
                     final_val = daily_pf['portfolio_value'].iloc[-1]
-                    total_return = (final_val - initial_val) / initial_val
-                    trial.set_user_attr('total_return', round(total_return, 4))
+                    total_return = ((final_val - initial_val) / initial_val) * 100
+                    trial.set_user_attr('total_return', round(total_return, 2))
+                    
+                    # CAGR (as percentage)
+                    cagr = compute_cagr(daily_pf)
+                    if cagr is not None:
+                        trial.set_user_attr('cagr', round(cagr * 100, 2))
+                    
+                    # Maximum Drawdown (as percentage)
+                    mdd = compute_max_drawdown(daily_pf)
+                    if mdd is not None:
+                        trial.set_user_attr('mdd', round(mdd * 100, 2))
                 
                 return objective_value
                 
@@ -414,9 +426,13 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
         # Get best trial details
         best_trial = study.best_trial
         if 'total_return' in best_trial.user_attrs:
-            print(f"  Total return: {best_trial.user_attrs['total_return']:.2%}")
+            print(f"  Total return: {best_trial.user_attrs['total_return']:.2f}%")
+        if 'cagr' in best_trial.user_attrs:
+            print(f"  CAGR: {best_trial.user_attrs['cagr']:.2f}%")
+        if 'mdd' in best_trial.user_attrs:
+            print(f"  Max Drawdown: {best_trial.user_attrs['mdd']:.2f}%")
         if 'win_rate' in best_trial.user_attrs:
-            print(f"  Win rate: {best_trial.user_attrs['win_rate']:.2%}")
+            print(f"  Win rate: {best_trial.user_attrs['win_rate']:.2f}%")
         if 'n_trades' in best_trial.user_attrs:
             print(f"  Number of trades: {best_trial.user_attrs['n_trades']}")
         
