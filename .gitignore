@@ -57,3 +57,6 @@ src/data_validation.ipynb
 src/strategy_config.yaml
 src/tuning_config.yaml
 src/strategy_grid_config.yaml
+
+# Log files
+*.log
