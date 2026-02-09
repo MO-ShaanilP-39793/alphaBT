@@ -26,6 +26,10 @@ fixed:
   # Specify if stock selection is required
   run_stock_selection: true
   
+  # Validate input data for price coverage issues
+  # Set to false if data has already been validated to skip validation step
+  validate_input_data: true
+  
   # Report generation (keep disabled during tuning for speed)
   generate_analysis_report: false
   generate_detailed_report: false

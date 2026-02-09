@@ -46,10 +46,13 @@ ENV/
 .DS_Store
 Thumbs.db
 
+# Jupyter Notebooks
 src/test.ipynb
 src/debug.ipynb
 src/target/target_eda.ipynb
+src/data_validation.ipynb
 
+# Config files
 src/strategy_config.yaml
 src/tuning_config.yaml
 src/strategy_grid_config.yaml

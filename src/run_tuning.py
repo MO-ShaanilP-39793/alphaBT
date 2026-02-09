@@ -272,62 +272,67 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     # -------------------------------------------------------------------------
     # Data Quality Validation
     # -------------------------------------------------------------------------
-    run_stock_selection_flag = fixed_config.get('run_stock_selection', True)
-    first_quarter = fixed_config['first_quarter']
-    last_quarter = fixed_config['last_quarter']
+    validate_input_data_flag = fixed_config.get('validate_input_data', True)
     
-    if run_stock_selection_flag:
-        # Filter out stocks with price data issues before selection
-        print("Validating price data coverage...")
-        filtered_input, data_issues = filter_tradeable_stocks(
-            data_cache.input_data,
-            data_cache.price_data,
-            first_quarter,
-            last_quarter
-        )
+    if validate_input_data_flag:
+        run_stock_selection_flag = fixed_config.get('run_stock_selection', True)
+        first_quarter = fixed_config['first_quarter']
+        last_quarter = fixed_config['last_quarter']
         
-        if not data_issues.empty:
-            # Save data issues to csv
-            issues_path = study_folder / 'data_quality_issues.csv'
-            data_issues.to_csv(issues_path, index=False)
+        if run_stock_selection_flag:
+            # Filter out stocks with price data issues before selection
+            print("Validating price data coverage...")
+            filtered_input, data_issues = filter_tradeable_stocks(
+                data_cache.input_data,
+                data_cache.price_data,
+                first_quarter,
+                last_quarter
+            )
             
-            original_count = len(data_cache.input_data)
-            filtered_count = len(filtered_input)
-            removed_count = original_count - filtered_count
+            if not data_issues.empty:
+                # Save data issues to csv
+                issues_path = study_folder / 'data_quality_issues.csv'
+                data_issues.to_csv(issues_path, index=False)
+                
+                original_count = len(data_cache.input_data)
+                filtered_count = len(filtered_input)
+                removed_count = original_count - filtered_count
+                
+                print(f"  Data Quality Check Results:")
+                print(f"    - Found {len(data_issues)} stock-quarter issues")
+                print(f"    - Affecting {data_issues['co_name'].nunique()} unique stocks")
+                print(f"    - Filtered {removed_count} rows from input data ({original_count} → {filtered_count})")
+                print(f"    - Report saved to: {issues_path}")
+            else:
+                print("  No price data issues found. All stocks are tradeable.")
             
-            print(f"  Data Quality Check Results:")
-            print(f"    - Found {len(data_issues)} stock-quarter issues")
-            print(f"    - Affecting {data_issues['co_name'].nunique()} unique stocks")
-            print(f"    - Filtered {removed_count} rows from input data ({original_count} → {filtered_count})")
-            print(f"    - Report saved to: {issues_path}")
+            # Replace cached input_data with filtered version
+            data_cache.input_data = filtered_input
+            print()
         else:
-            print("  No price data issues found. All stocks are tradeable.")
-        
-        # Replace cached input_data with filtered version
-        data_cache.input_data = filtered_input
-        print()
+            # Save and Report issues but don't filter (user's preselected portfolio)
+            print("Validating price data coverage for preselected portfolio...")
+            data_issues = validate_price_data_coverage(
+                data_cache.input_data,
+                data_cache.price_data,
+                first_quarter,
+                last_quarter
+            )
+            
+            if not data_issues.empty:
+                # Save report for user to review
+                issues_path = study_folder / 'data_quality_issues.csv'
+                data_issues.to_csv(issues_path, index=False)
+                
+                print(f"  WARNING: Found {len(data_issues)} stock-quarter issues in preselected portfolio")
+                print(f"    - Affecting {data_issues['co_name'].nunique()} unique stocks")
+                print(f"    - These positions will be held as cash during simulation")
+                print(f"    - Report saved: {issues_path}")
+            else:
+                print("  No price data issues found. All stocks are tradeable.")
+            print()
     else:
-        # Save and Report issues but don't filter (user's preselected portfolio)
-        print("Validating price data coverage for preselected portfolio...")
-        data_issues = validate_price_data_coverage(
-            data_cache.input_data,
-            data_cache.price_data,
-            first_quarter,
-            last_quarter
-        )
-        
-        if not data_issues.empty:
-            # Save report for user to review
-            issues_path = study_folder / 'data_quality_issues.csv'
-            data_issues.to_csv(issues_path, index=False)
-            
-            print(f"  WARNING: Found {len(data_issues)} stock-quarter issues in preselected portfolio")
-            print(f"    - Affecting {data_issues['co_name'].nunique()} unique stocks")
-            print(f"    - These positions will be held as cash during simulation")
-            print(f"    - Report saved: {issues_path}")
-        else:
-            print("  No price data issues found. All stocks are tradeable.")
-        print()
+        print("Skipping input data validation (already validated).\n")
     
     # Copy tuning config to study folder
     shutil.copy2(config_path, tuning_config_copy_path)
