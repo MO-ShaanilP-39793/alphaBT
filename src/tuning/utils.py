@@ -148,23 +148,33 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
     # ----- Sample TP/SL mode-specific parameters (conditional) -----
     if tpsl_mode == 'fixed':
         fixed_tpsl_config = tuning_config['fixed_tpsl']
-        for name, spec in fixed_tpsl_config.items():
-            params[f'fixed_{name}'] = sample_parameter(trial, f'fixed_{name}', spec)
+        if tp_enabled:
+            params['fixed_tp_thresholds'] = sample_parameter(trial, 'fixed_tp_thresholds', fixed_tpsl_config['tp_thresholds'])
+        if sl_enabled:
+            params['fixed_sl_thresholds'] = sample_parameter(trial, 'fixed_sl_thresholds', fixed_tpsl_config['sl_thresholds'])
     
     elif tpsl_mode == 'atr':
         atr_config = tuning_config['atr_tpsl']
-        for name, spec in atr_config.items():
-            params[f'atr_{name}'] = sample_parameter(trial, f'atr_{name}', spec)
+        params['atr_period'] = sample_parameter(trial, 'atr_period', atr_config['period'])
+        if tp_enabled:
+            params['atr_tp_multiplier'] = sample_parameter(trial, 'atr_tp_multiplier', atr_config['tp_multiplier'])
+        if sl_enabled:
+            params['atr_sl_multiplier'] = sample_parameter(trial, 'atr_sl_multiplier', atr_config['sl_multiplier'])
     
     elif tpsl_mode == 'pivot':
         pivot_config = tuning_config['pivot_tpsl']
-        for name, spec in pivot_config.items():
-            params[f'pivot_{name}'] = sample_parameter(trial, f'pivot_{name}', spec)
+        params['pivot_lookback_days'] = sample_parameter(trial, 'pivot_lookback_days', pivot_config['lookback_days'])
+        if tp_enabled:
+            params['pivot_tp_level'] = sample_parameter(trial, 'pivot_tp_level', pivot_config['tp_level'])
+        if sl_enabled:
+            params['pivot_sl_level'] = sample_parameter(trial, 'pivot_sl_level', pivot_config['sl_level'])
     
     elif tpsl_mode == 'flat':
         flat_config = tuning_config['flat_tpsl']
-        for name, spec in flat_config.items():
-            params[f'flat_{name}'] = sample_parameter(trial, f'flat_{name}', spec)
+        if tp_enabled:
+            params['flat_tp'] = sample_parameter(trial, 'flat_tp', flat_config['tp'])
+        if sl_enabled:
+            params['flat_sl'] = sample_parameter(trial, 'flat_sl', flat_config['sl'])
     
     # ----- Sample index exit parameters (conditional) -----
     if 'index_exit' in tuning_config:
