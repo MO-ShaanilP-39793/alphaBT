@@ -28,7 +28,7 @@ from tuning import (
     load_tuning_config,
     sample_parameters,
     build_config,
-    compute_calmar_ratio,
+    compute_objective,
     export_best_config,
     get_study_summary,
 )
@@ -95,13 +95,14 @@ def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnin
     """
     fixed_config = tuning_config['fixed']
     optuna_config = tuning_config['optuna']
+    objective_name = optuna_config.get('objective', 'calmar')
     calmar_cap = optuna_config.get('calmar_cap', 10.0)
     failure_penalty = optuna_config.get('failure_penalty', -999.0)
     
     def objective(trial: optuna.Trial) -> float:
         """
         Objective function that samples parameters, runs backtest, 
-        and returns Calmar ratio.
+        and returns the specified optimization objective.
         """
         # Suppress warnings during trial execution to avoid cluttering output
         with warnings.catch_warnings():
@@ -124,7 +125,7 @@ def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnin
                     skip_price_data_validation=True
                 )
                 
-                # 4. Compute and return Calmar ratio
+                # 4. Compute and return objective value
                 if results is None:
                     return failure_penalty
                 
@@ -136,9 +137,14 @@ def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnin
                 daily_pf = daily_pf_values.reset_index()
                 daily_pf.columns = ['date', 'portfolio_value', 'quarter']
                 
-                calmar = compute_calmar_ratio(daily_pf, cap=calmar_cap)
+                # Compute objective (Calmar or CAGR)
+                objective_value = compute_objective(
+                    objective_name, 
+                    daily_pf, 
+                    cap=calmar_cap
+                )
                 
-                if calmar is None:
+                if objective_value is None:
                     return failure_penalty
                 
                 # Store additional metrics as trial user attributes for analysis
@@ -159,7 +165,7 @@ def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnin
                     total_return = (final_val - initial_val) / initial_val
                     trial.set_user_attr('total_return', round(total_return, 4))
                 
-                return calmar
+                return objective_value
                 
             except Exception as e:
                 # Log error but don't crash the optimization
@@ -255,9 +261,12 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     best_config_path = study_folder / 'best_config.yaml'
     tuning_config_copy_path = study_folder / 'tuning_config_used.yaml'
     
+    objective_name = optuna_config.get('objective', 'calmar')
+    
     print(f"  Study name: {study_name}")
     print(f"  Study folder: {study_folder}")
     print(f"  Storage: {storage}")
+    print(f"  Objective: {objective_name}")
     print(f"  Trials: {n_trials}")
     print(f"  Sampler: {sampler_name}")
     print(f"  Direction: {direction}")
@@ -388,9 +397,12 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     print(f"  Failed: {summary['n_failed']}")
     
     if summary['best_value'] is not None:
+        objective_name = optuna_config.get('objective', 'calmar')
+        objective_label = 'Calmar ratio' if objective_name == 'calmar' else 'CAGR'
+        
         print(f"\nBest Trial:")
         print(f"  Trial number: {summary['best_trial_number']}")
-        print(f"  Calmar ratio: {summary['best_value']:.4f}")
+        print(f"  {objective_label}: {summary['best_value']:.4f}")
         
         # Get best trial details
         best_trial = study.best_trial

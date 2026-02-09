@@ -266,19 +266,27 @@ optuna:
   # Study identifier
   study_name: "backtest_calmar_optimization"
   
+  # Optimization objective
+  # - 'calmar': Maximize Calmar ratio (CAGR / |Max Drawdown|)
+  # - 'cagr': Maximize Compound Annual Growth Rate
+  # Default: 'calmar' (if not specified)
+  objective: "calmar"
+  
   # Number of trials
   n_trials: 100
   
   # Sampler algorithm: TPE, Random, CmaEs (Covariance matrix adaptation evolution strategy)
   sampler: "TPE"
   
-  # Optimization direction (maximize Calmar ratio)
+  # Optimization direction
+  # Use 'maximize' for both calmar and cagr objectives
   direction: "maximize"
   
   # Resume existing study if it exists, or start fresh
   load_if_exists: true
   
   # Cap Calmar ratio to avoid inflated values from tiny drawdowns
+  # Only applies when objective is 'calmar'
   # Values above this will be clamped
   calmar_cap: 10.0
   

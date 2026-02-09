@@ -293,18 +293,17 @@ def build_config(fixed_config: dict, sampled_params: dict) -> dict:
     return config
 
 
-def compute_calmar_ratio(daily_pf_values: pd.DataFrame, cap: float = 10.0) -> float:
+def compute_cagr(daily_pf_values: pd.DataFrame) -> float:
     """
-    Compute Calmar ratio from daily portfolio values.
+    Compute Compound Annual Growth Rate (CAGR) from daily portfolio values.
     
-    Calmar Ratio = CAGR / |Max Drawdown|
+    CAGR = (Final Value / Initial Value) ^ (1 / Years) - 1
     
     Parameters:
         daily_pf_values: DataFrame with columns ['date', 'portfolio_value', 'quarter']
-        cap: Maximum Calmar ratio value to return (avoids inflated values)
         
     Returns:
-        Calmar ratio (capped)
+        Annualized CAGR as a float, or None if computation fails
     """
     if daily_pf_values is None or daily_pf_values.empty:
         return None
@@ -334,6 +333,37 @@ def compute_calmar_ratio(daily_pf_values: pd.DataFrame, cap: float = 10.0) -> fl
     # Compute CAGR
     cagr = (final_value / initial_value) ** (1 / years) - 1
     
+    return cagr
+
+
+def compute_calmar_ratio(daily_pf_values: pd.DataFrame, cap: float = 10.0) -> float:
+    """
+    Compute Calmar ratio from daily portfolio values.
+    
+    Calmar Ratio = CAGR / |Max Drawdown|
+    
+    Parameters:
+        daily_pf_values: DataFrame with columns ['date', 'portfolio_value', 'quarter']
+        cap: Maximum Calmar ratio value to return (avoids inflated values)
+        
+    Returns:
+        Calmar ratio (capped)
+    """
+    if daily_pf_values is None or daily_pf_values.empty:
+        return None
+    
+    df = daily_pf_values.copy()
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.sort_values('date', ignore_index=True)
+    
+    if len(df) < 2:
+        return None
+    
+    # Compute CAGR using dedicated function
+    cagr = compute_cagr(daily_pf_values)
+    if cagr is None:
+        return None
+    
     # Compute Maximum Drawdown
     df['cummax'] = df['portfolio_value'].cummax()
     df['drawdown'] = (df['portfolio_value'] - df['cummax']) / df['cummax']
@@ -350,6 +380,38 @@ def compute_calmar_ratio(daily_pf_values: pd.DataFrame, cap: float = 10.0) -> fl
     calmar = min(calmar, cap)
     
     return calmar
+
+
+def compute_objective(objective_name: str, daily_pf_values: pd.DataFrame, **kwargs) -> float:
+    """
+    Compute the specified optimization objective from daily portfolio values.
+    
+    This is a dispatcher function that routes to the appropriate objective computation.
+    
+    Parameters:
+        objective_name: Name of the objective ('calmar', 'cagr')
+        daily_pf_values: DataFrame with columns ['date', 'portfolio_value', 'quarter']
+        **kwargs: Additional objective-specific parameters:
+            - cap (float): For 'calmar', maximum ratio value (default: 10.0)
+        
+    Returns:
+        Objective value as a float, or None if computation fails
+        
+    Raises:
+        ValueError: If objective_name is not supported
+    """
+    if objective_name == 'calmar':
+        cap = kwargs.get('cap', 10.0)
+        return compute_calmar_ratio(daily_pf_values, cap=cap)
+    
+    elif objective_name == 'cagr':
+        return compute_cagr(daily_pf_values)
+    
+    else:
+        raise ValueError(
+            f"Unknown objective: '{objective_name}'. "
+            f"Supported objectives: 'calmar', 'cagr'"
+        )
 
 
 def export_best_config(
