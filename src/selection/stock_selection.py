@@ -126,6 +126,7 @@ def select_and_weight_stocks_volatility(
 
     Parameters:
     - stock_probabilities (pd.DataFrame): Input dataframe with columns ['quarter', 'co_name', 'prob', 'volatility']
+        Optionally can include 'category' column (largecap/midcap/smallcap) which will be preserved as 'mcap_category'
     - selection_counts (list): [n_high, n_med, n_low] Number of stocks to select for High, Med, Low vol.
     - category_weights (list): [w_high, w_med, w_low] Weights for High, Med, Low vol categories.
     - selection_method (str): Method to rank stocks within categories:
@@ -137,6 +138,7 @@ def select_and_weight_stocks_volatility(
     Returns: 
         pd.DataFrame with columns ['quarter', 'co_name', 'cat', 'cat_weight']
         If selection_method='risk_adjusted', also includes 'risk_adj_score' column.
+        If input has 'category' column, also includes 'mcap_category' column.
     """
     
     # Validation to ensure lists are length 3
@@ -147,6 +149,9 @@ def select_and_weight_stocks_volatility(
     valid_methods = ['probability', 'risk_adjusted']
     if selection_method not in valid_methods:
         raise ValueError(f"selection_method must be one of {valid_methods}, got '{selection_method}'")
+    
+    # Check if mcap category column exists in input
+    has_mcap_category = 'category' in stock_probabilities.columns
 
     specs = {
         'high_volatility':   {'count': selection_counts[0], 'weight': category_weights[0]},
@@ -225,19 +230,30 @@ def select_and_weight_stocks_volatility(
     # 4. Concatenate all selections and format output
     if final_selection:
         result_df = pd.concat(final_selection)
-        # Select and reorder specific columns based on method
+        # Select and reorder specific columns based on method and available data
+        base_cols = ['quarter', 'co_name', 'cat', 'cat_weight']
+        
+        # Add mcap_category if it exists in input data
+        if has_mcap_category:
+            result_df = result_df.rename(columns={'category': 'mcap_category'})
+            base_cols.append('mcap_category')
+        
+        # Add risk_adj_score if using risk_adjusted method
         if selection_method == 'risk_adjusted':
-            result_df = result_df[['quarter', 'co_name', 'cat', 'cat_weight', 'risk_adj_score']]
-        else:
-            result_df = result_df[['quarter', 'co_name', 'cat', 'cat_weight']]
+            base_cols.append('risk_adj_score')
+        
+        result_df = result_df[base_cols]
         # Reset index for cleanliness
         result_df = result_df.reset_index(drop=True)
         return result_df
     else:
         # Return empty dataframe with correct columns if input was empty
+        base_cols = ['quarter', 'co_name', 'cat', 'cat_weight']
+        if has_mcap_category:
+            base_cols.append('mcap_category')
         if selection_method == 'risk_adjusted':
-            return pd.DataFrame(columns=['quarter', 'co_name', 'cat', 'cat_weight', 'risk_adj_score'])
-        return pd.DataFrame(columns=['quarter', 'co_name', 'cat', 'cat_weight'])
+            base_cols.append('risk_adj_score')
+        return pd.DataFrame(columns=base_cols)
 
 
 def select_and_weight_stocks_mcap(

@@ -859,7 +859,8 @@ def run_backtest(config_path='strategy_config.yaml'):
             output_path=detailed_report_path,
             sub_periods=detailed_sub_periods,
             input_frequency="daily",
-            report_title="Backtest Analysis"
+            report_title="Backtest Analysis",
+            trade_results=trade_results
         )
     elif generate_detailed:
         print("\nSkipping detailed report (no equity curve data available)")

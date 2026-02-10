@@ -1166,6 +1166,79 @@ def get_stock_counts_pivot(trade_results: pd.DataFrame) -> pd.DataFrame:
     return pivot
 
 
+def get_stock_counts_by_mcap(trade_results: pd.DataFrame) -> pd.DataFrame:
+    """
+    Get count of stocks by market cap category (largecap/midcap/smallcap) per quarter.
+    Works with either 'mcap_category' column or 'cat' column containing mcap values.
+    
+    Parameters:
+    - trade_results: DataFrame from trade_results.csv with columns including:
+        ['quarter', 'holding_period'] and either 'mcap_category' or 'cat' with mcap values
+    
+    Returns:
+    - DataFrame with columns: ['quarter', 'total_stocks', 'largecap', 'midcap', 'smallcap']
+      Last row contains averages across all quarters.
+    """
+    # Check which column contains mcap information
+    has_mcap_category = 'mcap_category' in trade_results.columns
+    has_cat = 'cat' in trade_results.columns
+    
+    if not has_mcap_category and not has_cat:
+        raise ValueError("Missing required column: need either 'mcap_category' or 'cat'")
+    
+    # Determine which column to use
+    mcap_col = None
+    if has_mcap_category:
+        mcap_col = 'mcap_category'
+    elif has_cat:
+        # Check if 'cat' contains mcap values (largecap/midcap/smallcap)
+        cat_values = set(trade_results['cat'].dropna().unique())
+        mcap_values = {'largecap', 'midcap', 'smallcap'}
+        if mcap_values.intersection(cat_values):
+            mcap_col = 'cat'
+    
+    if mcap_col is None:
+        raise ValueError("No valid market cap category column found (largecap/midcap/smallcap)")
+    
+    # Check for holding_period
+    if 'holding_period' not in trade_results.columns:
+        raise ValueError("Missing required column: 'holding_period'")
+    
+    # Filter to valid trades (entered positions)
+    valid_trades = trade_results[trade_results['holding_period'].notna()].copy()
+    
+    # Count stocks by quarter and mcap category
+    mcap_counts = valid_trades.groupby(['quarter', mcap_col]).size().unstack(fill_value=0)
+    
+    # Ensure all three mcap categories exist as columns (even if zero)
+    for cat in ['largecap', 'midcap', 'smallcap']:
+        if cat not in mcap_counts.columns:
+            mcap_counts[cat] = 0
+    
+    # Calculate total stocks per quarter
+    mcap_counts['total_stocks'] = mcap_counts[['largecap', 'midcap', 'smallcap']].sum(axis=1)
+    
+    # Reorder columns
+    mcap_counts = mcap_counts[['total_stocks', 'largecap', 'midcap', 'smallcap']]
+    
+    # Reset index to make quarter a column
+    mcap_counts = mcap_counts.reset_index()
+    
+    # Calculate averages
+    avg_row = pd.DataFrame([{
+        'quarter': 'Average',
+        'total_stocks': mcap_counts['total_stocks'].mean(),
+        'largecap': mcap_counts['largecap'].mean(),
+        'midcap': mcap_counts['midcap'].mean(),
+        'smallcap': mcap_counts['smallcap'].mean()
+    }])
+    
+    # Append average row
+    result = pd.concat([mcap_counts, avg_row], ignore_index=True)
+    
+    return result
+
+
 def get_category_returns_by_quarter(trade_results: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate returns for each category (largecap/midcap/smallcap or volatility categories) per quarter.

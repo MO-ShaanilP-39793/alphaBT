@@ -800,7 +800,8 @@ def generate_mo_report(
     output_path,
     sub_periods=None,
     input_frequency="daily",
-    report_title="Portfolio Analysis"
+    report_title="Portfolio Analysis",
+    trade_results=None
 ):
     """
     Generate comprehensive Excel report with all analysis and embedded charts.
@@ -811,6 +812,7 @@ def generate_mo_report(
     - sub_periods: List of [start_year, end_year] pairs for sub-period analysis
     - input_frequency: 'daily' or 'monthly'
     - report_title: Title for the report
+    - trade_results: Optional DataFrame from trade_results.csv for additional analysis
     
     Returns:
     - Path to the generated Excel file
@@ -869,6 +871,25 @@ def generate_mo_report(
     
     print("    - Computing market regime returns...")
     market_df = compute_market_regime_returns(daily_returns_df, data_start, data_end)
+    
+    # Compute mcap stock counts if trade_results provided and has mcap information
+    mcap_counts_df = None
+    if trade_results is not None:
+        # Check if we have mcap_category column or cat column with mcap values
+        has_mcap_category = 'mcap_category' in trade_results.columns
+        has_cat_with_mcap = False
+        if 'cat' in trade_results.columns:
+            cat_values = set(trade_results['cat'].dropna().unique())
+            mcap_values = {'largecap', 'midcap', 'smallcap'}
+            has_cat_with_mcap = bool(mcap_values.intersection(cat_values))
+        
+        if has_mcap_category or has_cat_with_mcap:
+            print("    - Computing stock counts by market cap...")
+            from backtest.analytics import get_stock_counts_by_mcap
+            try:
+                mcap_counts_df = get_stock_counts_by_mcap(trade_results)
+            except ValueError as e:
+                print(f"      Warning: Could not compute mcap counts: {e}")
     
     # Create charts
     print("    - Creating charts...")
@@ -931,14 +952,18 @@ def generate_mo_report(
         if not market_df.empty:
             market_df.reset_index().to_excel(writer, sheet_name="market_regimes", index=False)
         
-        # Sheet 9: Charts - Distribution and Box Plot
+        # Sheet 9: Stock Counts by Mcap (if available)
+        if mcap_counts_df is not None:
+            mcap_counts_df.to_excel(writer, sheet_name="stock_counts_by_mcap", index=False)
+        
+        # Sheet 10: Charts - Distribution and Box Plot
         charts_sheet_01 = workbook.add_worksheet("charts_01")
         writer.sheets["charts_01"] = charts_sheet_01
         
         charts_sheet_01.insert_image('A2', "plot.png", {"image_data": bell_curve})
         charts_sheet_01.insert_image('A35', "plot.png", {"image_data": box_plot})
         
-        # Sheet 10: Charts - Growth, Drawdown, Calendar Year Heatmap, Correlation
+        # Sheet 11: Charts - Growth, Drawdown, Calendar Year Heatmap, Correlation
         charts_sheet_02 = workbook.add_worksheet("charts_02")
         writer.sheets["charts_02"] = charts_sheet_02
         
@@ -965,6 +990,9 @@ def generate_mo_report(
                 worksheet.set_column('B:Z', 12, format_decimal)
             elif sheet_name in ["crisis_regimes", "market_regimes"]:
                 worksheet.set_column('A:A', 25)
+            elif sheet_name == "stock_counts_by_mcap":
+                worksheet.set_column('A:A', 12)  # quarter column
+                worksheet.set_column('B:E', 15, format_decimal)  # stock count columns
                 worksheet.set_column('B:C', 15)
                 worksheet.set_column('D:Z', 12, format_decimal)
             elif sheet_name != "charts":
