@@ -791,6 +791,137 @@ def create_box_plot(monthly_returns_df, chart_title="Box-Whisker Plot of Monthly
     return buffer
 
 
+def compute_quarterly_alpha(daily_returns_df, trade_results):
+    """
+    Compute quarterly alpha (outperformance) for each quarter in the backtest.
+    
+    Parameters:
+    - daily_returns_df: DataFrame with Date index and return columns (Portfolio, Benchmark)
+    - trade_results: DataFrame with 'quarter' column to identify which quarters were traded
+    
+    Returns:
+    - DataFrame with columns: Quarter, Portfolio_Return, Benchmark_Return, Outperformance
+      Plus a summary row with total quarters and outperformance count
+    """
+    if trade_results is None or 'quarter' not in trade_results.columns:
+        return pd.DataFrame()
+    
+    # Get unique quarters from trade_results
+    quarters = sorted(trade_results['quarter'].unique())
+    
+    if len(quarters) == 0:
+        return pd.DataFrame()
+    
+    # Helper function to get date range for a quarter
+    def get_quarter_dates(quarter_int):
+        """
+        Convert quarter integer (e.g., 202202) to date range.
+        Returns (start_date, end_date) tuple.
+        """
+        quarter_str = str(quarter_int)
+        year = int(quarter_str[:4])
+        month = int(quarter_str[4:])
+        
+        if month == 2:  # Feb quarter: Feb 15 to May 30
+            start = pd.Timestamp(year=year, month=2, day=15)
+            end = pd.Timestamp(year=year, month=5, day=30)
+        elif month == 5:  # May quarter: May 31 to Aug 14
+            start = pd.Timestamp(year=year, month=5, day=31)
+            end = pd.Timestamp(year=year, month=8, day=14)
+        elif month == 8:  # Aug quarter: Aug 15 to Nov 14
+            start = pd.Timestamp(year=year, month=8, day=15)
+            end = pd.Timestamp(year=year, month=11, day=14)
+        elif month == 11:  # Nov quarter: Nov 15 to Feb 14 (next year)
+            start = pd.Timestamp(year=year, month=11, day=15)
+            end = pd.Timestamp(year=year + 1, month=2, day=14)
+        else:
+            raise ValueError(f"Invalid quarter month: {month}. Expected 2, 5, 8, or 11.")
+        
+        return start, end
+    
+    results = []
+    
+    # Determine column names for Portfolio and Benchmark
+    cols = daily_returns_df.columns.tolist()
+    pf_col = cols[0] if len(cols) > 0 else 'Portfolio'
+    bench_col = cols[1] if len(cols) > 1 else 'Benchmark'
+    
+    for quarter in quarters:
+        try:
+            start_date, end_date = get_quarter_dates(quarter)
+            
+            # Filter daily returns for this quarter
+            quarter_data = daily_returns_df[
+                (daily_returns_df.index >= start_date) & 
+                (daily_returns_df.index <= end_date)
+            ]
+            
+            if len(quarter_data) == 0:
+                # No data for this quarter
+                continue
+            
+            # Calculate cumulative returns for the quarter
+            # Using (1 + r1) * (1 + r2) * ... - 1 formula
+            pf_return = (1 + quarter_data[pf_col]).prod() - 1
+            bench_return = (1 + quarter_data[bench_col]).prod() - 1
+            outperformance = pf_return - bench_return
+            
+            results.append({
+                'Quarter': quarter,
+                'Portfolio_Return': pf_return,
+                'Benchmark_Return': bench_return,
+                'Outperformance': outperformance
+            })
+            
+        except Exception as e:
+            print(f"      Warning: Could not compute returns for quarter {quarter}: {e}")
+            continue
+    
+    if len(results) == 0:
+        return pd.DataFrame()
+    
+    # Create main DataFrame
+    quarterly_df = pd.DataFrame(results)
+    
+    # Add summary statistics
+    total_quarters = len(quarterly_df)
+    outperformance_quarters = (quarterly_df['Outperformance'] > 0).sum()
+    
+    # Add blank row then summary stats
+    blank_row = pd.DataFrame([{
+        'Quarter': '',
+        'Portfolio_Return': np.nan,
+        'Benchmark_Return': np.nan,
+        'Outperformance': np.nan
+    }])
+    
+    stats_rows = pd.DataFrame([
+        {
+            'Quarter': 'Total Quarters',
+            'Portfolio_Return': total_quarters,
+            'Benchmark_Return': np.nan,
+            'Outperformance': np.nan
+        },
+        {
+            'Quarter': 'Outperformance Quarters',
+            'Portfolio_Return': outperformance_quarters,
+            'Benchmark_Return': np.nan,
+            'Outperformance': np.nan
+        },
+        {
+            'Quarter': 'Outperformance %',
+            'Portfolio_Return': outperformance_quarters / total_quarters if total_quarters > 0 else 0,
+            'Benchmark_Return': np.nan,
+            'Outperformance': np.nan
+        }
+    ])
+    
+    # Combine all rows
+    result_df = pd.concat([quarterly_df, blank_row, stats_rows], ignore_index=True)
+    
+    return result_df
+
+
 # =============================================================================
 # MAIN REPORT GENERATION FUNCTION
 # =============================================================================
@@ -891,6 +1022,15 @@ def generate_mo_report(
             except ValueError as e:
                 print(f"      Warning: Could not compute mcap counts: {e}")
     
+    # Compute quarterly alpha if trade_results provided
+    quarterly_alpha_df = None
+    if trade_results is not None:
+        print("    - Computing quarterly alpha...")
+        try:
+            quarterly_alpha_df = compute_quarterly_alpha(daily_returns_df, trade_results)
+        except Exception as e:
+            print(f"      Warning: Could not compute quarterly alpha: {e}")
+    
     # Create charts
     print("    - Creating charts...")
     gow_chart = create_growth_of_wealth_chart(monthly_df, f"Growth of Rs 10,000 - {report_title}")
@@ -956,14 +1096,18 @@ def generate_mo_report(
         if mcap_counts_df is not None:
             mcap_counts_df.to_excel(writer, sheet_name="stock_counts_by_mcap", index=False)
         
-        # Sheet 10: Charts - Distribution and Box Plot
+        # Sheet 10: Quarterly Alpha (if available)
+        if quarterly_alpha_df is not None and not quarterly_alpha_df.empty:
+            quarterly_alpha_df.to_excel(writer, sheet_name="quarterly_alpha", index=False)
+        
+        # Sheet 11: Charts - Distribution and Box Plot
         charts_sheet_01 = workbook.add_worksheet("charts_01")
         writer.sheets["charts_01"] = charts_sheet_01
         
         charts_sheet_01.insert_image('A2', "plot.png", {"image_data": bell_curve})
         charts_sheet_01.insert_image('A35', "plot.png", {"image_data": box_plot})
         
-        # Sheet 11: Charts - Growth, Drawdown, Calendar Year Heatmap, Correlation
+        # Sheet 12: Charts - Growth, Drawdown, Calendar Year Heatmap, Correlation
         charts_sheet_02 = workbook.add_worksheet("charts_02")
         writer.sheets["charts_02"] = charts_sheet_02
         
@@ -995,6 +1139,9 @@ def generate_mo_report(
                 worksheet.set_column('B:E', 15, format_decimal)  # stock count columns
                 worksheet.set_column('B:C', 15)
                 worksheet.set_column('D:Z', 12, format_decimal)
+            elif sheet_name == "quarterly_alpha":
+                worksheet.set_column('A:A', 20)  # quarter column
+                worksheet.set_column('B:D', 18, percent_format)  # return columns as percentages
             elif sheet_name != "charts":
                 worksheet.set_column('A:A', 20)
                 worksheet.set_column('B:Z', 12, format_decimal)
