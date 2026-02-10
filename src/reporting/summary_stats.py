@@ -886,6 +886,7 @@ def compute_quarterly_alpha(daily_returns_df, trade_results):
     # Add summary statistics
     total_quarters = len(quarterly_df)
     outperformance_quarters = (quarterly_df['Outperformance'] > 0).sum()
+    outperformance_pct = outperformance_quarters / total_quarters if total_quarters > 0 else 0
     
     # Add blank row then summary stats
     blank_row = pd.DataFrame([{
@@ -895,24 +896,25 @@ def compute_quarterly_alpha(daily_returns_df, trade_results):
         'Outperformance': np.nan
     }])
     
+    # Create summary as text strings to avoid percentage formatting issues
     stats_rows = pd.DataFrame([
         {
             'Quarter': 'Total Quarters',
-            'Portfolio_Return': total_quarters,
-            'Benchmark_Return': np.nan,
-            'Outperformance': np.nan
+            'Portfolio_Return': str(total_quarters),  # Convert to string
+            'Benchmark_Return': '',
+            'Outperformance': ''
         },
         {
             'Quarter': 'Outperformance Quarters',
-            'Portfolio_Return': outperformance_quarters,
-            'Benchmark_Return': np.nan,
-            'Outperformance': np.nan
+            'Portfolio_Return': str(outperformance_quarters),  # Convert to string
+            'Benchmark_Return': '',
+            'Outperformance': ''
         },
         {
-            'Quarter': 'Outperformance %',
-            'Portfolio_Return': outperformance_quarters / total_quarters if total_quarters > 0 else 0,
-            'Benchmark_Return': np.nan,
-            'Outperformance': np.nan
+            'Quarter': 'Outperformance Rate',
+            'Portfolio_Return': outperformance_pct,  # Keep as number for % formatting
+            'Benchmark_Return': '',
+            'Outperformance': ''
         }
     ])
     
