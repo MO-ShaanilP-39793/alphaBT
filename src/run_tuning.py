@@ -21,6 +21,7 @@ import shutil
 import warnings
 from datetime import datetime
 from pathlib import Path
+import pandas as pd
 import optuna
 from optuna.samplers import TPESampler, RandomSampler, CmaEsSampler
 
@@ -80,6 +81,100 @@ class DataCache:
         print("Data loading complete.\n")
 
 
+def set_trial_user_attributes(
+        trial: optuna.Trial,
+        sampled_params: dict,
+        results: dict) -> None:
+    """
+    Set user attributes on the trial for enhanced analysis in Optuna Dashboard.
+    
+    This function stores:
+    - Expanded list-valued parameters (category counts, weights, TP/SL thresholds)
+    - Performance metrics (total return, CAGR, MDD, win rate, number of trades)
+    
+    Parameters:
+        trial: Optuna trial object
+        sampled_params: Parameters sampled for this trial
+        results: Results dictionary from backtest_core
+    """
+    # -------------------------------------------------------------------------
+    # Expand list-valued parameters for per-category analysis
+    # -------------------------------------------------------------------------
+    category_scheme = sampled_params.get('category_scheme')
+    
+    # Get category labels based on scheme
+    if category_scheme == 'volatility':
+        cat_labels = ['high_vol', 'medium_vol', 'low_vol']
+    elif category_scheme == 'mcap':
+        cat_labels = ['largecap', 'midcap', 'smallcap']
+    else:
+        cat_labels = None
+    
+    # Expand category_counts (if category_based selection)
+    if cat_labels and sampled_params.get('selection_type') == 'category_based':
+        category_counts = sampled_params.get('category_counts')
+        if category_counts is not None:
+            for i, label in enumerate(cat_labels):
+                trial.set_user_attr(f'category_count_{label}', category_counts[i])
+        
+        # Expand category_weights
+        category_weights = sampled_params.get('category_weights')
+        if category_weights is not None:
+            for i, label in enumerate(cat_labels):
+                trial.set_user_attr(f'category_weight_{label}', round(category_weights[i], 3))
+    
+    # Expand fixed TP/SL thresholds (if fixed mode)
+    if cat_labels and sampled_params.get('tpsl_mode') == 'fixed':
+        if sampled_params.get('tp_enabled'):
+            fixed_tp = sampled_params.get('fixed_tp_thresholds')
+            if fixed_tp is not None:
+                for i, label in enumerate(cat_labels):
+                    trial.set_user_attr(f'tp_threshold_{label}', round(fixed_tp[i], 3))
+        
+        if sampled_params.get('sl_enabled'):
+            fixed_sl = sampled_params.get('fixed_sl_thresholds')
+            if fixed_sl is not None:
+                for i, label in enumerate(cat_labels):
+                    trial.set_user_attr(f'sl_threshold_{label}', round(fixed_sl[i], 3))
+    
+    # -------------------------------------------------------------------------
+    # Store performance metrics
+    # -------------------------------------------------------------------------
+    trade_results = results.get('trade_results')
+    if trade_results is not None and not trade_results.empty:
+        # Extract and prepare daily portfolio values
+        daily_pf_values = results.get('daily_pf_values')
+        if daily_pf_values is not None and not daily_pf_values.empty:
+            daily_pf = daily_pf_values.reset_index()
+            daily_pf.columns = ['date', 'portfolio_value', 'quarter']
+            
+            # Number of trades
+            trial.set_user_attr('n_trades', len(trade_results))
+            
+            # Win rate
+            if 'stock_return' in trade_results.columns:
+                valid_returns = trade_results['stock_return'].dropna()
+                if len(valid_returns) > 0:
+                    win_rate = (valid_returns > 0).mean()
+                    trial.set_user_attr('win_rate', round(win_rate * 100, 2))
+            
+            # Total return (as percentage)
+            initial_val = daily_pf['portfolio_value'].iloc[0]
+            final_val = daily_pf['portfolio_value'].iloc[-1]
+            total_return = ((final_val - initial_val) / initial_val) * 100
+            trial.set_user_attr('total_return', round(total_return, 2))
+            
+            # CAGR (as percentage)
+            cagr = compute_cagr(daily_pf)
+            if cagr is not None:
+                trial.set_user_attr('cagr', round(cagr * 100, 2))
+            
+            # Maximum Drawdown (as percentage)
+            mdd = compute_max_drawdown(daily_pf)
+            if mdd is not None:
+                trial.set_user_attr('mdd', round(mdd * 100, 2))
+
+
 def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnings: bool = True):
     """
     Create the objective function for Optuna optimization.
@@ -127,7 +222,7 @@ def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnin
                     skip_price_data_validation=True
                 )
                 
-                # 4. Compute and return objective value
+                # 4. Validate results
                 if results is None:
                     return failure_penalty
                 
@@ -139,7 +234,7 @@ def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnin
                 daily_pf = daily_pf_values.reset_index()
                 daily_pf.columns = ['date', 'portfolio_value', 'quarter']
                 
-                # Compute objective (Calmar or CAGR)
+                # 5. Compute objective value
                 objective_value = compute_objective(
                     objective_name, 
                     daily_pf, 
@@ -149,33 +244,8 @@ def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnin
                 if objective_value is None:
                     return failure_penalty
                 
-                # Store additional metrics as trial user attributes for analysis
-                trade_results = results.get('trade_results')
-                if trade_results is not None and not trade_results.empty:
-                    trial.set_user_attr('n_trades', len(trade_results))
-                    
-                    # Win rate
-                    if 'stock_return' in trade_results.columns:
-                        valid_returns = trade_results['stock_return'].dropna()
-                        if len(valid_returns) > 0:
-                            win_rate = (valid_returns > 0).mean()
-                            trial.set_user_attr('win_rate', round(win_rate * 100, 2))
-                    
-                    # Total return (as percentage)
-                    initial_val = daily_pf['portfolio_value'].iloc[0]
-                    final_val = daily_pf['portfolio_value'].iloc[-1]
-                    total_return = ((final_val - initial_val) / initial_val) * 100
-                    trial.set_user_attr('total_return', round(total_return, 2))
-                    
-                    # CAGR (as percentage)
-                    cagr = compute_cagr(daily_pf)
-                    if cagr is not None:
-                        trial.set_user_attr('cagr', round(cagr * 100, 2))
-                    
-                    # Maximum Drawdown (as percentage)
-                    mdd = compute_max_drawdown(daily_pf)
-                    if mdd is not None:
-                        trial.set_user_attr('mdd', round(mdd * 100, 2))
+                # 6. Store user attributes for analysis in Optuna Dashboard
+                set_trial_user_attributes(trial, sampled_params, results)
                 
                 return objective_value
                 
