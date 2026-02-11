@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 
 
 # =============================================================================
@@ -471,7 +472,13 @@ def plot_drawdown(daily_pf: pd.DataFrame, save_path: str = None):
     ax1.plot(dd['date'], dd['portfolio_value'], color='#1f77b4', linewidth=1.5, label='Portfolio')
     ax1.plot(dd['date'], dd['cummax'], color='gray', linestyle='--', alpha=0.7, label='Peak')
     ax1.fill_between(dd['date'], dd['portfolio_value'], dd['cummax'], alpha=0.3, color='red')
-    ax1.set_ylabel('Portfolio Value')
+    ax1.set_ylabel('Portfolio Value (Cr)')
+    
+    # Format y-axis to show values in crores
+    def crores_formatter(x, pos):
+        return f'{x/1e7:.0f}'
+    ax1.yaxis.set_major_formatter(FuncFormatter(crores_formatter))
+    
     ax1.legend(loc='upper left')
     ax1.grid(True, alpha=0.3)
     ax1.set_title('Portfolio Value and Drawdown Analysis', fontsize=14)
@@ -483,13 +490,14 @@ def plot_drawdown(daily_pf: pd.DataFrame, save_path: str = None):
     ax2.set_xlabel('Date')
     ax2.grid(True, alpha=0.3)
     
-    # Max drawdown annotation
+    # Max drawdown annotation (moved upward to avoid x-axis overlap)
     max_dd_idx = dd['drawdown_pct'].idxmin()
     max_dd_date = dd.loc[max_dd_idx, 'date']
     max_dd_val = dd.loc[max_dd_idx, 'drawdown_pct']
     ax2.annotate(f'Max DD: {max_dd_val:.1f}%', xy=(max_dd_date, max_dd_val),
-                 xytext=(10, -20), textcoords='offset points',
-                 fontsize=10, color='darkred', fontweight='bold')
+                 xytext=(10, 15), textcoords='offset points',
+                 fontsize=10, color='darkred', fontweight='bold',
+                 arrowprops=dict(arrowstyle='->', color='darkred', lw=1))
     
     plt.tight_layout()
     
