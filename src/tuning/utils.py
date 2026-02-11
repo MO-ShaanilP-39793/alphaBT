@@ -90,11 +90,12 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
         'selection_method',
         'min_prob_threshold',
         'category_counts',
-        'category_weights'
+        'category_weights',
+        'category_based_selection_weighting_scheme'
     }
     
     # Create set of params that need to be sampled only when selection_type is 'category_based'
-    category_based_only_params = {'category_counts', 'category_weights'}
+    category_based_only_params = {'category_counts', 'category_weights', 'category_based_selection_weighting_scheme'}
     
     # ----- Sample key parameters first to enable conditional sampling -----
     
@@ -104,6 +105,16 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
     if run_stock_selection is True:
         params['selection_type'] = sample_parameter(trial, 'selection_type', search_space['selection_type'])
         selection_type = params['selection_type']
+    
+    # Sample category_based_selection_weighting_scheme early (needed for conditional sampling of category_weights)
+    cat_weighting_scheme = None
+    if run_stock_selection is True and selection_type == 'category_based':
+        if 'category_based_selection_weighting_scheme' in search_space:
+            params['category_based_selection_weighting_scheme'] = sample_parameter(
+                trial, 'category_based_selection_weighting_scheme', 
+                search_space['category_based_selection_weighting_scheme']
+            )
+            cat_weighting_scheme = params['category_based_selection_weighting_scheme']
     
     # Sample tp_enabled and sl_enabled
     params['tp_enabled'] = sample_parameter(trial, 'tp_enabled', search_space['tp_enabled'])
@@ -125,7 +136,7 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
     # ----- Sample base parameters (excluding conditional ones) -----
     for name, spec in search_space.items():
         # Skip already sampled parameters
-        if name in ('selection_type', 'tp_enabled', 'sl_enabled', 'tpsl_mode'):
+        if name in ('selection_type', 'tp_enabled', 'sl_enabled', 'tpsl_mode', 'category_based_selection_weighting_scheme'):
             continue
         # Skip all selection related params if run_stock_selection is False
         if not run_stock_selection and name in selection_params:
@@ -135,6 +146,9 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
             continue
         # Skip category-based-only params if not category_based selection
         if name in category_based_only_params and selection_type != 'category_based':
+            continue
+        # Skip category_weights when weighting scheme is 'equal' (weights are irrelevant)
+        if name == 'category_weights' and cat_weighting_scheme == 'equal':
             continue
         params[name] = sample_parameter(trial, name, spec)
     
@@ -249,6 +263,7 @@ def build_config(fixed_config: dict, sampled_params: dict) -> dict:
     config['category_scheme'] = get('category_scheme', 'volatility')
     config['category_counts'] = get('category_counts', [5, 10, 15])
     config['category_weights'] = get('category_weights', [0.3, 0.3, 0.4])
+    config['category_based_selection_weighting_scheme'] = get('category_based_selection_weighting_scheme', 'use_category_weights')
     config['top_k_config'] = {
         'k': get('top_k_k', 30),
         'weighting_scheme': get('top_k_weighting_scheme', 'equal'),

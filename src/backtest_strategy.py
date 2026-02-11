@@ -157,7 +157,8 @@ def save_config_copy(config, output_dir):
 
 def run_stock_selection(input_data, category_scheme, category_counts, category_weights,
                         selection_method='probability', min_prob_threshold=None,
-                        selection_type='category_based', top_k_config=None):
+                        selection_type='category_based', top_k_config=None,
+                        category_based_weighting_scheme='use_category_weights'):
     """
     Run stock selection based on the specified selection type and category scheme.
     
@@ -165,15 +166,19 @@ def run_stock_selection(input_data, category_scheme, category_counts, category_w
     - input_data: DataFrame with stock data
     - category_scheme: 'volatility' or 'mcap' (used for category_based selection)
     - category_counts: [n1, n2, n3] stocks to select per category (category_based only)
-    - category_weights: [w1, w2, w3] weights per category (category_based only)
+    - category_weights: [w1, w2, w3] weights per category (category_based only,
+      ignored when category_based_weighting_scheme is 'equal')
     - selection_method: 'probability' (default) or 'risk_adjusted'
     - min_prob_threshold: Minimum probability to consider (None = no filter)
     - selection_type: 'category_based' (default) or 'top_k'
     - top_k_config: dict with 'k' and 'weighting_scheme' (top_k only)
+    - category_based_weighting_scheme: 'use_category_weights' (default) or 'equal'
+      Controls how capital is allocated for category_based selection.
     
     Returns:
     - DataFrame with selected stocks
-      - category_based: [quarter, co_name, cat, cat_weight]
+      - category_based (use_category_weights): [quarter, co_name, cat, cat_weight]
+      - category_based (equal): [quarter, co_name, cat, stock_weight]
       - top_k: [quarter, co_name, stock_weight] (+ cat if category in input)
     """
     if selection_type == 'top_k':
@@ -194,7 +199,8 @@ def run_stock_selection(input_data, category_scheme, category_counts, category_w
                 selection_counts=category_counts, 
                 category_weights=category_weights,
                 selection_method=selection_method,
-                min_prob_threshold=min_prob_threshold
+                min_prob_threshold=min_prob_threshold,
+                weighting_scheme=category_based_weighting_scheme
             )
         elif category_scheme == 'mcap':
             return select_and_weight_stocks_mcap(
@@ -202,7 +208,8 @@ def run_stock_selection(input_data, category_scheme, category_counts, category_w
                 lms_count=category_counts, 
                 lms_w=category_weights,
                 selection_method=selection_method,
-                min_prob_threshold=min_prob_threshold
+                min_prob_threshold=min_prob_threshold,
+                weighting_scheme=category_based_weighting_scheme
             )
         else:
             raise ValueError(f"Unknown category_scheme: {category_scheme}. Use 'volatility' or 'mcap'.")
@@ -443,6 +450,7 @@ def backtest_core(
         selection_method = config.get('selection_method', 'probability')
         min_prob_threshold = config.get('min_prob_threshold', None)
         top_k_config = config.get('top_k_config', None)
+        category_based_weighting_scheme = config.get('category_based_selection_weighting_scheme', 'use_category_weights')
         
         # Default TP/SL config
         default_tpsl = config.get('default_tpsl', None)
@@ -505,7 +513,8 @@ def backtest_core(
                 selection_method=selection_method,
                 min_prob_threshold=min_prob_threshold,
                 selection_type=selection_type,
-                top_k_config=top_k_config
+                top_k_config=top_k_config,
+                category_based_weighting_scheme=category_based_weighting_scheme
             )
             if verbose:
                 print(f"  - Selected stocks: {len(selected_stocks)} positions across all quarters")
@@ -658,6 +667,7 @@ def run_backtest(config_path='strategy_config.yaml'):
     selection_method = config.get('selection_method', 'probability')
     min_prob_threshold = config.get('min_prob_threshold', None)
     top_k_config = config.get('top_k_config', None)
+    category_based_weighting_scheme = config.get('category_based_selection_weighting_scheme', 'use_category_weights')
     
     # Default TP/SL config (used when no category in preselected mode)
     default_tpsl = config.get('default_tpsl', None)
@@ -680,6 +690,7 @@ def run_backtest(config_path='strategy_config.yaml'):
         if selection_type == 'category_based':
             print(f"  - Category counts: {category_counts}")
             print(f"  - Category weights: {category_weights}")
+            print(f"  - Weighting scheme: {category_based_weighting_scheme}")
         elif selection_type == 'top_k':
             k = top_k_config.get('k', 30) if top_k_config else 30
             weighting = top_k_config.get('weighting_scheme', 'equal') if top_k_config else 'equal'

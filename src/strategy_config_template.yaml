@@ -45,6 +45,14 @@ category_scheme: 'volatility'  # choose from 'volatility' or 'mcap'
 category_counts: [10, 10, 10]  
 category_weights: [0.2, 0.4, 0.4]
 
+# How to allocate capital across category-selected stocks:
+# - 'use_category_weights': Divide capital by category using category_weights above,
+#   then equally within each category
+# - 'equal': Distribute capital equally across ALL selected stocks, regardless of category.
+#   Stocks are still selected from categories for diversification, but weighting is uniform.
+#   When 'equal' is selected, category_weights above is ignored.
+category_based_selection_weighting_scheme: 'use_category_weights'
+
 # -----------------------------------------------------------------------------
 # Top-k selection config (used when selection_type: 'top_k')
 # -----------------------------------------------------------------------------

@@ -117,11 +117,12 @@ def set_trial_user_attributes(
             for i, label in enumerate(cat_labels):
                 trial.set_user_attr(f'category_count_{label}', category_counts[i])
         
-        # Expand category_weights
-        category_weights = sampled_params.get('category_weights')
-        if category_weights is not None:
-            for i, label in enumerate(cat_labels):
-                trial.set_user_attr(f'category_weight_{label}', round(category_weights[i], 3))
+        # Expand category_weights (only when using category weights, not equal)
+        if sampled_params.get('category_based_selection_weighting_scheme') == 'use_category_weights':
+            category_weights = sampled_params.get('category_weights')
+            if category_weights is not None:
+                for i, label in enumerate(cat_labels):
+                    trial.set_user_attr(f'category_weight_{label}', round(category_weights[i], 3))
     
     # Expand fixed TP/SL thresholds (if fixed mode)
     if cat_labels and sampled_params.get('tpsl_mode') == 'fixed':

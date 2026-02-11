@@ -74,7 +74,8 @@ search_space:
       - [10, 15, 20]
       - [20, 20, 20]
   
-  # Portfolio weight allocation per category (only used when selection_type: 'category_based')
+  # Portfolio weight allocation per category (only used when selection_type: 'category_based'
+  # and category_based_selection_weighting_scheme: 'use_category_weights')
   category_weights:
     type: categorical
     choices:
@@ -83,6 +84,15 @@ search_space:
       - [0.40, 0.40, 0.20]
       - [0.25, 0.50, 0.25]
       - [0.50, 0.30, 0.20]
+  
+  # Capital allocation scheme for category-based selection
+  # - 'use_category_weights': use category_weights to allocate capital by category
+  # - 'equal': equal weight across all selected stocks regardless of category
+  # Only used when selection_type: 'category_based'
+  # When 'equal' is selected, category_weights is not sampled
+  category_based_selection_weighting_scheme:
+    type: categorical
+    choices: ['use_category_weights', 'equal']
   
   # Stock ranking method
   selection_method:
