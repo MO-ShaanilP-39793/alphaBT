@@ -7,26 +7,25 @@ import warnings
 # 1. POSITION SIZING LOGIC
 # --------------------------------------------------------------------------------
 
-def calculate_position_sizes(df, total_capital):
+def calculate_position_sizes(quarterly_pf_stocks, total_capital):
     """
     Allocates capital to each stock.
     
-    Supports two modes based on available columns:
-    - If 'stock_weight' column exists: Direct allocation (preselected portfolio mode)
-    - If 'cat_weight' column exists: Category-based allocation (stock selection mode)
+    Supports two modes based on available columns (stock_weight column takes precedence):
+    - If 'stock_weight' column exists: Direct allocation
+    - If 'cat_weight' column exists: Category-based allocation
 
     Returns:
         the passed dataframe with additional cols: [allocated_capital, shares]
     """
     # Create a copy to avoid SettingWithCopy warnings
-    df = df.copy()
+    quarterly_pf_stocks = quarterly_pf_stocks.copy()
     
-    if 'stock_weight' in df.columns:
-        # Preselected portfolio mode: stock_weight is the direct portfolio weight
-        df['allocated_capital'] = total_capital * df['stock_weight']
+    if 'stock_weight' in quarterly_pf_stocks.columns:
+        quarterly_pf_stocks['allocated_capital'] = total_capital * quarterly_pf_stocks['stock_weight']
     else:
-        # Stock selection mode: category weights divided among stocks in category
-        cat_counts = df['cat'].value_counts()
+        # use cat_weight column
+        cat_counts = quarterly_pf_stocks['cat'].value_counts()
         
         def get_stock_allocation(row):
             # How many stocks are in this category?
@@ -40,12 +39,12 @@ def calculate_position_sizes(df, total_capital):
             return stock_cap
 
         # Calculate allocated capital per stock
-        df['allocated_capital'] = df.apply(get_stock_allocation, axis=1)
+        quarterly_pf_stocks['allocated_capital'] = quarterly_pf_stocks.apply(get_stock_allocation, axis=1)
     
     # Calculate number of shares (Position Size)
-    df['shares'] = df['allocated_capital'] / df['entry_price']
+    quarterly_pf_stocks['shares'] = quarterly_pf_stocks['allocated_capital'] / quarterly_pf_stocks['entry_price']
     
-    return df
+    return quarterly_pf_stocks
 
 # --------------------------------------------------------------------------------
 # 2. DAILY EQUITY CURVE GENERATION (daily series of portfolio value)
