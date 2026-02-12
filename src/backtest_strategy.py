@@ -461,6 +461,11 @@ def backtest_core(
         tp_enabled = config.get('tp_enabled', True)
         sl_enabled = config.get('sl_enabled', True)
         
+        # Entry price window configuration
+        entry_price_window = config.get('entry_price_window', 3)
+        if not isinstance(entry_price_window, int) or entry_price_window < 1:
+            raise ValueError(f"entry_price_window must be an integer >= 1, got: {entry_price_window}")
+        
         # ---------------------------------------------------------------------
         # Filter Input Data by Quarter Range
         # ---------------------------------------------------------------------
@@ -498,7 +503,8 @@ def backtest_core(
                     input_data_filtered,
                     price_data,
                     first_quarter,
-                    last_quarter
+                    last_quarter,
+                    min_prices_required=entry_price_window
                 )
                 
                 if data_issues is not None and not data_issues.empty:
@@ -528,7 +534,8 @@ def backtest_core(
                     input_data_filtered,
                     price_data,
                     first_quarter,
-                    last_quarter
+                    last_quarter,
+                    min_prices_required=entry_price_window
                 )
                 
                 if data_issues is not None and not data_issues.empty:
@@ -581,7 +588,8 @@ def backtest_core(
             custom_atr_config=custom_atr_config,
             custom_pivot_config=custom_pivot_config,
             custom_flat_config=custom_flat_config,
-            custom_index_exit_config=custom_index_exit_config
+            custom_index_exit_config=custom_index_exit_config,
+            entry_price_window=entry_price_window
         )
         
         if trade_results is None or trade_results.empty:
@@ -603,7 +611,8 @@ def backtest_core(
             price_data, 
             first_quarter, 
             last_quarter, 
-            initial_capital
+            initial_capital,
+            entry_price_window=entry_price_window
         )
         
         if verbose and daily_pf_values is not None and not daily_pf_values.empty:
@@ -711,6 +720,10 @@ def run_backtest(config_path='strategy_config.yaml'):
     print(f"  - TP/SL mode: {tpsl_mode}")
     print(f"  - TP enabled: {tp_enabled}" + (" (take profit exits disabled)" if not tp_enabled else ""))
     print(f"  - SL enabled: {sl_enabled}" + (" (stop loss exits disabled)" if not sl_enabled else ""))
+    
+    # Entry price window
+    entry_price_window = config.get('entry_price_window', 3)
+    print(f"  - Entry price window: {entry_price_window} trading day(s)")
     
     # -------------------------------------------------------------------------
     # 2. Load Data

@@ -230,7 +230,7 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
 
 
 def process_trade(row, price_df, category_scheme, index_df=None, tpsl_mode='fixed',
-                   tp_enabled=True, sl_enabled=True):
+                   tp_enabled=True, sl_enabled=True, entry_price_window=3):
     """
     Calculates entry and exit data for a single row from selected_stocks.
     
@@ -242,6 +242,7 @@ def process_trade(row, price_df, category_scheme, index_df=None, tpsl_mode='fixe
     - tpsl_mode: 'fixed', 'flat', 'atr', or 'pivot'
     - tp_enabled: Whether take profit is active
     - sl_enabled: Whether stop loss is active
+    - entry_price_window: Number of trading days to average for entry price (default: 3)
     
     Returns:
     - pandas Series with trade results
@@ -267,12 +268,12 @@ def process_trade(row, price_df, category_scheme, index_df=None, tpsl_mode='fixe
     # ---------------------------------------------
     potential_entry_days = co_prices[co_prices['date'] >= entry_start_limit]
     
-    if len(potential_entry_days) < 3:
+    if len(potential_entry_days) < entry_price_window:
         return null_result
     
-    entry_window = potential_entry_days.iloc[:3]
+    entry_window = potential_entry_days.iloc[:entry_price_window]
     entry_price = entry_window['close'].mean()
-    entry_date = entry_window.iloc[1]['date']
+    entry_date = entry_window.iloc[entry_price_window // 2]['date']
     last_entry_calc_date = entry_window.iloc[-1]['date']
     
     # ---------------------------------------------
@@ -365,13 +366,13 @@ def process_trade(row, price_df, category_scheme, index_df=None, tpsl_mode='fixe
 
 
 def process_trade_with_config(row, price_df, category_scheme, index_df, tpsl_mode,
-                               tp_enabled, sl_enabled):
+                               tp_enabled, sl_enabled, entry_price_window=3):
     """
     Wrapper for process_trade that includes all config parameters.
     Used for apply() in calculate_portfolio_performance.
     """
     return process_trade(row, price_df, category_scheme, index_df, tpsl_mode,
-                         tp_enabled, sl_enabled)
+                         tp_enabled, sl_enabled, entry_price_window)
 
 
 def simulate_trades(
@@ -387,7 +388,8 @@ def simulate_trades(
     custom_atr_config: dict = None,
     custom_pivot_config: dict = None,
     custom_flat_config: dict = None,
-    custom_index_exit_config: dict = None):
+    custom_index_exit_config: dict = None,
+    entry_price_window: int = 3):
     """
     Calculate portfolio performance with TP/SL simulation.
     
@@ -409,6 +411,7 @@ def simulate_trades(
     - custom_pivot_config: Custom pivot config dict with 'lookback_days', 'tp_level', 'sl_level'
     - custom_flat_config: Custom flat config dict with 'tp_pct', 'sl_pct'
     - custom_index_exit_config: Custom index exit config dict with 'regime_filter' and 'vol_adjustment'
+    - entry_price_window: Number of trading days to average for entry price (default: 3)
     
     Returns:
     - DataFrame with trade results including entry/exit details
@@ -488,7 +491,7 @@ def simulate_trades(
         # Apply the logic row by row
         results = selected_stocks.apply(
             lambda row: process_trade(row, price_data, category_scheme, index_df, mode,
-                                      use_tp, use_sl), 
+                                      use_tp, use_sl, entry_price_window), 
             axis=1
         )
         

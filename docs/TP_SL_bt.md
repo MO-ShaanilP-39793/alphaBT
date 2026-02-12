@@ -54,15 +54,15 @@ Processes a single trade from entry calculation through exit determination.
 **Returns:**
 - pd.Series with three values:
   - `exit_date`: Date of trade exit
-  - `entry_price`: Average close price over first 3 trading days
+  - `entry_price`: Average close price over first N trading days (N = `entry_price_window`, default 3)
   - `exit_price`: Price at exit (TP/SL price or closing price)
 
 **Logic Flow:**
 
 1. **Entry Calculation**
-   - Identifies first 3 trading days starting from `entry_search_start`
-   - Entry price = mean of close prices for these 3 days
-   - Trading begins after day 3
+   - Identifies first N trading days starting from `entry_search_start` (N = `entry_price_window`, default 3)
+   - Entry price = mean of close prices for these N days
+   - Trading begins after day N
 
 2. **Threshold Calculation**
    - Take Profit Price = `entry_price × (1 + tp_pct)`
@@ -129,7 +129,7 @@ print(results[['co_name', 'quarter', 'entry_price', 'exit_price', 'exit_date']])
 
 ## Edge Cases Handled
 
-1. **Insufficient Data**: If fewer than 3 trading days available after entry start → Returns `None` values
+1. **Insufficient Data**: If fewer than N trading days available after entry start (N = `entry_price_window`) → Returns `None` values
 2. **No Monitoring Data**: If no price data exists between entry calculation and mandatory exit → Returns entry_price but `None` exit_price
 3. **Missing Price Days**: Uses available trading days only (no assumption of continuous dates)
 

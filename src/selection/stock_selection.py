@@ -438,8 +438,8 @@ def get_entry_start_date(quarter):
     Get the entry search start date for a quarter.
     
     This mirrors the logic in backtest/tpsl.py get_date_params().
-    Entry price is calculated as the average of the first 3 trading days
-    starting from this date.
+    Entry price is calculated as the average of the first N trading days
+    starting from this date (N is configurable via entry_price_window, default 3).
     
     Parameters:
         quarter: Quarter in YYYYMM format (int or str), e.g., 202402

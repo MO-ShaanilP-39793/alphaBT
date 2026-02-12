@@ -29,7 +29,7 @@ Quarter 4 (Nov-Feb)  → Select stocks → Trade → Exit → Evaluate
 **Each quarter**:
 1. Your ML model provides probability scores for all available stocks
 2. The **selection strategy** chooses which stocks to buy (20-50 typically)
-3. Positions are entered over the first 3 trading days
+3. Positions are entered over the first N trading days (configurable via `entry_price_window`, default 3)
 4. The **exit strategy** determines when to sell each stock
 5. All remaining positions are closed at the quarter's mandatory cutoff
 6. Process repeats for the next quarter (fresh slate)

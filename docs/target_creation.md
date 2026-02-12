@@ -6,7 +6,7 @@ This document outlines the process used to generate 6 target variables.
 
 First, we calculate three base metrics for every company in every quarter:
 
-*   **`avg_first3_close`**: The average closing price of the first 3 trading days of the quarter. This represents the "entry" price level for the quarter.
+*   **`avg_first3_close`**: The average closing price of the first 3 trading days of the quarter. This represents the "entry" price level for the quarter. Note: in the backtest, the entry window is configurable via `entry_price_window` (default 3).
 *   **`quarter_high_5`**: The average of the 5 highest prices (`high` column) achieved during the quarter. This represents the potential peak performance.
 *   **`quarter_close_5`**: The average of the 5 highest closing prices (`close` column) achieved during the quarter. This represents the potential peak closing performance.
 *   **`volatility`**: The standard deviation of the `daily_return` for the company within that specific quarter.

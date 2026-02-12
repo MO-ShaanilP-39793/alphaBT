@@ -76,6 +76,19 @@ selection_method: 'probability'
 min_prob_threshold: null  # e.g., 0.5 to only consider stocks with >50% probability
 
 # =============================================================================
+# TRADE ENTRY CONFIGURATION
+# =============================================================================
+
+# Number of trading days used to calculate the entry price.
+# Entry price = mean closing price over the first N trading days of the quarter.
+# - 1: Use the first day's closing price as entry (no averaging)
+# - 3: Use the mean of the first 3 closing prices (default, original behavior)
+# - Any integer >= 1 is valid
+# The entry date is set to the middle day of the window (day at index N//2).
+# Monitoring for TP/SL begins the day after the last day in the window.
+entry_price_window: 3
+
+# =============================================================================
 # TP/SL MODE CONFIGURATION
 # =============================================================================
 

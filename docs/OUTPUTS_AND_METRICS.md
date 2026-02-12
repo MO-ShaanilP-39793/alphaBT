@@ -120,7 +120,7 @@ Backtest complete. Results saved.
 | `mcap_category` | Market cap category (if applicable) | `largecap` |
 | `entry_date` | Date position was entered | `2020-02-17` |
 | `exit_date` | Date position was exited | `2020-03-15` |
-| `entry_price` | Average entry price (mean over 3 days) | `1455.50` |
+| `entry_price` | Average entry price (mean over N days, configurable) | `1455.50` |
 | `exit_price` | Price at which position was closed | `1530.25` |
 | `holding_period` | Days held | `27` |
 | `SL_triggered` | Stop loss hit? | `False` |

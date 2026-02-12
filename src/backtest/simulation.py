@@ -50,7 +50,7 @@ def calculate_position_sizes(quarterly_pf_stocks, total_capital):
 # 2. DAILY EQUITY CURVE GENERATION (daily series of portfolio value)
 # --------------------------------------------------------------------------------
 
-def generate_quarter_equity_curve(trades, price_data, quarter):
+def generate_quarter_equity_curve(trades, price_data, quarter, entry_price_window=3):
     """
     Creates a daily series of portfolio value.
 
@@ -58,6 +58,7 @@ def generate_quarter_equity_curve(trades, price_data, quarter):
     (already filtered for the target quarter)
     price_data: [date, co_name, open, high, low, close]
     quarter: integer like 202402
+    entry_price_window: Number of trading days used for entry (must match the window used in trade simulation)
 
     Returns a dataframe with index: dates in the quarter
         and a column called Total_Portfolio_Value
@@ -72,17 +73,17 @@ def generate_quarter_equity_curve(trades, price_data, quarter):
     elif mm == 8: quarter_start_date = pd.Timestamp(year, 8, 15)
     elif mm == 11: quarter_start_date = pd.Timestamp(year, 11, 15)
     
-    # 2. Identify the "First 3 Trading Days" for this quarter
+    # 2. Identify the entry phase trading days for this quarter
     all_dates = sorted(price_data[price_data['date'] >= quarter_start_date]['date'].unique())
     
-    if len(all_dates) >= 3:
-        entry_phase_dates = all_dates[:3]
+    if len(all_dates) >= entry_price_window:
+        entry_phase_dates = all_dates[:entry_price_window]
         chart_start_date = entry_phase_dates[0]
     else:
         # Fallback if data is sparse
         warnings.warn(
             f"Insufficient trading days for quarter {quarter}. "
-            f"Found only {len(all_dates)} days (expected at least 3). "
+            f"Found only {len(all_dates)} days (expected at least {entry_price_window}). "
             f"Using available dates: {all_dates}",
             UserWarning
         )
@@ -139,7 +140,7 @@ def generate_quarter_equity_curve(trades, price_data, quarter):
         for current_date in date_range:
             current_date = pd.Timestamp(current_date)
             
-            # CONDITION 1: Entry Phase (First 3 Days)
+            # CONDITION 1: Entry Phase (first entry_price_window days)
             # Value is fixed at cost basis
             if current_date in entry_phase_set:
                 daily_val = shares * entry_price
@@ -230,12 +231,13 @@ def _generate_quarter_sequence(first_quarter, last_quarter):
     return quarters
 
 
-def compute_pf_value_over_quarter(trades, price_data, target_quarter, initial_capital=1000000000):
+def compute_pf_value_over_quarter(trades, price_data, target_quarter, initial_capital=1000000000, entry_price_window=3):
     '''
     trades: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price]
     price_data: [date, co_name, open, high, low, close]
     target_quarter: integer like 202402
     initial_capital: sum like 100 crs
+    entry_price_window: Number of trading days used for entry (must match the window used in trade simulation)
 
     Returns a dataframe with index: dates in the quarter
         and a column called Total_Portfolio_Value
@@ -252,12 +254,12 @@ def compute_pf_value_over_quarter(trades, price_data, target_quarter, initial_ca
     # quarter_df_sized: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price, allocated_capital, shares]
 
     # Equity Curve
-    equity_curve = generate_quarter_equity_curve(quarter_df_sized, price_data, target_quarter)
+    equity_curve = generate_quarter_equity_curve(quarter_df_sized, price_data, target_quarter, entry_price_window)
 
     return equity_curve
 
 
-def compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter, initial_capital=1000000000):
+def compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter, initial_capital=1000000000, entry_price_window=3):
     '''
     Computes portfolio value across multiple quarters at daily frequency.
     The ending value of each quarter becomes the starting capital for the next quarter.
@@ -267,6 +269,7 @@ def compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quart
     first_quarter: integer like 202402 (start quarter, inclusive)
     last_quarter: integer like 202411 (end quarter, inclusive)
     initial_capital: sum like 100 crs
+    entry_price_window: Number of trading days used for entry (must match the window used in trade simulation)
 
     Returns a dataframe with index: dates across all quarters
         and a column called Total_Portfolio_Value
@@ -284,7 +287,7 @@ def compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quart
     for quarter in quarters:
         # Compute equity curve for this quarter
         equity_curve = compute_pf_value_over_quarter(
-            trades, price_data, quarter, current_capital
+            trades, price_data, quarter, current_capital, entry_price_window
         )
         
         if equity_curve is None or equity_curve.empty:

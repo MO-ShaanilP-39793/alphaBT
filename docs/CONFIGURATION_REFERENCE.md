@@ -145,7 +145,7 @@ Quarters are encoded as **integers in YYYYMM format**:
 
 **Month Codes**: Only `02`, `05`, `08`, `11` are valid. Any other month will cause errors.
 
-**Entry Logic**: Positions are entered using the mean closing price over the first 3 trading days of the period.
+**Entry Logic**: Positions are entered using the mean closing price over the first N trading days of the period (configurable via `entry_price_window`, default 3).
 
 **Exit Logic**: Positions exit early if TP/SL/regime triggers fire, otherwise at the mandatory cutoff date.
 
