@@ -46,6 +46,8 @@ from selection import (
     validate_price_data_coverage,
 )
 
+from reporting.summary_stats import compute_trailing_returns
+
 
 class DataCache:
     """
@@ -174,6 +176,37 @@ def set_trial_user_attributes(
             mdd = compute_max_drawdown(daily_pf)
             if mdd is not None:
                 trial.set_user_attr('mdd', round(mdd * 100, 2))
+            
+            # Trailing Returns (1m, 3m, 6m, 1y, 3y, 5y, 10y)
+            if len(daily_pf) > 1:
+                # Prepare returns DataFrame (Date index, return columns)
+                returns_df = pd.DataFrame({
+                    'Portfolio': daily_pf['portfolio_value'].pct_change()
+                })
+                returns_df.index = pd.to_datetime(daily_pf['date'])
+                returns_df = returns_df.dropna()
+                
+                if not returns_df.empty:
+                    trailing_returns = compute_trailing_returns(returns_df, input_frequency="daily")
+                    
+                    # trailing_returns has strategies as index, periods as columns
+                    if not trailing_returns.empty and 'Portfolio' in trailing_returns.index:
+                        # Map period labels to attribute names
+                        period_map = {
+                            '1-m': 'trailing_1m',
+                            '3-m': 'trailing_3m',
+                            '6-m': 'trailing_6m',
+                            '1-year': 'trailing_1y',
+                            '3-years': 'trailing_3y',
+                            '5-years': 'trailing_5y',
+                            '10-years': 'trailing_10y'
+                        }
+                        
+                        for period, attr_name in period_map.items():
+                            if period in trailing_returns.columns:
+                                value = trailing_returns.loc['Portfolio', period]
+                                if not pd.isna(value):
+                                    trial.set_user_attr(attr_name, value)  # Already rounded to 2 decimals
 
 
 def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnings: bool = True):
