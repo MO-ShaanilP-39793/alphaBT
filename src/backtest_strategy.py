@@ -570,6 +570,7 @@ def backtest_core(
         # Get custom configs (if provided)
         custom_tp_config = config.get('TP_CONFIG')
         custom_sl_config = config.get('SL_CONFIG')
+        custom_default_tpsl = config.get('default_tpsl')
         custom_atr_config = config.get('atr_config')
         custom_pivot_config = config.get('pivot_config')
         custom_flat_config = config.get('flat_config')
@@ -585,6 +586,7 @@ def backtest_core(
             sl_enabled=sl_enabled,
             custom_tp_config=custom_tp_config,
             custom_sl_config=custom_sl_config,
+            custom_default_tpsl=custom_default_tpsl,
             custom_atr_config=custom_atr_config,
             custom_pivot_config=custom_pivot_config,
             custom_flat_config=custom_flat_config,

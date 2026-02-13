@@ -1,5 +1,4 @@
-"""
-TP/SL Backtesting Module
+"""TP/SL Backtesting Module
 
 This module handles trade execution with Take Profit and Stop Loss thresholds.
 Supports four modes for threshold calculation:
@@ -11,11 +10,12 @@ Supports four modes for threshold calculation:
 Also supports index-guided exit strategies:
 - Regime filter: Exit when index falls below moving average
 - Volatility adjustment: Widen/tighten thresholds based on market volatility
+
+All config is passed explicitly through function parameters — this module performs
+no file I/O and has no mutable module-level state.
 """
 
 import pandas as pd
-import yaml
-import os
 
 from backtest.dynamic_levels import (
     calculate_atr_thresholds,
@@ -24,41 +24,17 @@ from backtest.dynamic_levels import (
     check_regime_exit_signal
 )
 
-# Load configuration
-config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'strategy_config.yaml')
-with open(config_path, 'r') as file:
-    config = yaml.safe_load(file)
-
-# Legacy fixed TP/SL config
-TP_CONFIG = config.get('TP_CONFIG', {})
-SL_CONFIG = config.get('SL_CONFIG', {})
-
-# Default TP/SL thresholds (used when no category is provided in preselected mode)
-DEFAULT_TPSL = config.get('default_tpsl', {'tp_pct': 0.05, 'sl_pct': 0.05})
-
-# TP/SL config
-TPSL_MODE = config.get('tpsl_mode', 'fixed')  # 'fixed', 'atr', or 'pivot'
-TP_ENABLED = config.get('tp_enabled', True)  # Enable/disable take profit
-SL_ENABLED = config.get('sl_enabled', True)  # Enable/disable stop loss
-ATR_CONFIG = config.get('atr_config', {
-    'period': 14,
-    'tp_multiplier': 2.0,
-    'sl_multiplier': 1.5
-})
-PIVOT_CONFIG = config.get('pivot_config', {
-    'lookback_days': 60,
-    'tp_level': 'R1',
-    'sl_level': 'S1'
-})
-
-# Flat mode config (same threshold for all stocks, no category required)
-FLAT_CONFIG = config.get('flat_config', {
-    'tp_pct': 0.05,
-    'sl_pct': 0.05
-})
-
-# Index-guided exit config
-INDEX_EXIT_CONFIG = config.get('index_exit', {
+# ---------------------------------------------------------------------------
+# Default config constants — used as fallbacks when callers pass None.
+# These are NOT loaded from any file; they mirror the historical defaults.
+# ---------------------------------------------------------------------------
+_DEFAULT_TP_CONFIG = {}   # {category_scheme: {cat: pct}}
+_DEFAULT_SL_CONFIG = {}   # {category_scheme: {cat: pct}}
+_DEFAULT_TPSL = {'tp_pct': 0.05, 'sl_pct': 0.05}
+_DEFAULT_ATR_CONFIG = {'period': 14, 'tp_multiplier': 2.0, 'sl_multiplier': 1.5}
+_DEFAULT_PIVOT_CONFIG = {'lookback_days': 60, 'tp_level': 'R1', 'sl_level': 'S1'}
+_DEFAULT_FLAT_CONFIG = {'tp_pct': 0.05, 'sl_pct': 0.05}
+_DEFAULT_INDEX_EXIT_CONFIG = {
     'regime_filter': {'enabled': False, 'ma_period': 20, 'exit_threshold': -0.02},
     'vol_adjustment': {
         'enabled': False,
@@ -66,9 +42,9 @@ INDEX_EXIT_CONFIG = config.get('index_exit', {
         'high_vol_threshold': 0.25,
         'low_vol_threshold': 0.15,
         'high_vol_multiplier': 1.5,
-        'low_vol_multiplier': 0.8
-    }
-})
+        'low_vol_multiplier': 0.8,
+    },
+}
 
 
 def get_date_params(quarter_str):
@@ -99,7 +75,8 @@ def get_date_params(quarter_str):
     return entry_search_start, mandatory_exit_date
 
 
-def calculate_thresholds_fixed(entry_price, category_scheme, cat):
+def calculate_thresholds_fixed(entry_price, category_scheme, cat,
+                                tp_config, sl_config, default_tpsl):
     """
     Calculate fixed percentage-based TP/SL thresholds.
     
@@ -107,17 +84,20 @@ def calculate_thresholds_fixed(entry_price, category_scheme, cat):
     - entry_price: Entry price of the trade
     - category_scheme: 'volatility' or 'mcap'
     - cat: Category name (e.g., 'high_volatility', 'largecap'), or '_default' for preselected without category
+    - tp_config: Dict mapping {category_scheme: {cat: pct}}
+    - sl_config: Dict mapping {category_scheme: {cat: pct}}
+    - default_tpsl: Dict with 'tp_pct' and 'sl_pct' fallback values
     
     Returns:
     - Tuple of (tp_price, sl_price, tp_pct, sl_pct)
     """
     if cat is None or cat == '_default':
         # Use default thresholds when no category is provided (preselected mode)
-        tp_pct = DEFAULT_TPSL.get('tp_pct', 0.05)
-        sl_pct = DEFAULT_TPSL.get('sl_pct', 0.05)
+        tp_pct = default_tpsl.get('tp_pct', 0.05)
+        sl_pct = default_tpsl.get('sl_pct', 0.05)
     else:
-        tp_pct = TP_CONFIG.get(category_scheme, {}).get(cat, 0.05)
-        sl_pct = SL_CONFIG.get(category_scheme, {}).get(cat, 0.05)
+        tp_pct = tp_config.get(category_scheme, {}).get(cat, 0.05)
+        sl_pct = sl_config.get(category_scheme, {}).get(cat, 0.05)
     
     tp_price = entry_price * (1 + tp_pct)
     sl_price = entry_price * (1 - sl_pct)
@@ -126,7 +106,10 @@ def calculate_thresholds_fixed(entry_price, category_scheme, cat):
 
 
 def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date, 
-                                  category_scheme, cat, tpsl_mode, index_df=None):
+                                  category_scheme, cat, tpsl_mode, index_df=None,
+                                  *, atr_config, pivot_config, flat_config,
+                                  index_exit_config, tp_config, sl_config,
+                                  default_tpsl):
     """
     Calculate TP/SL thresholds based on the specified mode.
     
@@ -139,6 +122,13 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
     - cat: Category name
     - tpsl_mode: 'fixed', 'flat', 'atr', or 'pivot'
     - index_df: Optional DataFrame with index data for volatility adjustment
+    - atr_config: ATR mode config dict
+    - pivot_config: Pivot mode config dict
+    - flat_config: Flat mode config dict
+    - index_exit_config: Index-guided exit config dict
+    - tp_config: Fixed-mode TP config dict
+    - sl_config: Fixed-mode SL config dict
+    - default_tpsl: Default TP/SL fallback dict
     
     Returns:
     - Tuple of (tp_price, sl_price, metadata_dict)
@@ -149,15 +139,16 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
     if tpsl_mode == 'atr':
         tp_price, sl_price, atr = calculate_atr_thresholds(
             price_df, co_name, entry_price, entry_date,
-            tp_multiplier=ATR_CONFIG.get('tp_multiplier', 2.0),
-            sl_multiplier=ATR_CONFIG.get('sl_multiplier', 1.5),
-            period=ATR_CONFIG.get('period', 14)
+            tp_multiplier=atr_config.get('tp_multiplier', 2.0),
+            sl_multiplier=atr_config.get('sl_multiplier', 1.5),
+            period=atr_config.get('period', 14)
         )
         
         if tp_price is None:
             # Fallback to fixed if ATR calculation fails
             tp_price, sl_price, tp_pct, sl_pct = calculate_thresholds_fixed(
-                entry_price, category_scheme, cat
+                entry_price, category_scheme, cat,
+                tp_config, sl_config, default_tpsl
             )
             metadata['fallback'] = 'fixed'
             metadata['tp_pct'] = tp_pct
@@ -170,15 +161,16 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
     elif tpsl_mode == 'pivot':
         tp_price, sl_price, pivots = calculate_pivot_thresholds(
             price_df, co_name, entry_price, entry_date,
-            tp_level=PIVOT_CONFIG.get('tp_level', 'R1'),
-            sl_level=PIVOT_CONFIG.get('sl_level', 'S1'),
-            lookback_days=PIVOT_CONFIG.get('lookback_days', 60)
+            tp_level=pivot_config.get('tp_level', 'R1'),
+            sl_level=pivot_config.get('sl_level', 'S1'),
+            lookback_days=pivot_config.get('lookback_days', 60)
         )
         
         if tp_price is None:
             # Fallback to fixed if pivot calculation fails
             tp_price, sl_price, tp_pct, sl_pct = calculate_thresholds_fixed(
-                entry_price, category_scheme, cat
+                entry_price, category_scheme, cat,
+                tp_config, sl_config, default_tpsl
             )
             metadata['fallback'] = 'fixed'
             metadata['tp_pct'] = tp_pct
@@ -190,8 +182,8 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
             
     elif tpsl_mode == 'flat':
         # Flat mode: same threshold for all stocks, no category lookup
-        tp_pct = FLAT_CONFIG.get('tp_pct', 0.05)
-        sl_pct = FLAT_CONFIG.get('sl_pct', 0.05)
+        tp_pct = flat_config.get('tp_pct', 0.05)
+        sl_pct = flat_config.get('sl_pct', 0.05)
         tp_price = entry_price * (1 + tp_pct)
         sl_price = entry_price * (1 - sl_pct)
         metadata['tp_pct'] = tp_pct
@@ -199,13 +191,14 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
     
     else:  # 'fixed' mode (default)
         tp_price, sl_price, tp_pct, sl_pct = calculate_thresholds_fixed(
-            entry_price, category_scheme, cat
+            entry_price, category_scheme, cat,
+            tp_config, sl_config, default_tpsl
         )
         metadata['tp_pct'] = tp_pct
         metadata['sl_pct'] = sl_pct
     
     # Apply volatility adjustment if enabled and index data is available
-    vol_config = INDEX_EXIT_CONFIG.get('vol_adjustment', {})
+    vol_config = index_exit_config.get('vol_adjustment', {})
     if vol_config.get('enabled', False) and index_df is not None:
         multiplier = get_volatility_adjustment_multiplier(
             index_df, entry_date,
@@ -230,7 +223,9 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
 
 
 def process_trade(row, price_df, category_scheme, index_df=None, tpsl_mode='fixed',
-                   tp_enabled=True, sl_enabled=True, entry_price_window=3):
+                   tp_enabled=True, sl_enabled=True, entry_price_window=3,
+                   *, tp_config, sl_config, default_tpsl, atr_config,
+                   pivot_config, flat_config, index_exit_config):
     """
     Calculates entry and exit data for a single row from selected_stocks.
     
@@ -243,6 +238,13 @@ def process_trade(row, price_df, category_scheme, index_df=None, tpsl_mode='fixe
     - tp_enabled: Whether take profit is active
     - sl_enabled: Whether stop loss is active
     - entry_price_window: Number of trading days to average for entry price (default: 3)
+    - tp_config: Fixed-mode TP config dict
+    - sl_config: Fixed-mode SL config dict
+    - default_tpsl: Default TP/SL fallback dict
+    - atr_config: ATR mode config dict
+    - pivot_config: Pivot mode config dict
+    - flat_config: Flat mode config dict
+    - index_exit_config: Index-guided exit config dict
     
     Returns:
     - pandas Series with trade results
@@ -287,7 +289,11 @@ def process_trade(row, price_df, category_scheme, index_df=None, tpsl_mode='fixe
     if tp_enabled or sl_enabled:
         tp_price, sl_price, threshold_metadata = calculate_dynamic_thresholds(
             price_df, co_name, entry_price, entry_date,
-            category_scheme, cat, tpsl_mode, index_df
+            category_scheme, cat, tpsl_mode, index_df,
+            atr_config=atr_config, pivot_config=pivot_config,
+            flat_config=flat_config, index_exit_config=index_exit_config,
+            tp_config=tp_config, sl_config=sl_config,
+            default_tpsl=default_tpsl
         )
         
         if tp_enabled:
@@ -315,7 +321,7 @@ def process_trade(row, price_df, category_scheme, index_df=None, tpsl_mode='fixe
     regime_exit = False
     
     # Get regime filter config
-    regime_config = INDEX_EXIT_CONFIG.get('regime_filter', {})
+    regime_config = index_exit_config.get('regime_filter', {})
     regime_filter_enabled = regime_config.get('enabled', False) and index_df is not None
     
     # Iterate through days to check for TP/SL and regime exits
@@ -365,16 +371,6 @@ def process_trade(row, price_df, category_scheme, index_df=None, tpsl_mode='fixe
                      index=result_cols)
 
 
-def process_trade_with_config(row, price_df, category_scheme, index_df, tpsl_mode,
-                               tp_enabled, sl_enabled, entry_price_window=3):
-    """
-    Wrapper for process_trade that includes all config parameters.
-    Used for apply() in calculate_portfolio_performance.
-    """
-    return process_trade(row, price_df, category_scheme, index_df, tpsl_mode,
-                         tp_enabled, sl_enabled, entry_price_window)
-
-
 def simulate_trades(
     selected_stocks: pd.DataFrame, 
     price_data: pd.DataFrame, 
@@ -385,6 +381,7 @@ def simulate_trades(
     sl_enabled: bool = None,
     custom_tp_config: dict = None,
     custom_sl_config: dict = None,
+    custom_default_tpsl: dict = None,
     custom_atr_config: dict = None,
     custom_pivot_config: dict = None,
     custom_flat_config: dict = None,
@@ -402,138 +399,94 @@ def simulate_trades(
     - price_data: ['date', 'co_name', 'open', 'high', 'low', 'close']
     - category_scheme: 'volatility' or 'mcap' to determine which TP/SL config to use
     - index_data: Optional DataFrame with ['date', 'value'] for index-guided exits
-    - tpsl_mode: Override for TP/SL mode ('fixed', 'atr', 'pivot'). Uses config if None.
-    - tp_enabled: Override for take profit enabled. Uses config if None.
-    - sl_enabled: Override for stop loss enabled. Uses config if None.
-    - custom_tp_config: Custom TP config dict to override global config (for fixed mode optimization)
-    - custom_sl_config: Custom SL config dict to override global config (for fixed mode optimization)
-    - custom_atr_config: Custom ATR config dict with 'period', 'tp_multiplier', 'sl_multiplier'
-    - custom_pivot_config: Custom pivot config dict with 'lookback_days', 'tp_level', 'sl_level'
-    - custom_flat_config: Custom flat config dict with 'tp_pct', 'sl_pct'
-    - custom_index_exit_config: Custom index exit config dict with 'regime_filter' and 'vol_adjustment'
+    - tpsl_mode: TP/SL mode ('fixed', 'flat', 'atr', 'pivot'). Defaults to 'fixed' if None.
+    - tp_enabled: Whether take profit is active. Defaults to True if None.
+    - sl_enabled: Whether stop loss is active. Defaults to True if None.
+    - custom_tp_config: TP config dict for fixed mode ({category_scheme: {cat: pct}})
+    - custom_sl_config: SL config dict for fixed mode ({category_scheme: {cat: pct}})
+    - custom_default_tpsl: Default TP/SL dict with 'tp_pct' and 'sl_pct'
+    - custom_atr_config: ATR config dict with 'period', 'tp_multiplier', 'sl_multiplier'
+    - custom_pivot_config: Pivot config dict with 'lookback_days', 'tp_level', 'sl_level'
+    - custom_flat_config: Flat config dict with 'tp_pct', 'sl_pct'
+    - custom_index_exit_config: Index exit config dict with 'regime_filter' and 'vol_adjustment'
     - entry_price_window: Number of trading days to average for entry price (default: 3)
     
     Returns:
     - DataFrame with trade results including entry/exit details
     """
-    global TP_CONFIG, SL_CONFIG, ATR_CONFIG, PIVOT_CONFIG, FLAT_CONFIG, INDEX_EXIT_CONFIG
-    
-    # Override global config if custom values provided
-    original_tp_config = TP_CONFIG.copy() if custom_tp_config else None
-    original_sl_config = SL_CONFIG.copy() if custom_sl_config else None
-    original_atr_config = ATR_CONFIG.copy() if custom_atr_config else None
-    original_pivot_config = PIVOT_CONFIG.copy() if custom_pivot_config else None
-    original_flat_config = FLAT_CONFIG.copy() if custom_flat_config else None
-    original_index_exit_config = INDEX_EXIT_CONFIG.copy() if custom_index_exit_config else None
-    
-    if custom_tp_config:
-        TP_CONFIG = custom_tp_config
-    if custom_sl_config:
-        SL_CONFIG = custom_sl_config
-    if custom_atr_config:
-        ATR_CONFIG = custom_atr_config
-    if custom_pivot_config:
-        PIVOT_CONFIG = custom_pivot_config
-    if custom_flat_config:
-        FLAT_CONFIG = custom_flat_config
-    if custom_index_exit_config:
-        INDEX_EXIT_CONFIG = custom_index_exit_config
-    
-    try:
-        # --- Input Validation ---
-        if category_scheme not in ['volatility', 'mcap']:
-            raise ValueError("category_scheme must be 'volatility' or 'mcap'")
-        
-        # Base required columns
-        required_base_cols = {'quarter', 'co_name'}
-        required_price_cols = {'date', 'co_name', 'open', 'high', 'low', 'close'}
-        
-        if not required_base_cols.issubset(selected_stocks.columns):
-            missing_cols = required_base_cols - set(selected_stocks.columns)
-            raise ValueError(f"Missing required columns in selected_stocks: {missing_cols}")
-        
-        # Check for weight column: either cat_weight (selection mode) or stock_weight (preselected mode)
-        has_cat_weight = 'cat_weight' in selected_stocks.columns
-        has_stock_weight = 'stock_weight' in selected_stocks.columns
-        
-        if not (has_cat_weight or has_stock_weight):
-            raise ValueError("Missing weight column: need either 'cat_weight' or 'stock_weight'")
+    # Resolve each config: use caller-provided value or fall back to defaults
+    tp_config = custom_tp_config if custom_tp_config is not None else _DEFAULT_TP_CONFIG
+    sl_config = custom_sl_config if custom_sl_config is not None else _DEFAULT_SL_CONFIG
+    default_tpsl = custom_default_tpsl if custom_default_tpsl is not None else _DEFAULT_TPSL
+    atr_config = custom_atr_config if custom_atr_config is not None else _DEFAULT_ATR_CONFIG
+    pivot_config = custom_pivot_config if custom_pivot_config is not None else _DEFAULT_PIVOT_CONFIG
+    flat_config = custom_flat_config if custom_flat_config is not None else _DEFAULT_FLAT_CONFIG
+    index_exit_config = custom_index_exit_config if custom_index_exit_config is not None else _DEFAULT_INDEX_EXIT_CONFIG
 
-        if not required_price_cols.issubset(price_data.columns):
-            missing_cols = required_price_cols - set(price_data.columns)
-            raise ValueError(f"Missing required columns in price_data: {missing_cols}")
-        
-        # Make a copy of selected_stocks to avoid modifying the original
-        selected_stocks = selected_stocks.copy()
-        
-        # Handle optional 'cat' column: add placeholder if missing
-        if 'cat' not in selected_stocks.columns:
-            selected_stocks['cat'] = '_default'
-        
-        # Ensure date column is datetime
-        price_data = price_data.copy()
-        price_data['date'] = pd.to_datetime(price_data['date'])
-        
-        # Prepare index data if provided
-        index_df = None
-        if index_data is not None:
-            index_df = index_data.copy()
-            index_df['date'] = pd.to_datetime(index_df['date'])
+    # Resolve mode flags
+    mode = tpsl_mode if tpsl_mode is not None else 'fixed'
+    use_tp = tp_enabled if tp_enabled is not None else True
+    use_sl = sl_enabled if sl_enabled is not None else True
 
-        # Sort the selected_stocks data
-        selected_stocks = selected_stocks.sort_values(by=['quarter', 'co_name'], ignore_index=True)
-        
-        # Use provided values or fall back to config
-        mode = tpsl_mode if tpsl_mode is not None else TPSL_MODE
-        use_tp = tp_enabled if tp_enabled is not None else TP_ENABLED
-        use_sl = sl_enabled if sl_enabled is not None else SL_ENABLED
-        
-        # Apply the logic row by row
-        results = selected_stocks.apply(
-            lambda row: process_trade(row, price_data, category_scheme, index_df, mode,
-                                      use_tp, use_sl, entry_price_window), 
-            axis=1
-        )
-        
-        # Concatenate the generated columns back to original dataframe
-        final_df = pd.concat([selected_stocks, results], axis=1)
-        
-        # Calculate stock return
-        final_df['stock_return'] = (final_df['exit_price'] - final_df['entry_price']) / final_df['entry_price']
-        
-        return final_df
-        
-    finally:
-        # Restore original config if it was overridden
-        if original_tp_config is not None:
-            TP_CONFIG = original_tp_config
-        if original_sl_config is not None:
-            SL_CONFIG = original_sl_config
-        if original_atr_config is not None:
-            ATR_CONFIG = original_atr_config
-        if original_pivot_config is not None:
-            PIVOT_CONFIG = original_pivot_config
-        if original_flat_config is not None:
-            FLAT_CONFIG = original_flat_config
-        if original_index_exit_config is not None:
-            INDEX_EXIT_CONFIG = original_index_exit_config
-
-
-def calculate_portfolio_performance_simple(selected_stocks: pd.DataFrame, price_data: pd.DataFrame, 
-                                            category_scheme: str):
-    """
-    Simplified version for backward compatibility.
-    Uses fixed TP/SL mode with no index-guided exits.
+    # --- Input Validation ---
+    if category_scheme not in ['volatility', 'mcap']:
+        raise ValueError("category_scheme must be 'volatility' or 'mcap'")
     
-    Parameters:
-    - selected_stocks: ['quarter', 'co_name', 'cat', 'cat_weight']
-    - price_data: ['date', 'co_name', 'open', 'high', 'low', 'close']
-    - category_scheme: 'volatility' or 'mcap'
+    # Base required columns
+    required_base_cols = {'quarter', 'co_name'}
+    required_price_cols = {'date', 'co_name', 'open', 'high', 'low', 'close'}
     
-    Returns:
-    - DataFrame with trade results
-    """
-    return simulate_trades(
-        selected_stocks, price_data, category_scheme,
-        index_data=None, tpsl_mode='fixed'
+    if not required_base_cols.issubset(selected_stocks.columns):
+        missing_cols = required_base_cols - set(selected_stocks.columns)
+        raise ValueError(f"Missing required columns in selected_stocks: {missing_cols}")
+    
+    # Check for weight column: either cat_weight (selection mode) or stock_weight (preselected mode)
+    has_cat_weight = 'cat_weight' in selected_stocks.columns
+    has_stock_weight = 'stock_weight' in selected_stocks.columns
+    
+    if not (has_cat_weight or has_stock_weight):
+        raise ValueError("Missing weight column: need either 'cat_weight' or 'stock_weight'")
+
+    if not required_price_cols.issubset(price_data.columns):
+        missing_cols = required_price_cols - set(price_data.columns)
+        raise ValueError(f"Missing required columns in price_data: {missing_cols}")
+    
+    # Make a copy of selected_stocks to avoid modifying the original
+    selected_stocks = selected_stocks.copy()
+    
+    # Handle optional 'cat' column: add placeholder if missing
+    if 'cat' not in selected_stocks.columns:
+        selected_stocks['cat'] = '_default'
+    
+    # Ensure date column is datetime
+    price_data = price_data.copy()
+    price_data['date'] = pd.to_datetime(price_data['date'])
+    
+    # Prepare index data if provided
+    index_df = None
+    if index_data is not None:
+        index_df = index_data.copy()
+        index_df['date'] = pd.to_datetime(index_df['date'])
+
+    # Sort the selected_stocks data
+    selected_stocks = selected_stocks.sort_values(by=['quarter', 'co_name'], ignore_index=True)
+    
+    # Apply the logic row by row
+    results = selected_stocks.apply(
+        lambda row: process_trade(
+            row, price_data, category_scheme, index_df, mode,
+            use_tp, use_sl, entry_price_window,
+            tp_config=tp_config, sl_config=sl_config,
+            default_tpsl=default_tpsl, atr_config=atr_config,
+            pivot_config=pivot_config, flat_config=flat_config,
+            index_exit_config=index_exit_config),
+        axis=1
     )
+    
+    # Concatenate the generated columns back to original dataframe
+    final_df = pd.concat([selected_stocks, results], axis=1)
+    
+    # Calculate stock return
+    final_df['stock_return'] = (final_df['exit_price'] - final_df['entry_price']) / final_df['entry_price']
+    
+    return final_df
