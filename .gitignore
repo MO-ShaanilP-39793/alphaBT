@@ -37,6 +37,7 @@ ENV/
 
 # IDEs
 .vscode/
+.VSCodeCounter/
 .github/
 .idea/
 *.swp
