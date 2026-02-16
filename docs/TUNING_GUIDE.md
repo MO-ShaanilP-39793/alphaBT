@@ -1,6 +1,6 @@
 # Tuning Guide
 
-Comprehensive guide to hyperparameter optimization using Optuna in CCQPF.
+Comprehensive guide to strategy optimization using Optuna.
 
 ---
 
@@ -11,6 +11,8 @@ Comprehensive guide to hyperparameter optimization using Optuna in CCQPF.
 - [Setting Up tuning_config.yaml](#setting-up-tuning_configyaml)
 - [Running Optimization](#running-optimization)
 - [Analyzing Results](#analyzing-results)
+- [Multi-Objective Optimization](#multi-objective-optimization)
+- [Exporting Configs](#exporting-configs)
 - [Advanced Tuning Strategies](#advanced-tuning-strategies)
 - [From Tuning to Production](#from-tuning-to-production)
 - [Troubleshooting](#troubleshooting)
@@ -21,7 +23,7 @@ Comprehensive guide to hyperparameter optimization using Optuna in CCQPF.
 
 ### The Parameter Space Problem
 
-A typical CCQPF backtest has **dozens of parameters**:
+A typical backtest has **dozens of parameters**:
 
 - **Stock selection**: k (20-50), category counts (many combinations), selection method (2 options), min threshold (0.4-0.8)
 - **TP/SL thresholds**: Fixed (3 categories × 2 values = 6 params), Flat (2 params), ATR (3 params), Pivot (3 params)
@@ -70,9 +72,11 @@ A typical CCQPF backtest has **dozens of parameters**:
    ↓
 5. View results in optuna-dashboard
    ↓
-6. Copy best_config.yaml → strategy_config.yaml
+6. Export desired config with export_config.py
    ↓
-7. Run final backtest with detailed reports
+7. Copy exported config → strategy_config.yaml
+   ↓
+8. Run final backtest with detailed reports
 ```
 
 ### Time Estimation
@@ -306,7 +310,7 @@ MDD = max((peak - trough) / peak)
 #### Other Settings
 
 **study_name**: Unique identifier for this optimization run
-- Results stored in `optuna_studies.db` under this name
+- Results stored in `tuning_logs/<study_name>/optuna_study.db`
 - Use descriptive names: `"atr_optimization_2024"`, `"top_k_vs_category_feb2026"`
 - If `load_if_exists: true`, resumes existing study with same name
 
@@ -358,7 +362,8 @@ Number of trials: 100
 
 Best trial: 99
 Best value (Calmar): 3.41
-Best params saved to: best_config.yaml
+
+Use export_config.py to export trial configurations.
 ```
 
 ### Command-Line Options
@@ -427,19 +432,21 @@ After tuning completes:
 
 | File | Location | Description |
 |------|----------|-------------|
-| `optuna_studies.db` | `src/` | SQLite database with all trials |
-| `best_config.yaml` | `src/` | Best trial's full configuration |
-| `tuning_logs/<study_name>/` | `tuning_logs/` | Per-trial logs and metadata |
+| `optuna_study.db` | `tuning_logs/<study_name>/` | SQLite database with all trials for this study |
+| `tuning_config_used.yaml` | `tuning_logs/<study_name>/` | Copy of the tuning config used |
+| `data_quality_issues.csv` | `tuning_logs/<study_name>/` | (If validation found issues) Data coverage report |
 
-**optuna_studies.db**:
-- Contains all trials for all studies
+**Note**: Unlike previous versions, `best_config.yaml` is **not** auto-exported. Use the `export_config.py` script to export trial configurations (see [Exporting Configs](#exporting-configs) section).
+
+**optuna_study.db**:
+- Contains all trials for this specific study
+- Per-study database (isolated from other studies)
 - Persistent (survives restarts)
-- Query via Optuna Dashboard or Python API
+- Query via Optuna Dashboard: `optuna-dashboard sqlite:///tuning_logs/<study_name>/optuna_study.db`
 
-**best_config.yaml**:
-- Ready-to-use configuration
-- Copy to `strategy_config.yaml` for final backtest
-- Includes ALL parameters (fixed + sampled)
+**tuning_config_used.yaml**:
+- Exact copy of the config used for this optimization run
+- Useful for reproducing results or understanding what was optimized
 
 ---
 
@@ -449,10 +456,12 @@ After tuning completes:
 
 **Start dashboard**:
 ```bash
-optuna-dashboard sqlite:///optuna_studies.db
+optuna-dashboard sqlite:///tuning_logs/<study_name>/optuna_study.db
 ```
 
 **Access**: Open browser to `http://localhost:8080`
+
+**Tip**: Replace `<study_name>` with your actual study name (e.g., `cagr_vs_mdd_optimization`).
 
 **Features**:
 
@@ -581,6 +590,268 @@ last_quarter: 202411   # Test on 2023-2024
 - Avoid very narrow parameter ranges (e.g., `low: 0.123, high: 0.127`)
 - Prefer discrete steps for percentages: `step: 0.01` (not 0.001)
 - Limit conditional params (too many = overfitting risk)
+
+---
+
+## Multi-Objective Optimization
+
+### When to Use Multi-Objective
+
+Single-objective optimization collapses your goals into one number (e.g., Calmar ratio = CAGR / MDD). This is convenient but hides information — you don't see the full range of trade-offs available.
+
+**Use multi-objective when:**
+- You want to see the full trade-off curve between return and risk
+- You don't want to pre-commit to a specific CAGR/MDD weighting
+- You want to choose between aggressive (high CAGR, higher drawdown) and conservative (lower CAGR, minimal drawdown) strategies after seeing the options
+- Stakeholders have different risk preferences
+
+**Stick with single-objective when:**
+- You have a clear, fixed objective (e.g., "maximize Calmar ratio")
+- You want a single "best" answer with no ambiguity
+- You're doing quick exploration with few trials
+
+### How It Works: Pareto Front
+
+In multi-objective optimization, there is no single "best" trial. Instead, Optuna finds a set of **Pareto-optimal** (non-dominated) solutions.
+
+A trial is **Pareto-optimal** if no other trial is better in ALL objectives simultaneously. The collection of these trials forms the **Pareto front** — a curve showing the best achievable trade-offs.
+
+```
+  CAGR ↑
+   25% │            ● (aggressive: high return, high drawdown)
+       │          ●
+   20% │        ●      ← Pareto front (the frontier of best trade-offs)
+       │      ●
+   15% │    ●
+       │  ● (conservative: lower return, minimal drawdown)
+   10% │
+       └──────────────────────── MDD →
+         5%    10%    15%    20%
+```
+
+Trials **below** the Pareto front are **dominated** — there exists another trial that is better in at least one objective without being worse in any other.
+
+### Configuration
+
+To enable multi-objective, **replace** `objective`/`direction` with `objectives`/`directions` in the `optuna:` section of your tuning config. These keys are **mutually exclusive** — you cannot have both `objective` and `objectives` in the same config (this will raise an error).
+
+```yaml
+optuna:
+  study_name: "cagr_vs_mdd_optimization"
+  
+  # Multi-objective: maximize CAGR while minimizing drawdown
+  objectives: ['cagr', 'mdd']
+  directions: ['maximize', 'minimize']
+  
+  # Per-objective failure penalties (must match length of objectives)
+  # Use negative for maximize objectives, positive for minimize objectives
+  failure_penalties: [-999.0, 999.0]
+  
+  n_trials: 200
+  sampler: "NSGA-II"   # Recommended for multi-objective
+  load_if_exists: true
+  
+  # calmar_cap still applies if 'calmar' is one of your objectives
+  # calmar_cap: 10.0
+```
+
+**Key differences from single-objective:**
+
+| Setting | Single-Objective | Multi-Objective |
+|---------|-----------------|----------------|
+| Config key | `objective: "calmar"` | `objectives: ['cagr', 'mdd']` |
+| Direction | `direction: "maximize"` | `directions: ['maximize', 'minimize']` |
+| Penalty | `failure_penalty: -999.0` | `failure_penalties: [-999.0, 999.0]` |
+| Sampler | `TPE` (default) | `NSGA-II` (default if not specified) |
+| Result | Single best trial | Pareto front of non-dominated trials |
+
+**Supported objective combinations:**
+You can combine any of `'cagr'`, `'mdd'`, `'calmar'`. Common setups:
+- `['cagr', 'mdd']` with `['maximize', 'minimize']` — the classic return vs risk trade-off
+- `['calmar', 'mdd']` with `['maximize', 'minimize']` — risk-adjusted return vs absolute risk
+
+### Samplers for Multi-Objective
+
+| Sampler | Multi-Obj Support | Notes |
+|---------|:-:|-------|
+| `NSGA-II` | ✅ | **Recommended.** Evolutionary algorithm designed for multi-objective. Fast, well-tested. |
+| `NSGA-III` | ✅ | Extension of NSGA-II for many objectives (3+). Use if you have 3+ objectives. |
+| `TPE` | ✅ | Works for multi-objective since Optuna 3.0. Decent but not specialized. |
+| `Random` | ✅ | Random search. Useful as a baseline. |
+| `CmaEs` | ❌ | **Does NOT support multi-objective.** Will raise an error. |
+
+### Running Multi-Objective Optimization
+
+The command is identical to single-objective — the mode is detected from your config:
+
+```bash
+cd src
+python run_tuning.py                          # Uses tuning_config.yaml
+python run_tuning.py --n-trials 200            # Override trial count
+python run_tuning.py --fresh                   # Start a fresh study
+```
+
+The output will show the optimization mode and, upon completion, a summary of the Pareto front:
+
+```
+======================================================================
+OPTUNA HYPERPARAMETER TUNING
+======================================================================
+  Mode: Multi-objective
+  Objective(s): cagr (maximize) + mdd (minimize)
+  Sampler: NSGA-II
+  ...
+
+======================================================================
+OPTIMIZATION COMPLETE
+======================================================================
+
+Study Summary:
+  Total trials: 200
+  Completed: 195
+  Failed: 5
+
+Pareto Front: 23 non-dominated solutions
+  CAGR (maximize): 0.0812 — 0.2341
+  Maximum Drawdown (minimize): 0.0523 — 0.1892
+
+  Top 10 Pareto-optimal trials (sorted by cagr):
+  Trial |           CAGR |            MDD |      CAGR% |       MDD% | Win Rate% |    Trades
+    142 |         0.2341 |         0.1892 |      23.41 |      18.92 |     58.20 |       450
+    087 |         0.2105 |         0.1456 |      21.05 |      14.56 |     56.80 |       420
+    ...
+```
+
+### Analyzing Multi-Objective Studies in Optuna Dashboard
+
+The Optuna Dashboard has built-in support for multi-objective studies:
+
+```bash
+optuna-dashboard sqlite:///tuning_logs/<study_name>/optuna_study.db
+```
+
+Open the browser at `http://localhost:8080` and navigate to your study.
+
+#### 1. Pareto Front Plot
+
+The dashboard automatically shows a **scatter plot** of the Pareto front:
+- Each axis represents one objective (e.g., X = CAGR, Y = MDD)
+- Each dot is a completed trial
+- **Pareto-optimal trials** are highlighted on the frontier
+- Dominated trials appear behind the front
+
+**How to read it:**
+- The top-left region represents "ideal" (high CAGR, low MDD) — but may be unachievable
+- The Pareto front shows what IS achievable — the best trade-offs
+- Points at the extremes represent the aggressive end (max CAGR) and conservative end (min MDD)
+- The **knee point** (sharpest bend in the curve) often represents the best balanced trade-off
+
+#### 2. Parallel Coordinate Plot
+
+Still works in multi-objective mode. Filter by Pareto-optimal trials to see which parameter regions produce the best trade-offs.
+
+**Tip**: Color by one objective (e.g., CAGR) to see how parameters correlate with return, then switch to the other (MDD) to see the risk perspective.
+
+#### 3. Parameter Importances
+
+The dashboard shows parameter importances **per objective**. This is very useful:
+- A parameter that is important for CAGR but not for MDD → controls return without affecting risk
+- A parameter important for both → a key lever that moves the entire trade-off
+- A parameter important for neither → noise, consider removing
+
+#### 4. Trial History
+
+For multi-objective studies, the trial history shows values for each objective over time. You can track convergence of the Pareto front as trials progress.
+
+### Choosing a Solution from the Pareto Front
+
+Unlike single-objective, you must **choose** which Pareto solution to use. Common strategies:
+
+1. **Aggressive**: Pick the trial with highest CAGR (right end of Pareto front)
+   - Accepts highest drawdown for maximum return
+   - Suitable when capital preservation is secondary
+
+2. **Conservative**: Pick the trial with lowest MDD (left end of Pareto front)
+   - Accepts lower returns for minimal drawdown
+   - Suitable for risk-averse mandates
+
+3. **Knee Point** (recommended): Pick the trial at the "elbow" of the curve
+   - Best marginal trade-off (each additional unit of risk buys the most return)
+   - Visual: where the Pareto front bends most sharply
+   - Examine the Pareto front plot in the dashboard and choose the point where the curve transitions from steep to flat
+
+4. **Constraint-Based**: Pick the best CAGR trial where MDD < your threshold
+   - E.g., "Give me the highest CAGR where max drawdown stays under 15%"
+   - Filter Pareto configs by MDD and choose the best CAGR among those
+
+### Comparison: Single-Objective Calmar vs Multi-Objective CAGR+MDD
+
+| Aspect | Calmar (single-obj) | CAGR + MDD (multi-obj) |
+|--------|--------------------|-----------------------|
+| Output | One best trial | Set of Pareto-optimal trials |
+| Trade-off | Pre-defined (CAGR/MDD ratio) | User chooses after seeing options |
+| Information | Less (collapsed to ratio) | More (full frontier visible) |
+| Simplicity | Simpler to interpret | Requires judgment to pick a solution |
+| Risk of distortion | Tiny MDD → inflated ratio | No distortion — each metric is independent |
+| When to use | Quick optimization, clear mandate | Exploration, stakeholder presentation |
+
+**Practical recommendation**: Start with single-objective Calmar for baseline, then switch to multi-objective for refinement and stakeholder discussions where seeing the full trade-off curve adds value.
+
+---
+
+## Exporting Configs
+
+After optimization, use `export_config.py` to extract trial configurations as ready-to-run YAML files.
+
+### Single-Objective: Export Best Trial
+
+```bash
+cd src
+python export_config.py --study-folder tuning_logs/my_study --best
+```
+
+This exports `best_config.yaml` into the study folder — the trial with the highest (or lowest) objective value.
+
+### Export a Specific Trial
+
+Works for both single and multi-objective studies:
+
+```bash
+python export_config.py --study-folder tuning_logs/my_study --trial 42
+```
+
+This exports `trial_42_config.yaml` into the study folder.
+
+### Multi-Objective: Export Pareto Configs
+
+```bash
+# Export ALL Pareto-optimal configs
+python export_config.py --study-folder tuning_logs/my_study --pareto
+
+# Export only top 5 (sorted by first objective)
+python export_config.py --study-folder tuning_logs/my_study --pareto --top 5
+```
+
+This creates a `pareto_configs/` folder inside the study folder with one YAML per Pareto trial:
+```
+tuning_logs/my_study/
+  pareto_configs/
+    trial_42.yaml    # Aggressive (highest CAGR)
+    trial_87.yaml
+    trial_123.yaml
+    trial_156.yaml
+    trial_201.yaml   # Conservative (lowest MDD)
+```
+
+Each exported YAML includes a comment header with the trial number, objective values, and key metrics.
+
+### Using an Exported Config
+
+```bash
+# Copy to strategy_config.yaml and run
+copy tuning_logs\my_study\pareto_configs\trial_87.yaml strategy_config.yaml
+python backtest_strategy.py
+```
 
 ---
 
@@ -736,34 +1007,51 @@ flat_tpsl:
 
 ## From Tuning to Production
 
-### Step 1: Review Best Config
+### Step 1: Export Best Config
 
-Open `best_config.yaml`:
+Use `export_config.py` to export the best trial (single-objective) or a chosen Pareto solution (multi-objective):
+
+```bash
+cd src
+
+# Single-objective: export best trial
+python export_config.py --study-folder tuning_logs/my_study --best
+
+# Multi-objective: export Pareto front, then choose one
+python export_config.py --study-folder tuning_logs/my_study --pareto
+```
+
+This creates `best_config.yaml` (or `pareto_configs/trial_*.yaml`) in the study folder.
+
+### Step 2: Review Exported Config
+
+Open the exported config:
 
 ```bash
 # Windows
-notepad best_config.yaml
+notepad tuning_logs\my_study\best_config.yaml
 
 # Mac/Linux
-cat best_config.yaml
+cat tuning_logs/my_study/best_config.yaml
 ```
 
 **Sanity checks**:
 - ✅ All parameters present
 - ✅ Values make sense (no suspicious outliers)
 - ✅ Fixed params match your data
+- ✅ Objective values in header comment match expectations
 
-### Step 2: Copy to Strategy Config
+### Step 3: Copy to Strategy Config
 
 ```bash
 # Windows
-copy best_config.yaml strategy_config.yaml
+copy tuning_logs\my_study\best_config.yaml strategy_config.yaml
 
 # Mac/Linux
-cp best_config.yaml strategy_config.yaml
+cp tuning_logs/my_study/best_config.yaml strategy_config.yaml
 ```
 
-### Step 3: Enable Reports
+### Step 4: Enable Reports
 
 Edit `strategy_config.yaml`:
 
@@ -777,7 +1065,7 @@ detailed_report_sub_periods:
   - [2023, 2025]
 ```
 
-### Step 4: Run Final Backtest
+### Step 5: Run Final Backtest
 
 ```bash
 cd src
@@ -789,13 +1077,13 @@ python backtest_strategy.py
 - Generates full reports (Excel, charts)
 - Suitable for stakeholder presentation
 
-### Step 5: Document Your Work
+### Step 6: Document Your Work
 
 Save a copy of the optimized config with metadata:
 
 ```bash
-# Create versioned config
-copy best_config.yaml configs/production_v1_calmar3.41_feb2026.yaml
+# Create versioned config (from the strategy_config.yaml you're using)
+copy strategy_config.yaml configs/production_v1_calmar3.41_feb2026.yaml
 ```
 
 **Include in filename**:

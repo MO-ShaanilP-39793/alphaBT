@@ -8,6 +8,9 @@ from tuning.utils import (
     compute_max_drawdown,
     compute_calmar_ratio,
     compute_objective,
+    compute_multi_objective,
     export_best_config,
+    is_multi_objective,
     get_study_summary,
+    SUPPORTED_OBJECTIVES,
 )

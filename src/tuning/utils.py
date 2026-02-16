@@ -436,6 +436,10 @@ def compute_calmar_ratio(daily_pf_values: pd.DataFrame, cap: float = 10.0) -> fl
     return calmar
 
 
+# Supported objective names for validation
+SUPPORTED_OBJECTIVES = ('calmar', 'cagr', 'mdd')
+
+
 def compute_objective(objective_name: str, daily_pf_values: pd.DataFrame, **kwargs) -> float:
     """
     Compute the specified optimization objective from daily portfolio values.
@@ -467,8 +471,37 @@ def compute_objective(objective_name: str, daily_pf_values: pd.DataFrame, **kwar
     else:
         raise ValueError(
             f"Unknown objective: '{objective_name}'. "
-            f"Supported objectives: 'calmar', 'cagr', 'mdd'"
+            f"Supported objectives: {SUPPORTED_OBJECTIVES}"
         )
+
+
+def compute_multi_objective(
+        objective_names: list, 
+        daily_pf_values: pd.DataFrame, 
+        **kwargs) -> tuple:
+    """
+    Compute multiple optimization objectives from daily portfolio values.
+    
+    Used by multi-objective optimization to return a tuple of values,
+    one per objective.
+    
+    Parameters:
+        objective_names: List of objective names (e.g., ['cagr', 'mdd'])
+        daily_pf_values: DataFrame with columns ['date', 'portfolio_value', 'quarter']
+        **kwargs: Additional objective-specific parameters:
+            - cap (float): For 'calmar', maximum ratio value (default: 10.0)
+        
+    Returns:
+        Tuple of objective values (one per objective name), or None for any
+        that fail to compute
+        
+    Raises:
+        ValueError: If any objective_name is not supported
+    """
+    values = []
+    for name in objective_names:
+        values.append(compute_objective(name, daily_pf_values, **kwargs))
+    return tuple(values)
 
 
 def export_best_config(
@@ -499,35 +532,77 @@ def export_best_config(
     print(f"Best configuration exported to: {output_path}")
 
 
+def is_multi_objective(study: optuna.Study) -> bool:
+    """Check if a study is multi-objective (has multiple directions)."""
+    return len(study.directions) > 1
+
+
 def get_study_summary(study: optuna.Study) -> dict:
     """
     Get summary statistics from an Optuna study.
+    
+    Supports both single-objective and multi-objective studies.
     
     Parameters:
         study: Completed Optuna study
         
     Returns:
-        Dictionary with study summary statistics
+        Dictionary with study summary statistics.
+        For multi-objective studies, includes 'is_multi_objective', 
+        'n_pareto_optimal', and per-objective statistics.
     """
     trials_df = study.trials_dataframe()
     
     completed_trials = trials_df[trials_df['state'] == 'COMPLETE']
     
+    multi_obj = is_multi_objective(study)
+    
     summary = {
         'study_name': study.study_name,
-        'direction': study.direction.name,
+        'is_multi_objective': multi_obj,
+        'directions': [d.name for d in study.directions],
         'n_trials': len(study.trials),
         'n_completed': len(completed_trials),
         'n_pruned': len(trials_df[trials_df['state'] == 'PRUNED']),
         'n_failed': len(trials_df[trials_df['state'] == 'FAIL']),
-        'best_value': study.best_value if study.best_trial else None,
-        'best_trial_number': study.best_trial.number if study.best_trial else None,
     }
     
-    if not completed_trials.empty:
-        summary['mean_value'] = completed_trials['value'].mean()
-        summary['std_value'] = completed_trials['value'].std()
-        summary['min_value'] = completed_trials['value'].min()
-        summary['max_value'] = completed_trials['value'].max()
+    if multi_obj:
+        # Multi-objective: report Pareto front statistics
+        try:
+            pareto_trials = study.best_trials
+            summary['n_pareto_optimal'] = len(pareto_trials)
+            
+            if pareto_trials:
+                # Per-objective statistics across Pareto front
+                n_objectives = len(study.directions)
+                pareto_values = [t.values for t in pareto_trials]
+                
+                for i in range(n_objectives):
+                    obj_vals = [v[i] for v in pareto_values]
+                    summary[f'objective_{i}_min'] = min(obj_vals)
+                    summary[f'objective_{i}_max'] = max(obj_vals)
+                    summary[f'objective_{i}_mean'] = sum(obj_vals) / len(obj_vals)
+        except Exception:
+            summary['n_pareto_optimal'] = 0
+        
+        # No single best value/trial for multi-objective
+        summary['best_value'] = None
+        summary['best_trial_number'] = None
+    else:
+        # Single-objective
+        summary['direction'] = study.directions[0].name
+        try:
+            summary['best_value'] = study.best_value
+            summary['best_trial_number'] = study.best_trial.number
+        except ValueError:
+            summary['best_value'] = None
+            summary['best_trial_number'] = None
+        
+        if not completed_trials.empty:
+            summary['mean_value'] = completed_trials['value'].mean()
+            summary['std_value'] = completed_trials['value'].std()
+            summary['min_value'] = completed_trials['value'].min()
+            summary['max_value'] = completed_trials['value'].max()
     
     return summary

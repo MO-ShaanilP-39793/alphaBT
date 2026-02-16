@@ -276,33 +276,60 @@ optuna:
   # Study identifier
   study_name: "backtest_calmar_optimization"
   
-  # Optimization objective
-  # - 'calmar': Maximize Calmar ratio (CAGR / |Max Drawdown|)
-  # - 'cagr': Maximize Compound Annual Growth Rate
-  # - 'mdd': Minimize Maximum Drawdown
-  # Default: 'calmar' (if not specified)
+  # ---------------------------------------------------------------------------
+  # Single-Objective Optimization
+  # ---------------------------------------------------------------------------
+  # Use 'objective' (string) + 'direction' (string) for single-objective mode.
+  #
+  # Supported objectives:
+  #   - 'calmar': Calmar ratio (CAGR / |Max Drawdown|)
+  #   - 'cagr': Compound Annual Growth Rate
+  #   - 'mdd': Maximum Drawdown (magnitude)
+  #
+  # Direction:
+  #   - 'maximize' for 'calmar' and 'cagr'
+  #   - 'minimize' for 'mdd'
   objective: "calmar"
+  direction: "maximize"
+  
+  # Penalty for failed trials (use negative when maximizing, positive when minimizing)
+  failure_penalty: -999.0
+  
+  # Cap Calmar ratio to avoid inflated values from tiny drawdowns
+  # Only applies when 'calmar' is the objective (single or multi)
+  calmar_cap: 10.0
+  
+  # ---------------------------------------------------------------------------
+  # Multi-Objective Optimization (uncomment to enable)
+  # ---------------------------------------------------------------------------
+  # Use 'objectives' (list) + 'directions' (list) for multi-objective mode.
+  # This produces a Pareto front of non-dominated solutions instead of a single best.
+  #
+  # IMPORTANT: 'objective' and 'objectives' are mutually exclusive.
+  # To enable multi-objective, COMMENT OUT 'objective' and 'direction' above,
+  # then UNCOMMENT 'objectives' and 'directions' below.
+  # Having both will raise a configuration error.
+  #
+  # Recommended sampler for multi-objective: 'NSGA-II' or 'NSGA-III'
+  #
+  # Example: maximize CAGR while minimizing drawdown
+  # objectives: ['cagr', 'mdd']
+  # directions: ['maximize', 'minimize']
+  # failure_penalties: [-999.0, 999.0]
+  #
+  # You can combine any supported objectives (including 'calmar').
+  # Length of 'directions' and 'failure_penalties' must match 'objectives'.
+  # If 'failure_penalties' is omitted, defaults are auto-derived from directions.
   
   # Number of trials
   n_trials: 100
   
-  # Sampler algorithm: TPE, Random, CmaEs (Covariance matrix adaptation evolution strategy)
+  # Sampler algorithm
+  # Single-objective: 'TPE' (recommended), 'Random', 'CmaEs'
+  # Multi-objective:  'NSGA-II' (recommended), 'NSGA-III', 'TPE', 'Random'
+  # Note: 'CmaEs' does NOT support multi-objective optimization.
+  # If not specified for multi-objective, defaults to 'NSGA-II'.
   sampler: "TPE"
-  
-  # Optimization direction
-  # - Use 'maximize' for 'calmar' and 'cagr' objectives
-  # - Use 'minimize' for 'mdd' objective
-  direction: "maximize"
   
   # Resume existing study if it exists, or start fresh
   load_if_exists: true
-  
-  # Cap Calmar ratio to avoid inflated values from tiny drawdowns
-  # Only applies when objective is 'calmar'
-  # Values above this will be clamped
-  calmar_cap: 10.0
-  
-  # Penalty value for failed trials (no trades, errors, etc.)
-  # Use a large negative value when maximizing (if objective is 'calmar' or 'cagr')
-  # Use a large positive value when minimizing (if objective is 'mdd')
-  failure_penalty: -999.0

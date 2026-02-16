@@ -1,8 +1,16 @@
 """
 Optuna Hyperparameter Tuning Script for Backtesting Strategy
 
-This script runs hyperparameter optimization using Optuna to find the best
-strategy parameters that maximize the Calmar ratio.
+Supports both single-objective and multi-objective optimization.
+
+Single-objective:
+    Maximizes a single metric (Calmar, CAGR) or minimizes MDD.
+    Config uses: objective, direction, failure_penalty
+
+Multi-objective:
+    Simultaneously optimizes multiple metrics (e.g., maximize CAGR + minimize MDD).
+    Produces a Pareto front of non-dominated solutions.
+    Config uses: objectives, directions, failure_penalties
 
 Usage:
     python run_tuning.py                          # Use tuning_config.yaml
@@ -11,9 +19,11 @@ Usage:
     python run_tuning.py --fresh                  # Start fresh study (ignore existing)
 
 After optimization:
-    - Best parameters are exported to best_config.yaml
     - Study is stored in SQLite for Optuna Dashboard analysis
-    - Run: optuna-dashboard sqlite:///optuna_studies.db
+    - Use export_config.py to export trial configs:
+        python export_config.py --study-folder tuning_logs/<study> --best
+        python export_config.py --study-folder tuning_logs/<study> --pareto --top 5
+    - Run: optuna-dashboard sqlite:///tuning_logs/<study>/optuna_study.db
 """
 
 import argparse
@@ -23,17 +33,24 @@ from datetime import datetime
 from pathlib import Path
 import pandas as pd
 import optuna
-from optuna.samplers import TPESampler, RandomSampler, CmaEsSampler
+from optuna.samplers import (
+    TPESampler, 
+    RandomSampler, 
+    CmaEsSampler, 
+    NSGAIISampler, 
+    NSGAIIISampler,
+)
 
 from tuning import (
     load_tuning_config,
     sample_parameters,
     build_config,
     compute_objective,
+    compute_multi_objective,
     compute_cagr,
     compute_max_drawdown,
-    export_best_config,
     get_study_summary,
+    SUPPORTED_OBJECTIVES,
 )
 
 from backtest_strategy import (
@@ -209,33 +226,157 @@ def set_trial_user_attributes(
                                     trial.set_user_attr(attr_name, value)  # Already rounded to 2 decimals
 
 
-def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnings: bool = True):
+def _parse_objective_config(optuna_config: dict) -> dict:
+    """
+    Parse objective configuration and determine single vs multi-objective mode.
+    
+    Detection logic:
+        - If 'objectives' (list) is present → multi-objective
+        - If 'objective' (string) is present → single-objective
+        - If both present → error
+    
+    Parameters:
+        optuna_config: The 'optuna' section of tuning config
+        
+    Returns:
+        Dictionary with keys:
+            - is_multi_objective (bool)
+            - objective_names (list of str): e.g., ['calmar'] or ['cagr', 'mdd']
+            - directions (list of str): e.g., ['maximize'] or ['maximize', 'minimize']
+            - failure_penalties (list of float): per-objective penalty values
+            - calmar_cap (float): cap for calmar objective
+    """
+    has_single = 'objective' in optuna_config
+    has_multi = 'objectives' in optuna_config
+    
+    # Enforce mutual exclusivity
+    if has_single and has_multi:
+        raise ValueError(
+            "Cannot specify both 'objective' (single-objective) and 'objectives' "
+            "(multi-objective) in the same config. Choose one mode:\n"
+            "  - For single-objective: use 'objective' + 'direction'\n"
+            "  - For multi-objective: use 'objectives' + 'directions'"
+        )
+    
+    if has_multi:
+        # Multi-objective mode
+        objective_names = optuna_config['objectives']
+        if not isinstance(objective_names, list) or len(objective_names) < 2:
+            raise ValueError(
+                "'objectives' must be a list with at least 2 entries "
+                "(e.g., ['cagr', 'mdd']). For single-objective, use 'objective' instead."
+            )
+        
+        # Validate objective names
+        for name in objective_names:
+            if name not in SUPPORTED_OBJECTIVES:
+                raise ValueError(
+                    f"Unknown objective: '{name}'. "
+                    f"Supported: {SUPPORTED_OBJECTIVES}"
+                )
+        
+        # Directions (required for multi-objective)
+        directions = optuna_config.get('directions')
+        if directions is None:
+            raise ValueError(
+                "'directions' is required for multi-objective optimization. "
+                "Provide a list matching 'objectives' length "
+                "(e.g., ['maximize', 'minimize'])."
+            )
+        if len(directions) != len(objective_names):
+            raise ValueError(
+                f"'directions' length ({len(directions)}) must match "
+                f"'objectives' length ({len(objective_names)})."
+            )
+        
+        # Failure penalties
+        raw_penalties = optuna_config.get('failure_penalties')
+        if raw_penalties is None:
+            # Auto-derive from directions
+            failure_penalties = [
+                -999.0 if d == 'maximize' else 999.0 for d in directions
+            ]
+        elif isinstance(raw_penalties, list):
+            if len(raw_penalties) != len(objective_names):
+                raise ValueError(
+                    f"'failure_penalties' length ({len(raw_penalties)}) must match "
+                    f"'objectives' length ({len(objective_names)})."
+                )
+            failure_penalties = raw_penalties
+        else:
+            # Scalar — broadcast to all objectives
+            failure_penalties = [float(raw_penalties)] * len(objective_names)
+        
+        return {
+            'is_multi_objective': True,
+            'objective_names': objective_names,
+            'directions': directions,
+            'failure_penalties': failure_penalties,
+            'calmar_cap': optuna_config.get('calmar_cap', 10.0),
+        }
+    
+    elif has_single:
+        # Single-objective mode
+        objective_name = optuna_config['objective']
+        if objective_name not in SUPPORTED_OBJECTIVES:
+            raise ValueError(
+                f"Unknown objective: '{objective_name}'. "
+                f"Supported: {SUPPORTED_OBJECTIVES}"
+            )
+        
+        direction = optuna_config.get('direction', 'maximize')
+        failure_penalty = optuna_config.get('failure_penalty', -999.0)
+        
+        return {
+            'is_multi_objective': False,
+            'objective_names': [objective_name],
+            'directions': [direction],
+            'failure_penalties': [failure_penalty],
+            'calmar_cap': optuna_config.get('calmar_cap', 10.0),
+        }
+    
+    else:
+        # Neither specified — default to single-objective calmar
+        return {
+            'is_multi_objective': False,
+            'objective_names': ['calmar'],
+            'directions': ['maximize'],
+            'failure_penalties': [-999.0],
+            'calmar_cap': optuna_config.get('calmar_cap', 10.0),
+        }
+
+
+def create_objective(tuning_config: dict, data_cache: DataCache, 
+                     obj_config: dict, suppress_warnings: bool = True):
     """
     Create the objective function for Optuna optimization.
     
-    This is a factory function that returns the actual objective function
-    with the config and data cache bound via closure.
+    Supports both single-objective (returns float) and multi-objective 
+    (returns tuple of floats) modes.
     
     Parameters:
         tuning_config: Full tuning configuration
         data_cache: Cached data files
+        obj_config: Parsed objective config from _parse_objective_config()
         suppress_warnings: If True, suppress warnings during trials (default: True)
         
     Returns:
-        Objective function for Optuna
+        Objective function for Optuna (returns float or tuple of floats)
     """
     fixed_config = tuning_config['fixed']
-    optuna_config = tuning_config['optuna']
-    objective_name = optuna_config.get('objective', 'calmar')
-    calmar_cap = optuna_config.get('calmar_cap', 10.0)
-    failure_penalty = optuna_config.get('failure_penalty', -999.0)
+    is_multi_obj = obj_config['is_multi_objective']
+    objective_names = obj_config['objective_names']
+    failure_penalties = obj_config['failure_penalties']
+    calmar_cap = obj_config['calmar_cap']
     
-    def objective(trial: optuna.Trial) -> float:
+    # Single penalty (float) for single-obj, tuple for multi-obj
+    failure_return = tuple(failure_penalties) if is_multi_obj else failure_penalties[0]
+    
+    def objective(trial: optuna.Trial):
         """
-        Objective function that samples parameters, runs backtest, 
-        and returns the specified optimization objective.
+        Objective function that samples parameters, runs backtest,
+        and returns the optimization objective(s).
         """
-        # Suppress warnings during trial execution to avoid cluttering output
         with warnings.catch_warnings():
             if suppress_warnings:
                 warnings.simplefilter("ignore")
@@ -258,53 +399,81 @@ def create_objective(tuning_config: dict, data_cache: DataCache, suppress_warnin
                 
                 # 4. Validate results
                 if results is None:
-                    return failure_penalty
+                    return failure_return
                 
                 daily_pf_values = results.get('daily_pf_values')
                 if daily_pf_values is None or daily_pf_values.empty:
-                    return failure_penalty
+                    return failure_return
                 
                 # Prepare daily_pf in expected format
                 daily_pf = daily_pf_values.reset_index()
                 daily_pf.columns = ['date', 'portfolio_value', 'quarter']
                 
-                # 5. Compute objective value
-                objective_value = compute_objective(
-                    objective_name, 
-                    daily_pf, 
-                    cap=calmar_cap
-                )
-                
-                if objective_value is None:
-                    return failure_penalty
-                
-                # 6. Store user attributes for analysis in Optuna Dashboard
-                set_trial_user_attributes(trial, sampled_params, results)
-                
-                return objective_value
+                # 5. Compute objective value(s)
+                if is_multi_obj:
+                    values = compute_multi_objective(
+                        objective_names,
+                        daily_pf,
+                        cap=calmar_cap
+                    )
+                    # Replace None values with corresponding failure penalties
+                    final_values = tuple(
+                        fp if v is None else v
+                        for v, fp in zip(values, failure_penalties)
+                    )
+                    if all(v == fp for v, fp in zip(final_values, failure_penalties)):
+                        return failure_return
+                    
+                    # 6. Store user attributes
+                    set_trial_user_attributes(trial, sampled_params, results)
+                    return final_values
+                else:
+                    objective_value = compute_objective(
+                        objective_names[0],
+                        daily_pf,
+                        cap=calmar_cap
+                    )
+                    if objective_value is None:
+                        return failure_return
+                    
+                    # 6. Store user attributes
+                    set_trial_user_attributes(trial, sampled_params, results)
+                    return objective_value
                 
             except Exception as e:
-                # Log error but don't crash the optimization
                 warnings.warn(f"Trial {trial.number} failed with error: {str(e)}")
-                return failure_penalty
+                return failure_return
     
     return objective
 
 
-def get_sampler(sampler_name: str) -> optuna.samplers.BaseSampler:
+def get_sampler(sampler_name: str, is_multi_obj: bool = False) -> optuna.samplers.BaseSampler:
     """
     Get Optuna sampler by name.
     
     Parameters:
-        sampler_name: Name of sampler ('TPE', 'Random', 'CmaEs')
+        sampler_name: Name of sampler ('TPE', 'Random', 'CmaEs', 'NSGA-II', 'NSGA-III')
+        is_multi_obj: Whether the study is multi-objective
         
     Returns:
         Optuna sampler instance
+        
+    Raises:
+        ValueError: If sampler is unknown or incompatible with study type
     """
+    # CmaEs does not support multi-objective
+    if is_multi_obj and sampler_name == 'CmaEs':
+        raise ValueError(
+            "CmaEsSampler does not support multi-objective optimization. "
+            "Use 'NSGA-II', 'NSGA-III', or 'TPE' instead."
+        )
+    
     samplers = {
         'TPE': TPESampler(seed=42),
         'Random': RandomSampler(seed=42),
         'CmaEs': CmaEsSampler(seed=42),
+        'NSGA-II': NSGAIISampler(seed=42),
+        'NSGA-III': NSGAIIISampler(seed=42),
     }
     
     if sampler_name not in samplers:
@@ -342,7 +511,7 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
                      n_trials_override: int = None,
                      fresh_study: bool = False) -> optuna.Study:
     """
-    Run Optuna hyperparameter optimization.
+    Run optimization.
     
     Parameters:
         config_path: Path to tuning configuration YAML
@@ -368,24 +537,34 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     study_name = optuna_config['study_name']
     n_trials = n_trials_override or optuna_config['n_trials']
     sampler_name = optuna_config.get('sampler', 'TPE')
-    direction = optuna_config.get('direction', 'maximize')
     load_if_exists = optuna_config.get('load_if_exists', True) and not fresh_study
+    
+    # Parse objective configuration (detects single vs multi-objective)
+    obj_config = _parse_objective_config(optuna_config)
+    is_multi_obj = obj_config['is_multi_objective']
+    
+    # Default sampler for multi-objective if not explicitly set
+    if is_multi_obj and 'sampler' not in optuna_config:
+        sampler_name = 'NSGA-II'
     
     # Setup study folder structure
     study_folder = setup_study_folder(study_name)
     storage = f"sqlite:///{study_folder / 'optuna_study.db'}"
-    best_config_path = study_folder / 'best_config.yaml'
     tuning_config_copy_path = study_folder / 'tuning_config_used.yaml'
     
-    objective_name = optuna_config.get('objective', 'calmar')
+    # Display configuration
+    objective_display = (
+        ' + '.join(f"{n} ({d})" for n, d in zip(obj_config['objective_names'], obj_config['directions']))
+    )
+    mode_label = "Multi-objective" if is_multi_obj else "Single-objective"
     
     print(f"  Study name: {study_name}")
     print(f"  Study folder: {study_folder}")
     print(f"  Storage: {storage}")
-    print(f"  Objective: {objective_name}")
+    print(f"  Mode: {mode_label}")
+    print(f"  Objective(s): {objective_display}")
     print(f"  Trials: {n_trials}")
     print(f"  Sampler: {sampler_name}")
-    print(f"  Direction: {direction}")
     print(f"  Load existing: {load_if_exists}")
     print(f"  Quarter range: {fixed_config['first_quarter']} - {fixed_config['last_quarter']}")
     print()
@@ -472,14 +651,24 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
             pass  # Study doesn't exist
     
     # Create or load study
-    sampler = get_sampler(sampler_name)
-    study = optuna.create_study(
-        study_name=study_name,
-        storage=storage,
-        sampler=sampler,
-        direction=direction,
-        load_if_exists=load_if_exists,
-    )
+    sampler = get_sampler(sampler_name, is_multi_obj=is_multi_obj)
+    
+    if is_multi_obj:
+        study = optuna.create_study(
+            study_name=study_name,
+            storage=storage,
+            sampler=sampler,
+            directions=obj_config['directions'],
+            load_if_exists=load_if_exists,
+        )
+    else:
+        study = optuna.create_study(
+            study_name=study_name,
+            storage=storage,
+            sampler=sampler,
+            direction=obj_config['directions'][0],
+            load_if_exists=load_if_exists,
+        )
     
     existing_trials = len(study.trials)
     if existing_trials > 0:
@@ -489,7 +678,7 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
         print(f"Starting new study with {n_trials} trials...\n")
     
     # Create objective function
-    objective = create_objective(tuning_config, data_cache)
+    objective = create_objective(tuning_config, data_cache, obj_config)
     
     # Run optimization
     print("-" * 70)
@@ -512,47 +701,100 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     print(f"  Completed: {summary['n_completed']}")
     print(f"  Failed: {summary['n_failed']}")
     
-    if summary['best_value'] is not None:
-        objective_name = optuna_config.get('objective', 'calmar')
-        
-        # Map objective names to display labels
-        objective_labels = {
-            'calmar': 'Calmar ratio',
-            'cagr': 'CAGR',
-            'mdd': 'Maximum Drawdown'
-        }
-        objective_label = objective_labels.get(objective_name, objective_name)
-        
-        print(f"\nBest Trial:")
-        print(f"  Trial number: {summary['best_trial_number']}")
-        print(f"  {objective_label}: {summary['best_value']:.4f}")
-        
-        # Get best trial details
-        best_trial = study.best_trial
-        if 'total_return' in best_trial.user_attrs:
-            print(f"  Total return: {best_trial.user_attrs['total_return']:.2f}%")
-        if 'cagr' in best_trial.user_attrs:
-            print(f"  CAGR: {best_trial.user_attrs['cagr']:.2f}%")
-        if 'mdd' in best_trial.user_attrs:
-            print(f"  Max Drawdown: {best_trial.user_attrs['mdd']:.2f}%")
-        if 'win_rate' in best_trial.user_attrs:
-            print(f"  Win rate: {best_trial.user_attrs['win_rate']:.2f}%")
-        if 'n_trades' in best_trial.user_attrs:
-            print(f"  Number of trades: {best_trial.user_attrs['n_trades']}")
-        
-        # Export best config
-        print("\n" + "-" * 70)
-        export_best_config(best_trial.params, tuning_config, str(best_config_path))
-    else:
-        print("\nNo successful trials completed.")
+    # Map objective names to display labels
+    objective_labels = {
+        'calmar': 'Calmar ratio',
+        'cagr': 'CAGR',
+        'mdd': 'Maximum Drawdown'
+    }
     
-    print(f"\nEnd time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    if is_multi_obj:
+        # ----- Multi-objective results -----
+        n_pareto = summary.get('n_pareto_optimal', 0)
+        if n_pareto > 0:
+            print(f"\nPareto Front: {n_pareto} non-dominated solutions")
+            
+            # Per-objective ranges across Pareto front
+            for i, (name, direction) in enumerate(zip(obj_config['objective_names'], obj_config['directions'])):
+                label = objective_labels.get(name, name)
+                obj_min = summary.get(f'objective_{i}_min')
+                obj_max = summary.get(f'objective_{i}_max')
+                if obj_min is not None and obj_max is not None:
+                    print(f"  {label} ({direction}): {obj_min:.4f} — {obj_max:.4f}")
+            
+            # Print top Pareto trials (sorted by first objective, respecting direction)
+            pareto_trials = study.best_trials
+            first_dir = obj_config['directions'][0]
+            pareto_sorted = sorted(
+                pareto_trials,
+                key=lambda t: t.values[0],
+                reverse=(first_dir == 'maximize')
+            )
+            
+            n_display = min(10, len(pareto_sorted))
+            print(f"\n  Top {n_display} Pareto-optimal trials (sorted by {obj_config['objective_names'][0]}):")
+            header_parts = ["  Trial"]
+            for name in obj_config['objective_names']:
+                header_parts.append(f"{objective_labels.get(name, name):>14s}")
+            for extra in ['CAGR%', 'MDD%', 'Win Rate%', 'Trades']:
+                header_parts.append(f"{extra:>10s}")
+            print("  " + " | ".join(header_parts))
+            
+            for t in pareto_sorted[:n_display]:
+                parts = [f"  {t.number:>5d}"]
+                for v in t.values:
+                    parts.append(f"{v:>14.4f}")
+                # User attrs
+                for key, fmt in [('cagr', '{:>10.2f}'), ('mdd', '{:>10.2f}'), 
+                                 ('win_rate', '{:>10.2f}'), ('n_trades', '{:>10d}')]:
+                    val = t.user_attrs.get(key)
+                    if val is not None:
+                        parts.append(fmt.format(val))
+                    else:
+                        parts.append(f"{'N/A':>10s}")
+                print(" | ".join(parts))
+        else:
+            print("\nNo Pareto-optimal trials found.")
+    else:
+        # ----- Single-objective results -----
+        if summary['best_value'] is not None:
+            objective_name = obj_config['objective_names'][0]
+            objective_label = objective_labels.get(objective_name, objective_name)
+            
+            print(f"\nBest Trial:")
+            print(f"  Trial number: {summary['best_trial_number']}")
+            print(f"  {objective_label}: {summary['best_value']:.4f}")
+            
+            best_trial = study.best_trial
+            if 'total_return' in best_trial.user_attrs:
+                print(f"  Total return: {best_trial.user_attrs['total_return']:.2f}%")
+            if 'cagr' in best_trial.user_attrs:
+                print(f"  CAGR: {best_trial.user_attrs['cagr']:.2f}%")
+            if 'mdd' in best_trial.user_attrs:
+                print(f"  Max Drawdown: {best_trial.user_attrs['mdd']:.2f}%")
+            if 'win_rate' in best_trial.user_attrs:
+                print(f"  Win rate: {best_trial.user_attrs['win_rate']:.2f}%")
+            if 'n_trades' in best_trial.user_attrs:
+                print(f"  Number of trades: {best_trial.user_attrs['n_trades']}")
+        else:
+            print("\nNo successful trials completed.")
+    
+    # ----- Export guidance -----
+    print("\n" + "-" * 70)
+    print(f"End time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"\nStudy artifacts saved to: {study_folder}")
     print(f"  - optuna_study.db (trial history)")
     print(f"  - tuning_config_used.yaml (config used)")
-    if summary['best_value'] is not None:
-        print(f"  - best_config.yaml (best parameters)")
-    print(f"\nTo analyze the study, run:")
+    
+    print(f"\nTo export a config from this study:")
+    if is_multi_obj:
+        print(f"  python export_config.py --study-folder {study_folder} --pareto --top 5")
+        print(f"  python export_config.py --study-folder {study_folder} --trial <N>")
+    else:
+        print(f"  python export_config.py --study-folder {study_folder} --best")
+        print(f"  python export_config.py --study-folder {study_folder} --trial <N>")
+    
+    print(f"\nTo analyze the study visually, run:")
     print(f"  optuna-dashboard {storage}")
     
     return study
@@ -571,8 +813,9 @@ Examples:
   python run_tuning.py --fresh                  # Fresh start
 
 After optimization:
-  optuna-dashboard sqlite:///optuna_studies.db  # View dashboard
-  python backtest_strategy.py                   # Run with best_config.yaml
+  python export_config.py --study-folder tuning_logs/<study> --best     # Export best config (single-obj)
+  python export_config.py --study-folder tuning_logs/<study> --pareto   # Export Pareto configs (multi-obj)
+  optuna-dashboard sqlite:///tuning_logs/<study>/optuna_study.db        # View dashboard
         """
     )
     
