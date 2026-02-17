@@ -65,6 +65,50 @@ def _load_study(study_folder: Path) -> tuple:
     return study, tuning_config
 
 
+def _expand_trial_params(trial_params: dict, tuning_config: dict) -> dict:
+    """
+    Expand index-based parameters from trial.params back to their actual values.
+    
+    During sampling, list-valued categoricals (e.g., category_counts with choices
+    like [[8, 7, 5], [15, 10, 5], ...]) are stored as {name}_idx indices in trial.params.
+    This function converts them back to the actual values using the search space.
+    
+    Parameters:
+        trial_params: Raw trial.params dict from Optuna (contains {name}_idx for list categoricals)
+        tuning_config: Full tuning configuration (contains search space with choices)
+        
+    Returns:
+        Expanded params dict with indices converted to actual values
+    """
+    expanded = trial_params.copy()
+    
+    # Collect all search spaces (base + conditional mode-specific blocks)
+    search_spaces = [tuning_config.get('search_space', {})]
+    for block_name in ['top_k', 'fixed_tpsl', 'flat_tpsl', 'atr_tpsl', 'pivot_tpsl', 'index_exit']:
+        if block_name in tuning_config:
+            search_spaces.append(tuning_config[block_name])
+    
+    # Find list-valued categoricals and expand indices
+    for search_space in search_spaces:
+        for name, spec in search_space.items():
+            if not isinstance(spec, dict):
+                continue
+            if spec.get('type') != 'categorical':
+                continue
+            choices = spec.get('choices', [])
+            # Check if this is a list-valued categorical
+            if choices and isinstance(choices[0], list):
+                idx_key = f"{name}_idx"
+                if idx_key in trial_params:
+                    idx = trial_params[idx_key]
+                    if 0 <= idx < len(choices):
+                        expanded[name] = choices[idx]
+                    # Remove the index key since we've expanded it
+                    del expanded[idx_key]
+    
+    return expanded
+
+
 def _build_config_from_trial(trial: optuna.trial.FrozenTrial, 
                               tuning_config: dict) -> dict:
     """
@@ -77,7 +121,9 @@ def _build_config_from_trial(trial: optuna.trial.FrozenTrial,
     Returns:
         Complete configuration dict compatible with backtest_strategy.py
     """
-    config = build_config(tuning_config['fixed'], trial.params)
+    # Expand index-based params (e.g., category_counts_idx -> category_counts)
+    expanded_params = _expand_trial_params(trial.params, tuning_config)
+    config = build_config(tuning_config['fixed'], expanded_params)
     config['generate_analysis_report'] = True
     config['generate_detailed_report'] = True
     return config
