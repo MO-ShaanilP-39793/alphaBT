@@ -817,7 +817,8 @@ def run_backtest(config_path='strategy_config.yaml'):
             first_quarter,
             last_quarter,
             initial_capital,
-            save_path=plot_path
+            save_path=plot_path,
+            daily_pf_values=equity_curve  # Reuse pre-computed equity curve for consistency
         )
         
         if comparison_df is not None:

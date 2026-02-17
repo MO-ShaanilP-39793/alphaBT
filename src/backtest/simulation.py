@@ -479,7 +479,7 @@ def plot_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter,
     plt.show()
 
 
-def compute_pf_vs_index(trades, price_data, index_price_data, first_quarter, last_quarter, initial_capital=1000000000):
+def compute_pf_vs_index(trades, price_data, index_price_data, first_quarter, last_quarter, initial_capital=1000000000, daily_pf_values=None):
     '''
     Computes portfolio performance vs benchmark index across multiple quarters.
 
@@ -489,6 +489,8 @@ def compute_pf_vs_index(trades, price_data, index_price_data, first_quarter, las
     first_quarter: integer like 202402 (start quarter, inclusive)
     last_quarter: integer like 202411 (end quarter, inclusive)
     initial_capital: sum like 100 crs
+    daily_pf_values: Pre-computed equity curve (optional). If provided, skips recomputation
+                     to ensure consistency with backtest_core output.
 
     Returns a dataframe with columns:
         - date: the date
@@ -498,10 +500,11 @@ def compute_pf_vs_index(trades, price_data, index_price_data, first_quarter, las
         - index_return: index fund return vs initial capital (%)
         - alpha: pf_return - index_return (%)
     '''
-    # Get portfolio equity curve
-    daily_pf_values = compute_pf_value_over_quarters(
-        trades, price_data, first_quarter, last_quarter, initial_capital
-    )
+    # Get portfolio equity curve (reuse if provided, otherwise compute)
+    if daily_pf_values is None:
+        daily_pf_values = compute_pf_value_over_quarters(
+            trades, price_data, first_quarter, last_quarter, initial_capital
+        )
     
     if daily_pf_values is None or daily_pf_values.empty:
         print("No portfolio data found.")
@@ -557,7 +560,7 @@ def compute_pf_vs_index(trades, price_data, index_price_data, first_quarter, las
     return result
 
 
-def plot_pf_vs_index(trades, price_data, index_price_data, first_quarter, last_quarter, initial_capital=1000000000, save_path=None):
+def plot_pf_vs_index(trades, price_data, index_price_data, first_quarter, last_quarter, initial_capital=1000000000, save_path=None, daily_pf_values=None):
     '''
     Plots portfolio value vs benchmark index across multiple quarters.
 
@@ -568,13 +571,16 @@ def plot_pf_vs_index(trades, price_data, index_price_data, first_quarter, last_q
     last_quarter: integer like 202411 (end quarter, inclusive)
     initial_capital: sum like 100 crs
     save_path: if provided, saves the plot to this path instead of showing it
+    daily_pf_values: Pre-computed equity curve (optional). If provided, ensures plot uses
+                     the same data as saved to daily_portfolio_values.csv.
 
     Returns:
     - comparison_df: DataFrame with portfolio vs index comparison data
     '''
     comparison_df = compute_pf_vs_index(
         trades, price_data, index_price_data, 
-        first_quarter, last_quarter, initial_capital
+        first_quarter, last_quarter, initial_capital,
+        daily_pf_values=daily_pf_values
     )
     
     if comparison_df is None or comparison_df.empty:
