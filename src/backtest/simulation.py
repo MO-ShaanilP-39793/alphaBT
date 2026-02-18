@@ -68,10 +68,18 @@ def generate_quarter_equity_curve(trades, price_data, quarter, entry_price_windo
     year = int(quarter_str[:4])
     mm = int(quarter_str[4:])
     
-    if mm == 2: quarter_start_date = pd.Timestamp(year, 2, 15)
-    elif mm == 5: quarter_start_date = pd.Timestamp(year, 5, 31)
-    elif mm == 8: quarter_start_date = pd.Timestamp(year, 8, 15)
-    elif mm == 11: quarter_start_date = pd.Timestamp(year, 11, 15)
+    if mm == 2: 
+        quarter_start_date = pd.Timestamp(year, 2, 15)
+        quarter_end_date = pd.Timestamp(year, 5, 30)
+    elif mm == 5: 
+        quarter_start_date = pd.Timestamp(year, 5, 31)
+        quarter_end_date = pd.Timestamp(year, 8, 14)
+    elif mm == 8: 
+        quarter_start_date = pd.Timestamp(year, 8, 15)
+        quarter_end_date = pd.Timestamp(year, 11, 14)
+    elif mm == 11: 
+        quarter_start_date = pd.Timestamp(year, 11, 15)
+        quarter_end_date = pd.Timestamp(year + 1, 2, 14)
     
     # 2. Identify the entry phase trading days for this quarter
     all_dates = sorted(price_data[price_data['date'] >= quarter_start_date]['date'].unique())
@@ -89,13 +97,9 @@ def generate_quarter_equity_curve(trades, price_data, quarter, entry_price_windo
         )
         entry_phase_dates = all_dates
         chart_start_date = quarter_start_date
-
-    # Determine End Date for the chart
-    max_exit = pd.to_datetime(trades['exit_date']).max()
-    chart_end_date = max_exit # + pd.Timedelta(days=5)  # for visual clarity
     
-    # Create the Master Date Range for the plot, or the limits of the date index
-    date_range = pd.date_range(start=chart_start_date, end=chart_end_date, freq='B')
+    # Set limits of the date index
+    date_range = pd.date_range(start=chart_start_date, end=quarter_end_date, freq='B')
     
     # 3. Prepare Price Data for Fast Lookup
     # Pivot: Index=Date, Columns=Co_Name, Values=Close
