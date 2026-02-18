@@ -149,7 +149,7 @@ The TP/SL module now supports advanced threshold calculation modes and index-gui
 
 ### TP/SL Calculation Modes
 
-Configure via `tpsl_mode` in `strategy_config.yaml`:
+Configure via `tp_mode` and `sl_mode` in `strategy_config.yaml`. TP and SL modes can be set independently.
 
 | Mode | Description |
 |------|-------------|

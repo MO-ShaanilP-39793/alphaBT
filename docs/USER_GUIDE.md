@@ -110,7 +110,8 @@ min_prob_threshold: 0.5          # Only consider prob >= 0.5
 # Exit Strategy (simple percentage-based)
 tp_enabled: true                  # Enable take profit
 sl_enabled: true                  # Enable stop loss
-tpsl_mode: 'flat'                 # Same % for all stocks
+tp_mode: 'flat'                   # Same % for all stocks
+sl_mode: 'flat'                   # Same % for all stocks
 
 flat_config:
   tp_pct: 0.10                    # Exit at +10% profit

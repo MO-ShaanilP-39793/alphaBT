@@ -166,6 +166,10 @@ search_space:
   tpsl_mode:
     type: categorical
     choices: ['flat', 'atr']
+  
+  independent_tpsl_modes:        # Optional: when true, tp_mode and sl_mode are sampled independently
+    type: categorical
+    choices: [true, false]
 
 # Conditional - only if selection_type == 'top_k'
 top_k:
@@ -193,6 +197,8 @@ flat_tpsl:
 - Trial samples `selection_type: 'category_based'` → `k` is NOT sampled (not relevant)
 - This prevents invalid configurations (e.g., sampling ATR period when using fixed TP/SL)
 
+**Note**: The `tpsl_mode` search space key controls which mode-specific params are sampled. At runtime, the sampled mode is assigned to `tp_mode` and `sl_mode`. If `independent_tpsl_modes: true`, they are sampled separately.
+
 #### Parameter Types
 
 **Categorical** (discrete options):
@@ -203,6 +209,7 @@ tpsl_mode:
 ```
 - Use for: Strings, booleans, specific discrete values
 - Optuna samples uniformly from choices
+- **Note**: `tpsl_mode` in the search space maps to `tp_mode`/`sl_mode` in the runtime config
 
 **Integer** (whole numbers):
 ```yaml
@@ -413,7 +420,7 @@ Optimization prints live updates:
 ```
 [I 2026-02-11 10:04:30] Trial 2 finished with value: 1.92 and parameters:
   {'selection_type': 'top_k', 'k': 35, 'tp_enabled': True, 
-   'tpsl_mode': 'flat', 'flat_tp': 0.12, 'flat_sl': 0.06, ...}
+   'tp_mode': 'flat', 'sl_mode': 'flat', 'flat_tp': 0.12, 'flat_sl': 0.06, ...}
 Duration: 2.3 minutes
 ```
 
@@ -533,7 +540,8 @@ min_prob_threshold: 0.55
 
 tp_enabled: true
 sl_enabled: true
-tpsl_mode: 'flat'
+tp_mode: 'flat'
+sl_mode: 'flat'
 flat_config:
   tp_pct: 0.12
   sl_pct: 0.06
@@ -893,13 +901,15 @@ python backtest_strategy.py
 ```yaml
 # Study 1: Flat TP/SL optimization
 fixed:
-  tpsl_mode: 'flat'
+  tp_mode: 'flat'
+  sl_mode: 'flat'
 search_space:
   # ... only flat_tpsl params
 
 # Study 2: ATR optimization
 fixed:
-  tpsl_mode: 'atr'
+  tp_mode: 'atr'
+  sl_mode: 'atr'
 search_space:
   # ... only atr_tpsl params
 ```
@@ -924,7 +934,8 @@ search_space:
   category_counts: [...]
 
 fixed:
-  tpsl_mode: 'flat'
+  tp_mode: 'flat'
+  sl_mode: 'flat'
   flat_config:
     tp_pct: 0.10   # Use reasonable defaults
     sl_pct: 0.05

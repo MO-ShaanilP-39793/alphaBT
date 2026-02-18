@@ -324,7 +324,8 @@ sl_enabled: false
 ```yaml
 tp_enabled: true
 sl_enabled: true
-tpsl_mode: 'fixed'
+tp_mode: 'fixed'
+sl_mode: 'fixed'
 
 TP_CONFIG:
   volatility:  # or 'mcap' depending on your categories
@@ -375,7 +376,8 @@ default_tpsl:
 ```yaml
 tp_enabled: true
 sl_enabled: true
-tpsl_mode: 'flat'
+tp_mode: 'flat'
+sl_mode: 'flat'
 
 flat_config:
   tp_pct: 0.05   # 5% TP for ALL stocks
@@ -408,7 +410,8 @@ flat_config:
 ```yaml
 tp_enabled: true
 sl_enabled: true
-tpsl_mode: 'atr'
+tp_mode: 'atr'
+sl_mode: 'atr'
 
 atr_config:
   period: 14           # Use 14-day ATR
@@ -454,7 +457,8 @@ atr_config:
 ```yaml
 tp_enabled: true
 sl_enabled: true
-tpsl_mode: 'pivot'
+tp_mode: 'pivot'
+sl_mode: 'pivot'
 
 pivot_config:
   lookback_days: 60    # Use 60 days of history
@@ -677,9 +681,9 @@ START: Do you have category labels?
 │   │   └─ NO → selection_method: 'risk_adjusted' (needs volatility column)
 │   │
 │   └─ Exit strategy?
-│       ├─ Simple → tpsl_mode: 'flat'
-│       ├─ Volatility-aware → tpsl_mode: 'atr'
-│       ├─ Technical → tpsl_mode: 'pivot'
+│       ├─ Simple → tp_mode/sl_mode: 'flat'
+│       ├─ Volatility-aware → tp_mode/sl_mode: 'atr'
+│       ├─ Technical → tp_mode/sl_mode: 'pivot'
 │       └─ Pure signal → tp_enabled/sl_enabled: false
 │
 └─ YES → Use Category-Based selection
@@ -693,10 +697,10 @@ START: Do you have category labels?
     │   └─ Pure diversification → category_based_selection_weighting_scheme: 'equal'
     │
     └─ Exit strategy?
-        ├─ Category-specific → tpsl_mode: 'fixed' (requires TP_CONFIG/SL_CONFIG)
-        ├─ Uniform → tpsl_mode: 'flat'
-        ├─ Volatility-aware → tpsl_mode: 'atr'
-        └─ Technical → tpsl_mode: 'pivot'
+        ├─ Category-specific → tp_mode/sl_mode: 'fixed' (requires TP_CONFIG/SL_CONFIG)
+        ├─ Uniform → tp_mode/sl_mode: 'flat'
+        ├─ Volatility-aware → tp_mode/sl_mode: 'atr'
+        └─ Technical → tp_mode/sl_mode: 'pivot'
 ```
 
 ---

@@ -74,7 +74,7 @@ quarter,co_name,stock_weight,category
 | Column | Required? | Description |
 |--------|-----------|-------------|
 | `stock_weight` | Yes | Capital allocation (should sum to ≈1.0 per quarter) |
-| `category` | Only if using `tpsl_mode: 'fixed'` | For category-specific TP/SL |
+| `category` | Only if using `tp_mode: 'fixed'` and `sl_mode: 'fixed'` | For category-specific TP/SL |
 
 **File Format**: CSV or Parquet (auto-detected by extension)
 
@@ -381,15 +381,26 @@ sl_enabled: true   # Enable stop loss exits
 
 ### TP/SL Mode
 
+TP and SL modes can be configured **independently**, allowing different threshold strategies for take-profit and stop-loss exits.
+
 ```yaml
-tpsl_mode: 'fixed'  # Category-specific percentages
+tp_mode: 'fixed'   # Category-specific TP percentages
+sl_mode: 'fixed'   # Category-specific SL percentages
 # OR
-tpsl_mode: 'flat'   # Uniform percentage
+tp_mode: 'flat'    # Uniform TP percentage
+sl_mode: 'flat'    # Uniform SL percentage
 # OR
-tpsl_mode: 'atr'    # Volatility-based (ATR)
+tp_mode: 'atr'     # ATR-based dynamic TP
+sl_mode: 'atr'     # ATR-based dynamic SL
 # OR
-tpsl_mode: 'pivot'  # Support/resistance levels
+tp_mode: 'pivot'   # Resistance levels for TP
+sl_mode: 'pivot'   # Support levels for SL
 ```
+
+| Parameter | Type | Valid Values | Description |
+|-----------|------|--------------|-------------|
+| `tp_mode` | String | `'fixed'`, `'flat'`, `'atr'`, `'pivot'` | Take-profit threshold strategy |
+| `sl_mode` | String | `'fixed'`, `'flat'`, `'atr'`, `'pivot'` | Stop-loss threshold strategy |
 
 | Value | Description | Required Config Section |
 |-------|-------------|-------------------------|
@@ -398,11 +409,13 @@ tpsl_mode: 'pivot'  # Support/resistance levels
 | `'atr'` | ATR-based dynamic levels | `atr_config` |
 | `'pivot'` | Pivot point levels | `pivot_config` |
 
+**Note**: While both modes are typically set to the same value, you can mix them (e.g., `tp_mode: 'atr'` with `sl_mode: 'flat'`) for asymmetric exit strategies.
+
 ---
 
 ### Fixed Mode Configuration
 
-Used when `tpsl_mode: 'fixed'`:
+Used when `tp_mode: 'fixed'` and/or `sl_mode: 'fixed'`:
 
 ```yaml
 TP_CONFIG:
@@ -434,7 +447,7 @@ SL_CONFIG:
 
 ### Default TP/SL (Fallback)
 
-Used when `tpsl_mode: 'fixed'` but stock has no category label:
+Used when `tp_mode: 'fixed'` and/or `sl_mode: 'fixed'` but stock has no category label:
 
 ```yaml
 default_tpsl:
@@ -442,13 +455,13 @@ default_tpsl:
   sl_pct: 0.05   # 5% default SL
 ```
 
-**When needed**: Preselected mode (`run_stock_selection: false`) with `tpsl_mode: 'fixed'` and no `category` column in input.
+**When needed**: Preselected mode (`run_stock_selection: false`) with `tp_mode: 'fixed'` / `sl_mode: 'fixed'` and no `category` column in input.
 
 ---
 
 ### Flat Mode Configuration
 
-Used when `tpsl_mode: 'flat'`:
+Used when `tp_mode: 'flat'` and/or `sl_mode: 'flat'`:
 
 ```yaml
 flat_config:
@@ -467,7 +480,7 @@ flat_config:
 
 ### ATR Mode Configuration
 
-Used when `tpsl_mode: 'atr'`:
+Used when `tp_mode: 'atr'` and/or `sl_mode: 'atr'`:
 
 ```yaml
 atr_config:
@@ -498,7 +511,7 @@ See [atr_explained.md](atr_explained.md) for details.
 
 ### Pivot Mode Configuration
 
-Used when `tpsl_mode: 'pivot'`:
+Used when `tp_mode: 'pivot'` and/or `sl_mode: 'pivot'`:
 
 ```yaml
 pivot_config:
@@ -659,10 +672,16 @@ search_space:
     type: categorical
     choices: ['fixed', 'flat', 'atr', 'pivot']
   
+  independent_tpsl_modes:        # Optional: sample tp_mode and sl_mode independently
+    type: categorical
+    choices: [true, false]       # Default: false (one mode for both TP and SL)
+  
   tp_enabled:
     type: categorical
     choices: [true, false]
 ```
+
+**Note**: The `tpsl_mode` search space key selects the mode choices. When `independent_tpsl_modes` is `false` (default), the sampled mode is assigned to both `tp_mode` and `sl_mode`. When `true`, `tp_mode` and `sl_mode` are sampled independently from the same choices list. The runtime config always uses `tp_mode` and `sl_mode` keys.
 
 **Type**: `categorical`
 
@@ -910,7 +929,8 @@ min_prob_threshold: 0.5
 
 tp_enabled: true
 sl_enabled: true
-tpsl_mode: 'flat'
+tp_mode: 'flat'
+sl_mode: 'flat'
 flat_config:
   tp_pct: 0.10
   sl_pct: 0.05
@@ -934,7 +954,8 @@ selection_method: 'probability'
 
 tp_enabled: true
 sl_enabled: true
-tpsl_mode: 'atr'
+tp_mode: 'atr'
+sl_mode: 'atr'
 atr_config:
   period: 14
   tp_multiplier: 2.0
@@ -959,7 +980,8 @@ selection_method: 'probability'
 
 tp_enabled: true
 sl_enabled: true
-tpsl_mode: 'fixed'
+tp_mode: 'fixed'
+sl_mode: 'fixed'
 TP_CONFIG:
   mcap:
     largecap: 0.05
@@ -994,7 +1016,8 @@ fixed:
   last_quarter: 202411
   run_stock_selection: true
   selection_type: 'top_k'  # Fixed to top-k
-  tpsl_mode: 'flat'  # Fixed to flat
+  tp_mode: 'flat'   # Fixed to flat
+  sl_mode: 'flat'   # Fixed to flat
   tp_enabled: true
   sl_enabled: true
 
@@ -1099,10 +1122,10 @@ Before running backtest:
 ✅ **Price data coverage** spans quarter range with minimal gaps
 ✅ **Stock names** match exactly between inference and price data
 ✅ **TP/SL config** matches mode:
-   - `tpsl_mode: 'fixed'` → `TP_CONFIG`, `SL_CONFIG` (or `default_tpsl`)
-   - `tpsl_mode: 'flat'` → `flat_config`
-   - `tpsl_mode: 'atr'` → `atr_config`
-   - `tpsl_mode: 'pivot'` → `pivot_config`
+   - `tp_mode`/`sl_mode: 'fixed'` → `TP_CONFIG`, `SL_CONFIG` (or `default_tpsl`)
+   - `tp_mode`/`sl_mode: 'flat'` → `flat_config`
+   - `tp_mode`/`sl_mode: 'atr'` → `atr_config`
+   - `tp_mode`/`sl_mode: 'pivot'` → `pivot_config`
 
 ---
 
@@ -1126,7 +1149,7 @@ Before running backtest:
 
 **Needed when**:
 - `category_scheme: 'mcap'`
-- `run_stock_selection: false` with `tpsl_mode: 'fixed'` (without `default_tpsl`)
+- `run_stock_selection: false` with `tp_mode: 'fixed'` / `sl_mode: 'fixed'` (without `default_tpsl`)
 
 **Fix**: Add `category` column OR use `category_scheme: 'volatility'` OR set `default_tpsl` in config.
 

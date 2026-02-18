@@ -171,14 +171,18 @@ if should_exit:
 
 ## Usage in TP_SL_bt.py
 
-These functions are called automatically based on the `tpsl_mode` setting:
+These functions are called automatically based on the `tp_mode` and `sl_mode` settings:
 
 ```yaml
 # strategy_config.yaml
-tpsl_mode: 'atr'  # Uses calculate_atr_thresholds()
+tp_mode: 'atr'    # Uses calculate_atr_thresholds() for take-profit
+sl_mode: 'atr'    # Uses calculate_atr_thresholds() for stop-loss
 # OR
-tpsl_mode: 'pivot'  # Uses calculate_pivot_thresholds()
+tp_mode: 'pivot'  # Uses calculate_pivot_thresholds() for take-profit
+sl_mode: 'pivot'  # Uses calculate_pivot_thresholds() for stop-loss
 ```
+
+**Note**: `tp_mode` and `sl_mode` can be set independently (e.g., `tp_mode: 'atr'` with `sl_mode: 'pivot'`).
 
 The index functions are used when `index_exit` settings are enabled.
 
