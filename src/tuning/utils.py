@@ -13,6 +13,43 @@ import pandas as pd
 from typing import Any
 import optuna
 
+from config.defaults import (
+    DAYS_PER_YEAR,
+    DEFAULT_SELECTION_TYPE,
+    DEFAULT_CATEGORY_SCHEME,
+    DEFAULT_CATEGORY_COUNTS,
+    DEFAULT_CATEGORY_WEIGHTS,
+    DEFAULT_WEIGHTING_SCHEME,
+    DEFAULT_TOP_K,
+    DEFAULT_TOP_K_WEIGHTING,
+    DEFAULT_SELECTION_METHOD,
+    DEFAULT_TP_ENABLED,
+    DEFAULT_SL_ENABLED,
+    DEFAULT_TP_MODE,
+    DEFAULT_SL_MODE,
+    DEFAULT_ATR_PERIOD,
+    DEFAULT_ATR_TP_MULTIPLIER,
+    DEFAULT_ATR_SL_MULTIPLIER,
+    DEFAULT_PIVOT_LOOKBACK_DAYS,
+    DEFAULT_PIVOT_TP_LEVEL,
+    DEFAULT_PIVOT_SL_LEVEL,
+    DEFAULT_FLAT_TP_PCT,
+    DEFAULT_FLAT_SL_PCT,
+    DEFAULT_REGIME_FILTER_ENABLED,
+    DEFAULT_REGIME_MA_PERIOD,
+    DEFAULT_REGIME_EXIT_THRESHOLD,
+    DEFAULT_VOL_ADJUSTMENT_ENABLED,
+    DEFAULT_VOL_LOOKBACK,
+    DEFAULT_HIGH_VOL_THRESHOLD,
+    DEFAULT_LOW_VOL_THRESHOLD,
+    DEFAULT_HIGH_VOL_MULTIPLIER,
+    DEFAULT_LOW_VOL_MULTIPLIER,
+    DEFAULT_FIXED_TP_THRESHOLDS,
+    DEFAULT_FIXED_SL_THRESHOLDS,
+    DEFAULT_CALMAR_CAP,
+    DEFAULT_INDEPENDENT_TPSL_MODES,
+)
+
 
 def load_tuning_config(config_path: str = 'tuning_config.yaml') -> dict:
     """
@@ -125,7 +162,7 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
     # Sample TP/SL modes
     # independent_tpsl_modes: when False (default), one mode is sampled and used for both
     # when True, tp_mode and sl_mode are sampled independently from the same choices
-    independent_tpsl_modes = tuning_config.get('independent_tpsl_modes', False)
+    independent_tpsl_modes = tuning_config.get('independent_tpsl_modes', DEFAULT_INDEPENDENT_TPSL_MODES)
     tp_mode = None
     sl_mode = None
     
@@ -288,60 +325,60 @@ def build_config(fixed_config: dict, sampled_params: dict) -> dict:
     config = fixed_config.copy()
     
     # Fill out stock selection params
-    config['selection_type'] = get('selection_type', 'category_based')
-    config['category_scheme'] = get('category_scheme', 'volatility')
-    config['category_counts'] = get('category_counts', [5, 10, 15])
-    config['category_weights'] = get('category_weights', [0.3, 0.3, 0.4])
-    config['category_based_selection_weighting_scheme'] = get('category_based_selection_weighting_scheme', 'use_category_weights')
+    config['selection_type'] = get('selection_type', DEFAULT_SELECTION_TYPE)
+    config['category_scheme'] = get('category_scheme', DEFAULT_CATEGORY_SCHEME)
+    config['category_counts'] = get('category_counts', DEFAULT_CATEGORY_COUNTS)
+    config['category_weights'] = get('category_weights', DEFAULT_CATEGORY_WEIGHTS)
+    config['category_based_selection_weighting_scheme'] = get('category_based_selection_weighting_scheme', DEFAULT_WEIGHTING_SCHEME)
     config['top_k_config'] = {
-        'k': get('top_k_k', 30),
-        'weighting_scheme': get('top_k_weighting_scheme', 'equal'),
+        'k': get('top_k_k', DEFAULT_TOP_K),
+        'weighting_scheme': get('top_k_weighting_scheme', DEFAULT_TOP_K_WEIGHTING),
     }
-    config['selection_method'] = get('selection_method', 'probability')
+    config['selection_method'] = get('selection_method', DEFAULT_SELECTION_METHOD)
     config['min_prob_threshold'] = get('min_prob_threshold')
 
     # Fill out TP SL params
-    config['tp_enabled'] = get('tp_enabled', False)
-    config['sl_enabled'] = get('sl_enabled', False)
-    config['tp_mode'] = get('tp_mode', 'fixed')
-    config['sl_mode'] = get('sl_mode', 'fixed')
+    config['tp_enabled'] = get('tp_enabled', DEFAULT_TP_ENABLED)
+    config['sl_enabled'] = get('sl_enabled', DEFAULT_SL_ENABLED)
+    config['tp_mode'] = get('tp_mode', DEFAULT_TP_MODE)
+    config['sl_mode'] = get('sl_mode', DEFAULT_SL_MODE)
     
     config['atr_config'] = {
-        'period': get('atr_period', 14),
-        'tp_multiplier': get('atr_tp_multiplier', 2.0),
-        'sl_multiplier': get('atr_sl_multiplier', 1.5),
+        'period': get('atr_period', DEFAULT_ATR_PERIOD),
+        'tp_multiplier': get('atr_tp_multiplier', DEFAULT_ATR_TP_MULTIPLIER),
+        'sl_multiplier': get('atr_sl_multiplier', DEFAULT_ATR_SL_MULTIPLIER),
     }
 
     config['pivot_config'] = {
-        'lookback_days': get('pivot_lookback_days', 60),
-        'tp_level': get('pivot_tp_level', 'R1'),
-        'sl_level': get('pivot_sl_level', 'S1'),
+        'lookback_days': get('pivot_lookback_days', DEFAULT_PIVOT_LOOKBACK_DAYS),
+        'tp_level': get('pivot_tp_level', DEFAULT_PIVOT_TP_LEVEL),
+        'sl_level': get('pivot_sl_level', DEFAULT_PIVOT_SL_LEVEL),
     }
 
     config['flat_config'] = {
-        'tp_pct': get('flat_tp', 0.05),
-        'sl_pct': get('flat_sl', 0.05),
+        'tp_pct': get('flat_tp', DEFAULT_FLAT_TP_PCT),
+        'sl_pct': get('flat_sl', DEFAULT_FLAT_SL_PCT),
     }
 
     config['index_exit'] = {
         'regime_filter': {
-            'enabled': get('regime_filter_enabled', False),
-            'ma_period': get('regime_ma_period', 20),
-            'exit_threshold': get('regime_exit_threshold', -0.02),
+            'enabled': get('regime_filter_enabled', DEFAULT_REGIME_FILTER_ENABLED),
+            'ma_period': get('regime_ma_period', DEFAULT_REGIME_MA_PERIOD),
+            'exit_threshold': get('regime_exit_threshold', DEFAULT_REGIME_EXIT_THRESHOLD),
         },
         'vol_adjustment': {
-            'enabled': get('vol_adjustment_enabled', False),
-            'lookback': get('vol_lookback', 20),
-            'high_vol_threshold': get('high_vol_threshold', 0.25),
-            'low_vol_threshold': get('low_vol_threshold', 0.15),
-            'high_vol_multiplier': get('high_vol_multiplier', 1.5),
-            'low_vol_multiplier': get('low_vol_multiplier', 0.8),
+            'enabled': get('vol_adjustment_enabled', DEFAULT_VOL_ADJUSTMENT_ENABLED),
+            'lookback': get('vol_lookback', DEFAULT_VOL_LOOKBACK),
+            'high_vol_threshold': get('high_vol_threshold', DEFAULT_HIGH_VOL_THRESHOLD),
+            'low_vol_threshold': get('low_vol_threshold', DEFAULT_LOW_VOL_THRESHOLD),
+            'high_vol_multiplier': get('high_vol_multiplier', DEFAULT_HIGH_VOL_MULTIPLIER),
+            'low_vol_multiplier': get('low_vol_multiplier', DEFAULT_LOW_VOL_MULTIPLIER),
         }
     }
     
     # Build TP_CONFIG/SL_CONFIG (used when tp_mode or sl_mode == 'fixed')
-    tp_thresholds = get('fixed_tp_thresholds', [0.05, 0.05, 0.05])
-    sl_thresholds = get('fixed_sl_thresholds', [0.05, 0.05, 0.05])
+    tp_thresholds = get('fixed_tp_thresholds', DEFAULT_FIXED_TP_THRESHOLDS)
+    sl_thresholds = get('fixed_sl_thresholds', DEFAULT_FIXED_SL_THRESHOLDS)
     
     config['TP_CONFIG'], config['SL_CONFIG'] = _build_tpsl_config(config['category_scheme'], tp_thresholds, sl_thresholds)
     
@@ -380,7 +417,7 @@ def compute_cagr(daily_pf_values: pd.DataFrame) -> float:
     # Compute years
     start_date = df['date'].iloc[0]
     end_date = df['date'].iloc[-1]
-    years = (end_date - start_date).days / 365.25
+    years = (end_date - start_date).days / DAYS_PER_YEAR
     
     if years <= 0:
         return None
@@ -424,7 +461,7 @@ def compute_max_drawdown(daily_pf_values: pd.DataFrame) -> float:
     return abs(max_drawdown)
 
 
-def compute_calmar_ratio(daily_pf_values: pd.DataFrame, cap: float = 10.0) -> float:
+def compute_calmar_ratio(daily_pf_values: pd.DataFrame, cap: float = DEFAULT_CALMAR_CAP) -> float:
     """
     Compute Calmar ratio from daily portfolio values.
     
@@ -489,7 +526,7 @@ def compute_objective(objective_name: str, daily_pf_values: pd.DataFrame, **kwar
         ValueError: If objective_name is not supported
     """
     if objective_name == 'calmar':
-        cap = kwargs.get('cap', 10.0)
+        cap = kwargs.get('cap', DEFAULT_CALMAR_CAP)
         return compute_calmar_ratio(daily_pf_values, cap=cap)
     
     elif objective_name == 'cagr':

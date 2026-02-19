@@ -8,6 +8,25 @@ used to set adaptive TP/SL thresholds based on each stock's price behavior.
 import pandas as pd
 import numpy as np
 import logging
+from config.defaults import (
+    DEFAULT_ATR_PERIOD,
+    DEFAULT_ATR_TP_MULTIPLIER,
+    DEFAULT_ATR_SL_MULTIPLIER,
+    ATR_SL_FLOOR_FACTOR,
+    DEFAULT_PIVOT_LOOKBACK_DAYS,
+    DEFAULT_PIVOT_TP_LEVEL,
+    DEFAULT_PIVOT_SL_LEVEL,
+    PIVOT_TP_FALLBACK_FACTOR,
+    PIVOT_SL_FALLBACK_FACTOR,
+    DEFAULT_VOL_LOOKBACK,
+    DEFAULT_HIGH_VOL_THRESHOLD,
+    DEFAULT_LOW_VOL_THRESHOLD,
+    DEFAULT_HIGH_VOL_MULTIPLIER,
+    DEFAULT_LOW_VOL_MULTIPLIER,
+    DEFAULT_REGIME_MA_PERIOD,
+    DEFAULT_REGIME_EXIT_THRESHOLD,
+    TRADING_DAYS_PER_YEAR,
+)
 
 # Configure module-level logger
 logger = logging.getLogger(__name__)
@@ -45,7 +64,7 @@ def setup_dynamic_levels_logging(log_file: str = None, level: int = logging.INFO
         logger.addHandler(file_handler)
 
 
-def calculate_atr(price_df: pd.DataFrame, co_name: str, end_date: pd.Timestamp, period: int = 14) -> float:
+def calculate_atr(price_df: pd.DataFrame, co_name: str, end_date: pd.Timestamp, period: int = DEFAULT_ATR_PERIOD) -> float:
     """
     Calculate Average True Range (ATR) for a stock.
     
@@ -89,8 +108,8 @@ def calculate_atr(price_df: pd.DataFrame, co_name: str, end_date: pd.Timestamp, 
 
 
 def calculate_atr_thresholds(price_df: pd.DataFrame, co_name: str, entry_price: float,
-                              end_date: pd.Timestamp, tp_multiplier: float = 2.0,
-                              sl_multiplier: float = 1.5, period: int = 14) -> tuple:
+                              end_date: pd.Timestamp, tp_multiplier: float = DEFAULT_ATR_TP_MULTIPLIER,
+                              sl_multiplier: float = DEFAULT_ATR_SL_MULTIPLIER, period: int = DEFAULT_ATR_PERIOD) -> tuple:
     """
     Calculate TP/SL thresholds based on ATR.
     
@@ -116,13 +135,13 @@ def calculate_atr_thresholds(price_df: pd.DataFrame, co_name: str, entry_price: 
     sl_price = entry_price - (sl_multiplier * atr)
     
     # Ensure SL is not negative
-    sl_price = max(sl_price, entry_price * 0.5)  # Floor at 50% of entry
+    sl_price = max(sl_price, entry_price * ATR_SL_FLOOR_FACTOR)  # Floor at 50% of entry
     
     return tp_price, sl_price, atr
 
 
 def calculate_pivot_points(price_df: pd.DataFrame, co_name: str, 
-                           end_date: pd.Timestamp, lookback_days: int = 60) -> dict:
+                           end_date: pd.Timestamp, lookback_days: int = DEFAULT_PIVOT_LOOKBACK_DAYS) -> dict:
     """
     Calculate classic pivot points for support/resistance levels.
     
@@ -190,8 +209,8 @@ def calculate_pivot_points(price_df: pd.DataFrame, co_name: str,
 
 
 def calculate_pivot_thresholds(price_df: pd.DataFrame, co_name: str, entry_price: float,
-                                end_date: pd.Timestamp, tp_level: str = 'R1',
-                                sl_level: str = 'S1', lookback_days: int = 60) -> tuple:
+                                end_date: pd.Timestamp, tp_level: str = DEFAULT_PIVOT_TP_LEVEL,
+                                sl_level: str = DEFAULT_PIVOT_SL_LEVEL, lookback_days: int = DEFAULT_PIVOT_LOOKBACK_DAYS) -> tuple:
     """
     Calculate TP/SL thresholds based on pivot points.
     
@@ -248,7 +267,7 @@ def calculate_pivot_thresholds(price_df: pd.DataFrame, co_name: str, entry_price
                 break
         # If still no valid TP, use a percentage fallback
         if tp_price <= entry_price:
-            tp_price = entry_price * 1.05  # 5% fallback
+            tp_price = entry_price * PIVOT_TP_FALLBACK_FACTOR  # 5% fallback
             fallback_info['tp_fallback_used'] = True
             fallback_info['tp_fallback_reason'] = 'all_resistance_below_entry'
             fallback_info['tp_final_level'] = 'PCT_FALLBACK_5'
@@ -274,7 +293,7 @@ def calculate_pivot_thresholds(price_df: pd.DataFrame, co_name: str, entry_price
                 break
         # If still no valid SL, use a percentage fallback
         if sl_price >= entry_price:
-            sl_price = entry_price * 0.95  # 5% fallback
+            sl_price = entry_price * PIVOT_SL_FALLBACK_FACTOR  # 5% fallback
             fallback_info['sl_fallback_used'] = True
             fallback_info['sl_fallback_reason'] = 'all_support_above_entry'
             fallback_info['sl_final_level'] = 'PCT_FALLBACK_5'
@@ -293,7 +312,7 @@ def calculate_pivot_thresholds(price_df: pd.DataFrame, co_name: str, entry_price
 
 
 def calculate_index_volatility(index_df: pd.DataFrame, date: pd.Timestamp, 
-                                lookback: int = 20) -> float:
+                                lookback: int = DEFAULT_VOL_LOOKBACK) -> float:
     """
     Calculate rolling volatility of the index.
     
@@ -315,13 +334,13 @@ def calculate_index_volatility(index_df: pd.DataFrame, date: pd.Timestamp,
     idx_data['returns'] = idx_data['value'].pct_change()
     
     daily_vol = idx_data['returns'].std()
-    annualized_vol = daily_vol * np.sqrt(252)
+    annualized_vol = daily_vol * np.sqrt(TRADING_DAYS_PER_YEAR)
     
     return annualized_vol
 
 
 def calculate_index_ma(index_df: pd.DataFrame, date: pd.Timestamp, 
-                       ma_period: int = 20) -> tuple:
+                       ma_period: int = DEFAULT_REGIME_MA_PERIOD) -> tuple:
     """
     Calculate moving average of the index and current value.
     
@@ -347,11 +366,11 @@ def calculate_index_ma(index_df: pd.DataFrame, date: pd.Timestamp,
 
 
 def get_volatility_adjustment_multiplier(index_df: pd.DataFrame, date: pd.Timestamp,
-                                          lookback: int = 20,
-                                          high_vol_threshold: float = 0.25,
-                                          low_vol_threshold: float = 0.15,
-                                          high_vol_multiplier: float = 1.5,
-                                          low_vol_multiplier: float = 0.8) -> float:
+                                          lookback: int = DEFAULT_VOL_LOOKBACK,
+                                          high_vol_threshold: float = DEFAULT_HIGH_VOL_THRESHOLD,
+                                          low_vol_threshold: float = DEFAULT_LOW_VOL_THRESHOLD,
+                                          high_vol_multiplier: float = DEFAULT_HIGH_VOL_MULTIPLIER,
+                                          low_vol_multiplier: float = DEFAULT_LOW_VOL_MULTIPLIER) -> float:
     """
     Get a multiplier to adjust TP/SL based on market volatility.
     
@@ -384,7 +403,7 @@ def get_volatility_adjustment_multiplier(index_df: pd.DataFrame, date: pd.Timest
 
 
 def check_regime_exit_signal(index_df: pd.DataFrame, date: pd.Timestamp,
-                              ma_period: int = 20, exit_threshold: float = -0.02) -> bool:
+                              ma_period: int = DEFAULT_REGIME_MA_PERIOD, exit_threshold: float = DEFAULT_REGIME_EXIT_THRESHOLD) -> bool:
     """
     Check if market regime suggests exiting positions.
     

@@ -40,6 +40,29 @@ from backtest import (
     plot_category_performance_summary,
 )
 from reporting import generate_mo_report
+from config.defaults import (
+    INITIAL_CAPITAL,
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_OUTPUT_BASE_DIR,
+    DEFAULT_CATEGORY_SCHEME,
+    DEFAULT_RUN_STOCK_SELECTION,
+    DEFAULT_SELECTION_TYPE,
+    DEFAULT_CATEGORY_COUNTS,
+    DEFAULT_CATEGORY_WEIGHTS,
+    DEFAULT_SELECTION_METHOD,
+    DEFAULT_MIN_PROB_THRESHOLD,
+    DEFAULT_WEIGHTING_SCHEME,
+    DEFAULT_TOP_K,
+    DEFAULT_TOP_K_WEIGHTING,
+    DEFAULT_TP_MODE,
+    DEFAULT_SL_MODE,
+    DEFAULT_TP_ENABLED,
+    DEFAULT_SL_ENABLED,
+    DEFAULT_ENTRY_PRICE_WINDOW,
+    DEFAULT_TPSL_FALLBACK_PCT,
+    DEFAULT_GENERATE_ANALYSIS_REPORT,
+    DEFAULT_GENERATE_DETAILED_REPORT,
+)
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for saving plots
 
@@ -69,7 +92,7 @@ class TeeOutput:
             f.write(self.buffer.getvalue())
 
 
-def load_config(config_path='strategy_config.yaml'):
+def load_config(config_path=DEFAULT_CONFIG_PATH):
     """Load configuration from YAML file."""
     with open(config_path, 'r') as file:
         config = yaml.safe_load(file)
@@ -117,7 +140,7 @@ def filter_data_by_quarters(df, first_quarter, last_quarter):
     return df[(df['quarter'] >= first_quarter) & (df['quarter'] <= last_quarter)].copy()
 
 
-def create_output_directory(base_dir='../backtesting_results'):
+def create_output_directory(base_dir=DEFAULT_OUTPUT_BASE_DIR):
     """
     Create a timestamped output directory for results.
     
@@ -156,9 +179,9 @@ def save_config_copy(config, output_dir):
 
 
 def run_stock_selection(input_data, category_scheme, category_counts, category_weights,
-                        selection_method='probability', min_prob_threshold=None,
-                        selection_type='category_based', top_k_config=None,
-                        category_based_weighting_scheme='use_category_weights'):
+                        selection_method=DEFAULT_SELECTION_METHOD, min_prob_threshold=DEFAULT_MIN_PROB_THRESHOLD,
+                        selection_type=DEFAULT_SELECTION_TYPE, top_k_config=None,
+                        category_based_weighting_scheme=DEFAULT_WEIGHTING_SCHEME):
     """
     Run stock selection based on the specified selection type and category scheme.
     
@@ -183,14 +206,14 @@ def run_stock_selection(input_data, category_scheme, category_counts, category_w
     """
     if selection_type == 'top_k':
         if top_k_config is None:
-            top_k_config = {'k': 30, 'weighting_scheme': 'equal'}
+            top_k_config = {'k': DEFAULT_TOP_K, 'weighting_scheme': DEFAULT_TOP_K_WEIGHTING}
         
         return select_top_k_stocks(
             input_data,
-            k=top_k_config.get('k', 30),
+            k=top_k_config.get('k', DEFAULT_TOP_K),
             selection_method=selection_method,
             min_prob_threshold=min_prob_threshold,
-            weighting_scheme=top_k_config.get('weighting_scheme', 'equal')
+            weighting_scheme=top_k_config.get('weighting_scheme', DEFAULT_TOP_K_WEIGHTING)
         )
     elif selection_type == 'category_based':
         if category_scheme == 'volatility':
@@ -438,34 +461,34 @@ def backtest_core(
         # Extract config values
         first_quarter = config.get('first_quarter')
         last_quarter = config.get('last_quarter')
-        category_scheme = config.get('category_scheme', 'volatility')
+        category_scheme = config.get('category_scheme', DEFAULT_CATEGORY_SCHEME)
         
         # Stock selection mode
-        run_stock_selection_flag = config.get('run_stock_selection', True)
+        run_stock_selection_flag = config.get('run_stock_selection', DEFAULT_RUN_STOCK_SELECTION)
         
         # Selection type: 'category_based' or 'top_k'
-        selection_type = config.get('selection_type', 'category_based')
+        selection_type = config.get('selection_type', DEFAULT_SELECTION_TYPE)
         
         # Selection-specific config
-        category_counts = config.get('category_counts', [10, 10, 10])
-        category_weights = config.get('category_weights', [0.33, 0.33, 0.34])
-        selection_method = config.get('selection_method', 'probability')
-        min_prob_threshold = config.get('min_prob_threshold', None)
+        category_counts = config.get('category_counts', DEFAULT_CATEGORY_COUNTS)
+        category_weights = config.get('category_weights', DEFAULT_CATEGORY_WEIGHTS)
+        selection_method = config.get('selection_method', DEFAULT_SELECTION_METHOD)
+        min_prob_threshold = config.get('min_prob_threshold', DEFAULT_MIN_PROB_THRESHOLD)
         top_k_config = config.get('top_k_config', None)
-        category_based_weighting_scheme = config.get('category_based_selection_weighting_scheme', 'use_category_weights')
+        category_based_weighting_scheme = config.get('category_based_selection_weighting_scheme', DEFAULT_WEIGHTING_SCHEME)
         
         # Default TP/SL config
         default_tpsl = config.get('default_tpsl', None)
         has_default_tpsl = default_tpsl is not None
         
         # TP/SL mode configuration
-        tp_mode = config.get('tp_mode', 'fixed')
-        sl_mode = config.get('sl_mode', 'fixed')
-        tp_enabled = config.get('tp_enabled', True)
-        sl_enabled = config.get('sl_enabled', True)
+        tp_mode = config.get('tp_mode', DEFAULT_TP_MODE)
+        sl_mode = config.get('sl_mode', DEFAULT_SL_MODE)
+        tp_enabled = config.get('tp_enabled', DEFAULT_TP_ENABLED)
+        sl_enabled = config.get('sl_enabled', DEFAULT_SL_ENABLED)
         
         # Entry price window configuration
-        entry_price_window = config.get('entry_price_window', 3)
+        entry_price_window = config.get('entry_price_window', DEFAULT_ENTRY_PRICE_WINDOW)
         if not isinstance(entry_price_window, int) or entry_price_window < 1:
             raise ValueError(f"entry_price_window must be an integer >= 1, got: {entry_price_window}")
         
@@ -603,14 +626,12 @@ def backtest_core(
         if verbose:
             print("\n[4/4] Generating daily portfolio values...")
         
-        initial_capital = 1_000_000_000  # 100 Crores
-        
         daily_pf_values = compute_pf_value_over_quarters(
             trade_results, 
             price_data, 
             first_quarter, 
             last_quarter, 
-            initial_capital,
+            INITIAL_CAPITAL,
             entry_price_window=entry_price_window
         )
         
@@ -630,7 +651,7 @@ def backtest_core(
         return None
 
 
-def run_backtest(config_path='strategy_config.yaml'):
+def run_backtest(config_path=DEFAULT_CONFIG_PATH):
     """
     Main function to run the full backtesting workflow.
     
@@ -664,26 +685,26 @@ def run_backtest(config_path='strategy_config.yaml'):
     category_scheme = config['category_scheme']
     
     # Stock selection mode (new: can skip selection for preselected portfolios)
-    run_stock_selection_flag = config.get('run_stock_selection', True)
+    run_stock_selection_flag = config.get('run_stock_selection', DEFAULT_RUN_STOCK_SELECTION)
     
     # Selection type: 'category_based' or 'top_k'
-    selection_type = config.get('selection_type', 'category_based')
+    selection_type = config.get('selection_type', DEFAULT_SELECTION_TYPE)
     
     # Selection-specific config (only used when run_stock_selection is True)
-    category_counts = config.get('category_counts', [10, 10, 10])
-    category_weights = config.get('category_weights', [0.33, 0.33, 0.34])
-    selection_method = config.get('selection_method', 'probability')
-    min_prob_threshold = config.get('min_prob_threshold', None)
+    category_counts = config.get('category_counts', DEFAULT_CATEGORY_COUNTS)
+    category_weights = config.get('category_weights', DEFAULT_CATEGORY_WEIGHTS)
+    selection_method = config.get('selection_method', DEFAULT_SELECTION_METHOD)
+    min_prob_threshold = config.get('min_prob_threshold', DEFAULT_MIN_PROB_THRESHOLD)
     top_k_config = config.get('top_k_config', None)
-    category_based_weighting_scheme = config.get('category_based_selection_weighting_scheme', 'use_category_weights')
+    category_based_weighting_scheme = config.get('category_based_selection_weighting_scheme', DEFAULT_WEIGHTING_SCHEME)
     
     # Default TP/SL config (used when no category in preselected mode)
     default_tpsl = config.get('default_tpsl', None)
     has_default_tpsl = default_tpsl is not None
     
     # Analysis report options
-    generate_report = config.get('generate_analysis_report', False)
-    generate_detailed = config.get('generate_detailed_report', False)
+    generate_report = config.get('generate_analysis_report', DEFAULT_GENERATE_ANALYSIS_REPORT)
+    generate_detailed = config.get('generate_detailed_report', DEFAULT_GENERATE_DETAILED_REPORT)
     detailed_sub_periods = config.get('detailed_report_sub_periods', None)
     
     print(f"  - Input data: {input_data_path}")
@@ -700,8 +721,8 @@ def run_backtest(config_path='strategy_config.yaml'):
             print(f"  - Category weights: {category_weights}")
             print(f"  - Weighting scheme: {category_based_weighting_scheme}")
         elif selection_type == 'top_k':
-            k = top_k_config.get('k', 30) if top_k_config else 30
-            weighting = top_k_config.get('weighting_scheme', 'equal') if top_k_config else 'equal'
+            k = top_k_config.get('k', DEFAULT_TOP_K) if top_k_config else DEFAULT_TOP_K
+            weighting = top_k_config.get('weighting_scheme', DEFAULT_TOP_K_WEIGHTING) if top_k_config else DEFAULT_TOP_K_WEIGHTING
             print(f"  - Top k: {k}")
             print(f"  - Weighting scheme: {weighting}")
         print(f"  - Selection method: {selection_method}")
@@ -710,20 +731,20 @@ def run_backtest(config_path='strategy_config.yaml'):
     else:
         print("  - Using preselected portfolio (selection config options ignored)")
         if has_default_tpsl:
-            print(f"  - Default TP/SL: TP={default_tpsl.get('tp_pct', 0.05):.1%}, SL={default_tpsl.get('sl_pct', 0.05):.1%}")
+            print(f"  - Default TP/SL: TP={default_tpsl.get('tp_pct', DEFAULT_TPSL_FALLBACK_PCT):.1%}, SL={default_tpsl.get('sl_pct', DEFAULT_TPSL_FALLBACK_PCT):.1%}")
     
     # TP/SL mode configuration
-    tp_mode = config.get('tp_mode', 'fixed')
-    sl_mode = config.get('sl_mode', 'fixed')
-    tp_enabled = config.get('tp_enabled', True)
-    sl_enabled = config.get('sl_enabled', True)
+    tp_mode = config.get('tp_mode', DEFAULT_TP_MODE)
+    sl_mode = config.get('sl_mode', DEFAULT_SL_MODE)
+    tp_enabled = config.get('tp_enabled', DEFAULT_TP_ENABLED)
+    sl_enabled = config.get('sl_enabled', DEFAULT_SL_ENABLED)
     print(f"  - TP mode: {tp_mode}" + (" (take profit exits disabled)" if not tp_enabled else ""))
     print(f"  - SL mode: {sl_mode}" + (" (stop loss exits disabled)" if not sl_enabled else ""))
     print(f"  - TP enabled: {tp_enabled}")
     print(f"  - SL enabled: {sl_enabled}")
     
     # Entry price window
-    entry_price_window = config.get('entry_price_window', 3)
+    entry_price_window = config.get('entry_price_window', DEFAULT_ENTRY_PRICE_WINDOW)
     print(f"  - Entry price window: {entry_price_window} trading day(s)")
     
     # -------------------------------------------------------------------------
@@ -805,7 +826,6 @@ def run_backtest(config_path='strategy_config.yaml'):
     # -------------------------------------------------------------------------
     # 5. Generate Comparison Plot (if index data available)
     # -------------------------------------------------------------------------
-    initial_capital = 1_000_000_000  # 100 Crores (for plot scaling)
     comparison_df = None
     if index_data_path:
         plot_path = os.path.join(output_dir, 'portfolio_vs_index.png')
@@ -815,7 +835,7 @@ def run_backtest(config_path='strategy_config.yaml'):
             index_data,
             first_quarter,
             last_quarter,
-            initial_capital,
+            INITIAL_CAPITAL,
             save_path=plot_path,
             daily_pf_values=equity_curve  # Reuse pre-computed equity curve for consistency
         )

@@ -1,13 +1,23 @@
 import pandas as pd
 import warnings
 
+from config.defaults import (
+    DEFAULT_SELECTION_METHOD,
+    DEFAULT_MIN_PROB_THRESHOLD,
+    DEFAULT_TOP_K_WEIGHTING,
+    DEFAULT_WEIGHTING_SCHEME,
+    RISK_ADJUSTED_EPSILON,
+    DEFAULT_MIN_PRICES_REQUIRED,
+    DEFAULT_ENTRY_WINDOW_LENGTH,
+)
+
 
 def select_top_k_stocks(
     stock_probabilities,
     k,
-    selection_method='probability',
-    min_prob_threshold=None,
-    weighting_scheme='equal'):
+    selection_method=DEFAULT_SELECTION_METHOD,
+    min_prob_threshold=DEFAULT_MIN_PROB_THRESHOLD,
+    weighting_scheme=DEFAULT_TOP_K_WEIGHTING):
     """
     Selects top k stocks per quarter based on probability or risk-adjusted scores.
 
@@ -63,7 +73,7 @@ def select_top_k_stocks(
         
         # Calculate risk-adjusted score if needed
         if selection_method == 'risk_adjusted':
-            group['risk_adj_score'] = group['prob'] / (group['volatility'] + 1e-8)
+            group['risk_adj_score'] = group['prob'] / (group['volatility'] + RISK_ADJUSTED_EPSILON)
             group = group.sort_values(by='risk_adj_score', ascending=False)
         else:
             group = group.sort_values(by='prob', ascending=False)
@@ -118,9 +128,9 @@ def select_and_weight_stocks_volatility(
     stock_probabilities, 
     selection_counts, 
     category_weights,
-    selection_method='probability',
-    min_prob_threshold=None,
-    weighting_scheme='use_category_weights'):
+    selection_method=DEFAULT_SELECTION_METHOD,
+    min_prob_threshold=DEFAULT_MIN_PROB_THRESHOLD,
+    weighting_scheme=DEFAULT_WEIGHTING_SCHEME):
     """
     Selects stocks based on volatility categories and probability scores, 
     and assigns weights.
@@ -211,7 +221,7 @@ def select_and_weight_stocks_volatility(
         if selection_method == 'risk_adjusted':
             # Risk-adjusted score = probability / volatility (higher is better)
             # Add small epsilon to avoid division by zero
-            current_data['risk_adj_score'] = current_data['prob'] / (current_data['volatility'] + 1e-8)
+            current_data['risk_adj_score'] = current_data['prob'] / (current_data['volatility'] + RISK_ADJUSTED_EPSILON)
 
         # 3. Select stocks for each category
         for cat in ['high_volatility', 'medium_volatility', 'low_volatility']:
@@ -289,9 +299,9 @@ def select_and_weight_stocks_mcap(
     stock_probabilities, 
     lms_count, 
     lms_w,
-    selection_method='probability',
-    min_prob_threshold=None,
-    weighting_scheme='use_category_weights'):
+    selection_method=DEFAULT_SELECTION_METHOD,
+    min_prob_threshold=DEFAULT_MIN_PROB_THRESHOLD,
+    weighting_scheme=DEFAULT_WEIGHTING_SCHEME):
     """
     Selects stocks based on market cap categories and probability scores,
     and assigns weights.
@@ -362,7 +372,7 @@ def select_and_weight_stocks_mcap(
         # Calculate risk-adjusted score if needed
         if selection_method == 'risk_adjusted':
             group = group.copy()
-            group['risk_adj_score'] = group['prob'] / (group['volatility'] + 1e-8)
+            group['risk_adj_score'] = group['prob'] / (group['volatility'] + RISK_ADJUSTED_EPSILON)
         
         # Select stocks for each category
         for cat in ['largecap', 'midcap', 'smallcap']:
@@ -464,7 +474,7 @@ def get_entry_start_date(quarter):
 
 
 def validate_price_data_coverage(input_data, price_data, first_quarter=None, last_quarter=None,
-                                 min_prices_required=3, entry_window_length=10):
+                                 min_prices_required=DEFAULT_MIN_PRICES_REQUIRED, entry_window_length=DEFAULT_ENTRY_WINDOW_LENGTH):
     """
     Identify stocks every quarter in our input data (which have probabilities or are already selected)
     that we can't trade due to incomplete price data
@@ -539,7 +549,7 @@ def validate_price_data_coverage(input_data, price_data, first_quarter=None, las
 
 
 def filter_tradeable_stocks(input_data, price_data, first_quarter=None, last_quarter=None,
-                            min_prices_required=3, entry_window_length=10):
+                            min_prices_required=DEFAULT_MIN_PRICES_REQUIRED, entry_window_length=DEFAULT_ENTRY_WINDOW_LENGTH):
     """
     Remove stock-quarter combinations that cannot be traded due to price data issues.
     

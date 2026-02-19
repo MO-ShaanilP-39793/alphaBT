@@ -23,6 +23,7 @@ from matplotlib.ticker import StrMethodFormatter
 import io
 
 from backtest.regime_dates import CRISIS_REGIMES, MARKET_REGIMES
+from config.defaults import ANNUALIZATION_FACTORS, SCALE_FACTORS
 
 
 # =============================================================================
@@ -114,19 +115,13 @@ def _annualization_factor(input_frequency):
         monthly -> 12
         yearly -> 1
     """
-    factors = {"daily": 252, "monthly": 12, "yearly": 1}
-    return factors.get(input_frequency, 252)
+    return ANNUALIZATION_FACTORS.get(input_frequency, ANNUALIZATION_FACTORS['daily'])
 
 
 def _scale_factor_roll(returns_frequency, roll_type):
     """Get scaling factor for rolling calculations."""
-    scale_dict = {
-        "daily_daily": 1, "daily_monthly": 21, "daily_yearly": 252,
-        "monthly_monthly": 1, "monthly_yearly": 12,
-        "yearly_yearly": 1,
-    }
     key = f"{returns_frequency}_{roll_type}"
-    return scale_dict.get(key, 252)
+    return SCALE_FACTORS.get(key, SCALE_FACTORS['daily_yearly'])
 
 
 def _compute_probability_buckets(returns_df, lower_bound=None, upper_bound=None):

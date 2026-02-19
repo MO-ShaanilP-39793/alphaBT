@@ -24,6 +24,29 @@ from backtest.dynamic_levels import (
     get_volatility_adjustment_multiplier,
     check_regime_exit_signal
 )
+from config.defaults import (
+    DEFAULT_TPSL_FALLBACK_PCT,
+    DEFAULT_ATR_TP_MULTIPLIER,
+    DEFAULT_ATR_SL_MULTIPLIER,
+    DEFAULT_ATR_PERIOD,
+    DEFAULT_PIVOT_TP_LEVEL,
+    DEFAULT_PIVOT_SL_LEVEL,
+    DEFAULT_PIVOT_LOOKBACK_DAYS,
+    DEFAULT_FLAT_TP_PCT,
+    DEFAULT_FLAT_SL_PCT,
+    DEFAULT_TP_MODE,
+    DEFAULT_SL_MODE,
+    DEFAULT_TP_ENABLED,
+    DEFAULT_SL_ENABLED,
+    DEFAULT_ENTRY_PRICE_WINDOW,
+    DEFAULT_VOL_LOOKBACK,
+    DEFAULT_HIGH_VOL_THRESHOLD,
+    DEFAULT_LOW_VOL_THRESHOLD,
+    DEFAULT_HIGH_VOL_MULTIPLIER,
+    DEFAULT_LOW_VOL_MULTIPLIER,
+    DEFAULT_REGIME_MA_PERIOD,
+    DEFAULT_REGIME_EXIT_THRESHOLD,
+)
 
 def get_date_params(quarter_str):
     """
@@ -76,11 +99,11 @@ def calculate_thresholds_fixed(
     """
     if cat is None or cat == '_default':
         # Use default thresholds when no category is provided
-        tp_pct = default_tpsl.get('tp_pct', 0.05)
-        sl_pct = default_tpsl.get('sl_pct', 0.05)
+        tp_pct = default_tpsl.get('tp_pct', DEFAULT_TPSL_FALLBACK_PCT)
+        sl_pct = default_tpsl.get('sl_pct', DEFAULT_TPSL_FALLBACK_PCT)
     else:
-        tp_pct = tp_config.get(category_scheme, {}).get(cat, 0.05)
-        sl_pct = sl_config.get(category_scheme, {}).get(cat, 0.05)
+        tp_pct = tp_config.get(category_scheme, {}).get(cat, DEFAULT_TPSL_FALLBACK_PCT)
+        sl_pct = sl_config.get(category_scheme, {}).get(cat, DEFAULT_TPSL_FALLBACK_PCT)
     
     tp_price = entry_price * (1 + tp_pct)
     sl_price = entry_price * (1 - sl_pct)
@@ -111,9 +134,9 @@ def _compute_single_side(side, mode, price_df, co_name, entry_price, entry_date,
     if mode == 'atr':
         tp_price, sl_price, atr = calculate_atr_thresholds(
             price_df, co_name, entry_price, entry_date,
-            tp_multiplier=atr_config.get('tp_multiplier', 2.0),
-            sl_multiplier=atr_config.get('sl_multiplier', 1.5),
-            period=atr_config.get('period', 14)
+            tp_multiplier=atr_config.get('tp_multiplier', DEFAULT_ATR_TP_MULTIPLIER),
+            sl_multiplier=atr_config.get('sl_multiplier', DEFAULT_ATR_SL_MULTIPLIER),
+            period=atr_config.get('period', DEFAULT_ATR_PERIOD)
         )
         
         if tp_price is None:
@@ -137,9 +160,9 @@ def _compute_single_side(side, mode, price_df, co_name, entry_price, entry_date,
     elif mode == 'pivot':
         tp_price, sl_price, pivots = calculate_pivot_thresholds(
             price_df, co_name, entry_price, entry_date,
-            tp_level=pivot_config.get('tp_level', 'R1'),
-            sl_level=pivot_config.get('sl_level', 'S1'),
-            lookback_days=pivot_config.get('lookback_days', 60)
+            tp_level=pivot_config.get('tp_level', DEFAULT_PIVOT_TP_LEVEL),
+            sl_level=pivot_config.get('sl_level', DEFAULT_PIVOT_SL_LEVEL),
+            lookback_days=pivot_config.get('lookback_days', DEFAULT_PIVOT_LOOKBACK_DAYS)
         )
         
         if tp_price is None:
@@ -162,10 +185,10 @@ def _compute_single_side(side, mode, price_df, co_name, entry_price, entry_date,
                 
     elif mode == 'flat':
         if side == 'tp':
-            pct = flat_config.get('tp_pct', 0.05)
+            pct = flat_config.get('tp_pct', DEFAULT_FLAT_TP_PCT)
             price = entry_price * (1 + pct)
         else:
-            pct = flat_config.get('sl_pct', 0.05)
+            pct = flat_config.get('sl_pct', DEFAULT_FLAT_SL_PCT)
             price = entry_price * (1 - pct)
         meta['pct'] = pct
     
@@ -246,11 +269,11 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
     if vol_config.get('enabled', False) and index_df is not None:
         multiplier = get_volatility_adjustment_multiplier(
             index_df, entry_date,
-            lookback=vol_config.get('lookback', 20),
-            high_vol_threshold=vol_config.get('high_vol_threshold', 0.25),
-            low_vol_threshold=vol_config.get('low_vol_threshold', 0.15),
-            high_vol_multiplier=vol_config.get('high_vol_multiplier', 1.5),
-            low_vol_multiplier=vol_config.get('low_vol_multiplier', 0.8)
+            lookback=vol_config.get('lookback', DEFAULT_VOL_LOOKBACK),
+            high_vol_threshold=vol_config.get('high_vol_threshold', DEFAULT_HIGH_VOL_THRESHOLD),
+            low_vol_threshold=vol_config.get('low_vol_threshold', DEFAULT_LOW_VOL_THRESHOLD),
+            high_vol_multiplier=vol_config.get('high_vol_multiplier', DEFAULT_HIGH_VOL_MULTIPLIER),
+            low_vol_multiplier=vol_config.get('low_vol_multiplier', DEFAULT_LOW_VOL_MULTIPLIER)
         )
         
         if multiplier != 1.0:
@@ -267,8 +290,8 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
 
 
 def process_trade(row, price_df, category_scheme, index_df=None,
-                   tp_mode='fixed', sl_mode='fixed',
-                   tp_enabled=True, sl_enabled=True, entry_price_window=3,
+                   tp_mode=DEFAULT_TP_MODE, sl_mode=DEFAULT_SL_MODE,
+                   tp_enabled=DEFAULT_TP_ENABLED, sl_enabled=DEFAULT_SL_ENABLED, entry_price_window=DEFAULT_ENTRY_PRICE_WINDOW,
                    *, tp_config, sl_config, default_tpsl, atr_config,
                    pivot_config, flat_config, index_exit_config):
     """
@@ -343,12 +366,12 @@ def process_trade(row, price_df, category_scheme, index_df=None,
         )
         
         if tp_enabled:
-            tp_pct_used = threshold_metadata.get('tp_pct', 0.05)
+            tp_pct_used = threshold_metadata.get('tp_pct', DEFAULT_TPSL_FALLBACK_PCT)
         else:
             tp_price = None  # Disable TP threshold
             
         if sl_enabled:
-            sl_pct_used = threshold_metadata.get('sl_pct', 0.05)
+            sl_pct_used = threshold_metadata.get('sl_pct', DEFAULT_TPSL_FALLBACK_PCT)
         else:
             sl_price = None  # Disable SL threshold
     
@@ -378,8 +401,8 @@ def process_trade(row, price_df, category_scheme, index_df=None,
         if regime_filter_enabled:
             if check_regime_exit_signal(
                 index_df, current_date,
-                ma_period=regime_config.get('ma_period', 20),
-                exit_threshold=regime_config.get('exit_threshold', -0.02)
+                ma_period=regime_config.get('ma_period', DEFAULT_REGIME_MA_PERIOD),
+                exit_threshold=regime_config.get('exit_threshold', DEFAULT_REGIME_EXIT_THRESHOLD)
             ):
                 exit_date = current_date
                 exit_price = day_data['close']  # Exit at close
@@ -433,7 +456,7 @@ def simulate_trades(
     pivot_config: dict = None,
     flat_config: dict = None,
     index_exit_config: dict = None,
-    entry_price_window: int = 3):
+    entry_price_window: int = DEFAULT_ENTRY_PRICE_WINDOW):
     """
     Calculate portfolio performance with TP/SL simulation.
     
@@ -466,10 +489,10 @@ def simulate_trades(
     - DataFrame with trade results including entry/exit details
     """
     # Resolve mode flags
-    resolved_tp_mode = tp_mode if tp_mode is not None else 'fixed'
-    resolved_sl_mode = sl_mode if sl_mode is not None else 'fixed'
-    use_tp = tp_enabled if tp_enabled is not None else True
-    use_sl = sl_enabled if sl_enabled is not None else True
+    resolved_tp_mode = tp_mode if tp_mode is not None else DEFAULT_TP_MODE
+    resolved_sl_mode = sl_mode if sl_mode is not None else DEFAULT_SL_MODE
+    use_tp = tp_enabled if tp_enabled is not None else DEFAULT_TP_ENABLED
+    use_sl = sl_enabled if sl_enabled is not None else DEFAULT_SL_ENABLED
 
     # --- Validate required configs based on active modes ---
     active_modes = set()

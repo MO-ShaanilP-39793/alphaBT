@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import warnings
+from config.defaults import INITIAL_CAPITAL, DEFAULT_ENTRY_PRICE_WINDOW, DAYS_PER_YEAR
 
 # --------------------------------------------------------------------------------
 # 1. POSITION SIZING LOGIC
@@ -50,7 +51,7 @@ def calculate_position_sizes(quarterly_pf_stocks, total_capital):
 # 2. DAILY EQUITY CURVE GENERATION (daily series of portfolio value)
 # --------------------------------------------------------------------------------
 
-def generate_quarter_equity_curve(trades, price_data, quarter, entry_price_window=3):
+def generate_quarter_equity_curve(trades, price_data, quarter, entry_price_window=DEFAULT_ENTRY_PRICE_WINDOW):
     """
     Creates a daily series of portfolio value.
 
@@ -235,7 +236,7 @@ def _generate_quarter_sequence(first_quarter, last_quarter):
     return quarters
 
 
-def compute_pf_value_over_quarter(trades, price_data, target_quarter, initial_capital=1000000000, entry_price_window=3):
+def compute_pf_value_over_quarter(trades, price_data, target_quarter, initial_capital=INITIAL_CAPITAL, entry_price_window=DEFAULT_ENTRY_PRICE_WINDOW):
     '''
     trades: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price]
     price_data: [date, co_name, open, high, low, close]
@@ -263,7 +264,7 @@ def compute_pf_value_over_quarter(trades, price_data, target_quarter, initial_ca
     return equity_curve
 
 
-def compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter, initial_capital=1000000000, entry_price_window=3):
+def compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter, initial_capital=INITIAL_CAPITAL, entry_price_window=DEFAULT_ENTRY_PRICE_WINDOW):
     '''
     Computes portfolio value across multiple quarters at daily frequency.
     The ending value of each quarter becomes the starting capital for the next quarter.
@@ -331,7 +332,7 @@ def compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quart
     return combined_equity_curve
 
 
-def plot_pf_value_over_quarter(trades, price_data, target_quarter, initial_capital=1000000000):
+def plot_pf_value_over_quarter(trades, price_data, target_quarter, initial_capital=INITIAL_CAPITAL):
     '''
     trades: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price]
     price_data: [date, co_name, open, high, low, close]
@@ -390,7 +391,7 @@ def plot_pf_value_over_quarter(trades, price_data, target_quarter, initial_capit
     plt.show()
 
 
-def plot_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter, initial_capital=1000000000):
+def plot_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter, initial_capital=INITIAL_CAPITAL):
     '''
     Plots portfolio value across multiple quarters at daily frequency.
 
@@ -483,7 +484,7 @@ def plot_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter,
     plt.show()
 
 
-def compute_pf_vs_index(trades, price_data, index_price_data, first_quarter, last_quarter, initial_capital=1000000000, daily_pf_values=None):
+def compute_pf_vs_index(trades, price_data, index_price_data, first_quarter, last_quarter, initial_capital=INITIAL_CAPITAL, daily_pf_values=None):
     '''
     Computes portfolio performance vs benchmark index across multiple quarters.
 
@@ -564,7 +565,7 @@ def compute_pf_vs_index(trades, price_data, index_price_data, first_quarter, las
     return result
 
 
-def plot_pf_vs_index(trades, price_data, index_price_data, first_quarter, last_quarter, initial_capital=1000000000, save_path=None, daily_pf_values=None):
+def plot_pf_vs_index(trades, price_data, index_price_data, first_quarter, last_quarter, initial_capital=INITIAL_CAPITAL, save_path=None, daily_pf_values=None):
     '''
     Plots portfolio value vs benchmark index across multiple quarters.
 
@@ -630,7 +631,7 @@ def plot_pf_vs_index(trades, price_data, index_price_data, first_quarter, last_q
     # Calculate CAGR for portfolio and index
     start_date = comparison_df['date'].iloc[0]
     end_date = comparison_df['date'].iloc[-1]
-    years = (end_date - start_date).days / 365.25
+    years = (end_date - start_date).days / DAYS_PER_YEAR
     
     final_pf_value = comparison_df['pf_value'].iloc[-1]
     final_index_value = comparison_df['index_fund_value'].iloc[-1]

@@ -29,6 +29,8 @@ from tuning import (
     is_multi_objective,
 )
 
+from config.defaults import DEFAULT_OBJECTIVE, DEFAULT_DIRECTION
+
 
 def _load_study(study_folder: Path) -> tuple:
     """
@@ -203,7 +205,7 @@ def export_best(study_folder: Path) -> None:
         return
     
     optuna_config = tuning_config.get('optuna', {})
-    objective_names = [optuna_config.get('objective', 'calmar')]
+    objective_names = [optuna_config.get('objective', DEFAULT_OBJECTIVE)]
     
     config = _build_config_from_trial(best_trial, tuning_config)
     output_path = study_folder / 'best_config.yaml'
@@ -243,7 +245,7 @@ def export_trial(study_folder: Path, trial_number: int) -> None:
     if 'objectives' in optuna_config:
         objective_names = optuna_config['objectives']
     else:
-        objective_names = [optuna_config.get('objective', 'calmar')]
+        objective_names = [optuna_config.get('objective', DEFAULT_OBJECTIVE)]
     
     config = _build_config_from_trial(target_trial, tuning_config)
     output_path = study_folder / f'trial_{trial_number}_config.yaml'
@@ -275,7 +277,7 @@ def export_pareto(study_folder: Path, top_n: int = None) -> None:
     # Determine objective names and directions from config
     optuna_config = tuning_config.get('optuna', {})
     objective_names = optuna_config.get('objectives', ['objective_0', 'objective_1'])
-    directions = optuna_config.get('directions', ['maximize'] * len(objective_names))
+    directions = optuna_config.get('directions', [DEFAULT_DIRECTION] * len(objective_names))
     
     # Sort by first objective (respecting direction)
     first_dir = directions[0]

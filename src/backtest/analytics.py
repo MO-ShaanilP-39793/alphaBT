@@ -2,13 +2,24 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
+from config.defaults import (
+    RISK_FREE_RATE,
+    TRADING_DAYS_PER_YEAR,
+    DAYS_PER_YEAR,
+    VAR_CONFIDENCE_LEVEL,
+    DEFAULT_ROLLING_WINDOWS,
+    DEFAULT_CALENDAR_PERIODS,
+    DEFAULT_ROLLING_ALPHA_WINDOW,
+    DEFAULT_ROLLING_VOL_WINDOW,
+    DEFAULT_ROLLING_SHARPE_WINDOW,
+)
 
 
 # =============================================================================
 # DAILY PORTFOLIO VALUE ANALYSIS (from daily_portfolio_values.csv)
 # =============================================================================
 
-def compute_portfolio_metrics(daily_pf: pd.DataFrame, risk_free_rate: float = 0.065) -> dict:
+def compute_portfolio_metrics(daily_pf: pd.DataFrame, risk_free_rate: float = RISK_FREE_RATE) -> dict:
     """
     Compute comprehensive portfolio performance metrics from daily portfolio values.
     
@@ -35,14 +46,14 @@ def compute_portfolio_metrics(daily_pf: pd.DataFrame, risk_free_rate: float = 0.
     # Time period
     start_date = df['date'].iloc[0]
     end_date = df['date'].iloc[-1]
-    years = (end_date - start_date).days / 365.25
+    years = (end_date - start_date).days / DAYS_PER_YEAR
     
     # CAGR
     cagr = (final_value / initial_value) ** (1 / years) - 1 if years > 0 else total_return
     
     # Volatility (annualized)
     daily_vol = df['daily_return'].std()
-    annualized_vol = daily_vol * np.sqrt(252)
+    annualized_vol = daily_vol * np.sqrt(TRADING_DAYS_PER_YEAR)
     
     # Sharpe Ratio
     excess_return = cagr - risk_free_rate
@@ -50,12 +61,12 @@ def compute_portfolio_metrics(daily_pf: pd.DataFrame, risk_free_rate: float = 0.
     
     # Sortino Ratio (downside deviation in the denominator)
     # Using risk_free_rate/252 as the target return for downside deviation calculation
-    target_return = risk_free_rate / 252
+    target_return = risk_free_rate / TRADING_DAYS_PER_YEAR
     downside_diff = df['daily_return'] - target_return
     # We only care about returns below the target
     downside_diff = np.where(downside_diff < 0, downside_diff, 0)
     # Downside deviation is the square root of the mean of squared downside differences
-    downside_dev = np.sqrt(np.mean(downside_diff**2)) * np.sqrt(252)
+    downside_dev = np.sqrt(np.mean(downside_diff**2)) * np.sqrt(TRADING_DAYS_PER_YEAR)
     sortino = excess_return / downside_dev if downside_dev > 0 else 0
     
     # Maximum Drawdown
@@ -67,7 +78,7 @@ def compute_portfolio_metrics(daily_pf: pd.DataFrame, risk_free_rate: float = 0.
     calmar = cagr / abs(max_drawdown) if max_drawdown != 0 else 0
     
     # Value at Risk (95%)
-    var_95 = df['daily_return'].quantile(0.05)
+    var_95 = df['daily_return'].quantile(VAR_CONFIDENCE_LEVEL)
     
     # Best and worst days
     best_day = df['daily_return'].max()
@@ -119,7 +130,7 @@ def compute_drawdown_series(daily_pf: pd.DataFrame) -> pd.DataFrame:
     return df[['date', 'portfolio_value', 'cummax', 'drawdown', 'drawdown_pct']]
 
 
-def compute_rolling_returns(daily_pf: pd.DataFrame, windows: list = [21, 63, 126, 252]) -> pd.DataFrame:
+def compute_rolling_returns(daily_pf: pd.DataFrame, windows: list = DEFAULT_ROLLING_WINDOWS) -> pd.DataFrame:
     """
     Compute rolling returns for various windows.
     
@@ -145,7 +156,7 @@ def compute_rolling_returns(daily_pf: pd.DataFrame, windows: list = [21, 63, 126
     return result
 
 
-def compute_calendar_rolling_returns(daily_pf: pd.DataFrame, periods: list = [1, 3, 6, 12]) -> pd.DataFrame:
+def compute_calendar_rolling_returns(daily_pf: pd.DataFrame, periods: list = DEFAULT_CALENDAR_PERIODS) -> pd.DataFrame:
     """
     Compute rolling returns based on calendar months (not trading days).
     
@@ -356,7 +367,7 @@ def compute_benchmark_metrics(comparison_df: pd.DataFrame) -> dict:
     }
 
 
-def compute_rolling_alpha(comparison_df: pd.DataFrame, window: int = 63) -> pd.DataFrame:
+def compute_rolling_alpha(comparison_df: pd.DataFrame, window: int = DEFAULT_ROLLING_ALPHA_WINDOW) -> pd.DataFrame:
     """
     Compute rolling alpha (outperformance vs index).
     
@@ -609,7 +620,7 @@ def plot_return_distribution(daily_pf: pd.DataFrame, save_path: str = None):
         plt.show()
 
 
-def plot_rolling_volatility(daily_pf: pd.DataFrame, window: int = 21, 
+def plot_rolling_volatility(daily_pf: pd.DataFrame, window: int = DEFAULT_ROLLING_VOL_WINDOW, 
                             index_data: pd.DataFrame = None, save_path: str = None):
     """
     Plot rolling volatility (annualized), optionally compared to index.
@@ -624,7 +635,7 @@ def plot_rolling_volatility(daily_pf: pd.DataFrame, window: int = 21,
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values('date')
     df['daily_return'] = df['portfolio_value'].pct_change()
-    df['rolling_vol'] = df['daily_return'].rolling(window).std() * np.sqrt(252) * 100
+    df['rolling_vol'] = df['daily_return'].rolling(window).std() * np.sqrt(TRADING_DAYS_PER_YEAR) * 100
     
     fig, ax = plt.subplots(figsize=(14, 5))
     
@@ -641,7 +652,7 @@ def plot_rolling_volatility(daily_pf: pd.DataFrame, window: int = 21,
         # Handle both 'value' and 'close' column names
         price_col = 'value' if 'value' in idx.columns else 'close'
         idx['daily_return'] = idx[price_col].pct_change()
-        idx['rolling_vol'] = idx['daily_return'].rolling(window).std() * np.sqrt(252) * 100
+        idx['rolling_vol'] = idx['daily_return'].rolling(window).std() * np.sqrt(TRADING_DAYS_PER_YEAR) * 100
         
         ax.plot(idx['date'], idx['rolling_vol'], color='gray', linewidth=1.5, 
                 linestyle='--', label='Index', alpha=0.8)
@@ -671,7 +682,7 @@ def plot_rolling_volatility(daily_pf: pd.DataFrame, window: int = 21,
         plt.show()
 
 
-def plot_rolling_sharpe(daily_pf: pd.DataFrame, window: int = 126, risk_free_rate: float = 0.065, save_path: str = None):
+def plot_rolling_sharpe(daily_pf: pd.DataFrame, window: int = DEFAULT_ROLLING_SHARPE_WINDOW, risk_free_rate: float = RISK_FREE_RATE, save_path: str = None):
     """
     Plot rolling Sharpe ratio.
     
@@ -686,11 +697,11 @@ def plot_rolling_sharpe(daily_pf: pd.DataFrame, window: int = 126, risk_free_rat
     df = df.sort_values('date')
     df['daily_return'] = df['portfolio_value'].pct_change()
     
-    daily_rf = risk_free_rate / 252
+    daily_rf = risk_free_rate / TRADING_DAYS_PER_YEAR
     df['excess_return'] = df['daily_return'] - daily_rf
     
-    rolling_mean = df['excess_return'].rolling(window).mean() * 252
-    rolling_std = df['daily_return'].rolling(window).std() * np.sqrt(252)
+    rolling_mean = df['excess_return'].rolling(window).mean() * TRADING_DAYS_PER_YEAR
+    rolling_std = df['daily_return'].rolling(window).std() * np.sqrt(TRADING_DAYS_PER_YEAR)
     df['rolling_sharpe'] = rolling_mean / rolling_std
     
     fig, ax = plt.subplots(figsize=(14, 5))

@@ -53,6 +53,19 @@ from tuning import (
     SUPPORTED_OBJECTIVES,
 )
 
+from config.defaults import (
+    DEFAULT_OBJECTIVE,
+    DEFAULT_DIRECTION,
+    DEFAULT_FAILURE_PENALTY,
+    DEFAULT_FAILURE_PENALTY_MINIMIZE,
+    DEFAULT_CALMAR_CAP,
+    DEFAULT_SAMPLER,
+    DEFAULT_MULTI_OBJ_SAMPLER,
+    SAMPLER_SEED,
+    DEFAULT_RUN_STOCK_SELECTION,
+    DEFAULT_TUNING_CONFIG_PATH,
+)
+
 from backtest_strategy import (
     load_data,
     backtest_core,
@@ -294,7 +307,7 @@ def _parse_objective_config(optuna_config: dict) -> dict:
         if raw_penalties is None:
             # Auto-derive from directions
             failure_penalties = [
-                -999.0 if d == 'maximize' else 999.0 for d in directions
+                DEFAULT_FAILURE_PENALTY if d == 'maximize' else DEFAULT_FAILURE_PENALTY_MINIMIZE for d in directions
             ]
         elif isinstance(raw_penalties, list):
             if len(raw_penalties) != len(objective_names):
@@ -312,7 +325,7 @@ def _parse_objective_config(optuna_config: dict) -> dict:
             'objective_names': objective_names,
             'directions': directions,
             'failure_penalties': failure_penalties,
-            'calmar_cap': optuna_config.get('calmar_cap', 10.0),
+            'calmar_cap': optuna_config.get('calmar_cap', DEFAULT_CALMAR_CAP),
         }
     
     elif has_single:
@@ -324,25 +337,25 @@ def _parse_objective_config(optuna_config: dict) -> dict:
                 f"Supported: {SUPPORTED_OBJECTIVES}"
             )
         
-        direction = optuna_config.get('direction', 'maximize')
-        failure_penalty = optuna_config.get('failure_penalty', -999.0)
+        direction = optuna_config.get('direction', DEFAULT_DIRECTION)
+        failure_penalty = optuna_config.get('failure_penalty', DEFAULT_FAILURE_PENALTY)
         
         return {
             'is_multi_objective': False,
             'objective_names': [objective_name],
             'directions': [direction],
             'failure_penalties': [failure_penalty],
-            'calmar_cap': optuna_config.get('calmar_cap', 10.0),
+            'calmar_cap': optuna_config.get('calmar_cap', DEFAULT_CALMAR_CAP),
         }
     
     else:
         # Neither specified — default to single-objective calmar
         return {
             'is_multi_objective': False,
-            'objective_names': ['calmar'],
-            'directions': ['maximize'],
-            'failure_penalties': [-999.0],
-            'calmar_cap': optuna_config.get('calmar_cap', 10.0),
+            'objective_names': [DEFAULT_OBJECTIVE],
+            'directions': [DEFAULT_DIRECTION],
+            'failure_penalties': [DEFAULT_FAILURE_PENALTY],
+            'calmar_cap': optuna_config.get('calmar_cap', DEFAULT_CALMAR_CAP),
         }
 
 
@@ -469,11 +482,11 @@ def get_sampler(sampler_name: str, is_multi_obj: bool = False) -> optuna.sampler
         )
     
     samplers = {
-        'TPE': TPESampler(seed=42),
-        'Random': RandomSampler(seed=42),
-        'CmaEs': CmaEsSampler(seed=42),
-        'NSGA-II': NSGAIISampler(seed=42),
-        'NSGA-III': NSGAIIISampler(seed=42),
+        'TPE': TPESampler(seed=SAMPLER_SEED),
+        'Random': RandomSampler(seed=SAMPLER_SEED),
+        'CmaEs': CmaEsSampler(seed=SAMPLER_SEED),
+        'NSGA-II': NSGAIISampler(seed=SAMPLER_SEED),
+        'NSGA-III': NSGAIIISampler(seed=SAMPLER_SEED),
     }
     
     if sampler_name not in samplers:
@@ -536,7 +549,7 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     
     study_name = optuna_config['study_name']
     n_trials = n_trials_override or optuna_config['n_trials']
-    sampler_name = optuna_config.get('sampler', 'TPE')
+    sampler_name = optuna_config.get('sampler', DEFAULT_SAMPLER)
     load_if_exists = optuna_config.get('load_if_exists', True) and not fresh_study
     
     # Parse objective configuration (detects single vs multi-objective)
@@ -545,7 +558,7 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     
     # Default sampler for multi-objective if not explicitly set
     if is_multi_obj and 'sampler' not in optuna_config:
-        sampler_name = 'NSGA-II'
+        sampler_name = DEFAULT_MULTI_OBJ_SAMPLER
     
     # Setup study folder structure
     study_folder = setup_study_folder(study_name)
@@ -576,10 +589,10 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     # -------------------------------------------------------------------------
     # Data Quality Validation
     # -------------------------------------------------------------------------
-    validate_input_data_flag = fixed_config.get('validate_input_data', True)
+    validate_input_data_flag = fixed_config.get('validate_input_data', True)  # always default True for tuning
     
     if validate_input_data_flag:
-        run_stock_selection_flag = fixed_config.get('run_stock_selection', True)
+        run_stock_selection_flag = fixed_config.get('run_stock_selection', DEFAULT_RUN_STOCK_SELECTION)
         first_quarter = fixed_config['first_quarter']
         last_quarter = fixed_config['last_quarter']
         
@@ -821,7 +834,7 @@ After optimization:
     
     parser.add_argument(
         '--config', '-c',
-        default='tuning_config.yaml',
+        default=DEFAULT_TUNING_CONFIG_PATH,
         help='Path to tuning configuration YAML (default: tuning_config.yaml)'
     )
     
