@@ -31,8 +31,7 @@ fixed:
   validate_input_data: true
   
   # Report generation (keep disabled during tuning for speed)
-  generate_analysis_report: false
-  generate_detailed_report: false
+  generate_report: false
 
 # =============================================================================
 # TP/SL MODE SAMPLING

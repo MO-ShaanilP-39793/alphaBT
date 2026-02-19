@@ -171,5 +171,4 @@ DEFAULT_OUTPUT_BASE_DIR = '../backtesting_results'
 # =============================================================================
 
 DEFAULT_RUN_STOCK_SELECTION = True
-DEFAULT_GENERATE_ANALYSIS_REPORT = False
-DEFAULT_GENERATE_DETAILED_REPORT = False
+DEFAULT_GENERATE_REPORT = True

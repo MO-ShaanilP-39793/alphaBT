@@ -29,17 +29,9 @@ from selection import (
 from backtest import (
     simulate_trades,
     compute_pf_value_over_quarters,
-    plot_pf_vs_index,
-    compute_portfolio_metrics,
-    compute_monthly_returns,
-    compute_benchmark_metrics,
-    get_comprehensive_quarter_analysis,
-    plot_drawdown,
-    plot_monthly_returns_heatmap,
-    plot_return_distribution,
-    plot_category_performance_summary,
+    compute_pf_vs_index,
 )
-from reporting import generate_mo_report
+from reporting import generate_backtest_report
 from config.defaults import (
     INITIAL_CAPITAL,
     DEFAULT_CONFIG_PATH,
@@ -60,8 +52,7 @@ from config.defaults import (
     DEFAULT_SL_ENABLED,
     DEFAULT_ENTRY_PRICE_WINDOW,
     DEFAULT_TPSL_FALLBACK_PCT,
-    DEFAULT_GENERATE_ANALYSIS_REPORT,
-    DEFAULT_GENERATE_DETAILED_REPORT,
+    DEFAULT_GENERATE_REPORT,
 )
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for saving plots
@@ -311,122 +302,6 @@ def validate_preselected_input(df, category_scheme, tp_mode, sl_mode, tp_enabled
         result = result.rename(columns={'category': 'cat'})
     
     return result, has_category
-
-
-def generate_analysis_report(trade_results, daily_pf, comparison_df, output_dir):
-    """
-    Generate comprehensive analysis report with Excel sheets and plots.
-    
-    Parameters:
-    - trade_results: DataFrame from trade simulation
-    - daily_pf: DataFrame with columns ['date', 'portfolio_value', 'quarter']
-    - comparison_df: DataFrame with portfolio vs index comparison (can be None)
-    - output_dir: Directory to save outputs
-    
-    Returns:
-    - Path to the generated Excel file
-    """
-    print("\n[8/8] Generating analysis report...")
-    
-    # Create plots subdirectory
-    plots_dir = os.path.join(output_dir, 'plots')
-    os.makedirs(plots_dir, exist_ok=True)
-    
-    # Excel file path
-    excel_path = os.path.join(output_dir, 'analysis_report.xlsx')
-    
-    # Collect DataFrames for Excel sheets
-    sheets = {}
-    
-    # -------------------------------------------------------------------------
-    # Portfolio Metrics
-    # -------------------------------------------------------------------------
-    try:
-        portfolio_metrics = compute_portfolio_metrics(daily_pf)
-        # Convert dict to single-row DataFrame for Excel
-        sheets['Portfolio_Metrics'] = pd.DataFrame([portfolio_metrics])
-        print("  - Portfolio metrics computed")
-    except Exception as e:
-        print(f"  - Warning: Could not compute portfolio metrics: {e}")
-    
-    # -------------------------------------------------------------------------
-    # Monthly Returns Table
-    # -------------------------------------------------------------------------
-    try:
-        monthly_returns = compute_monthly_returns(daily_pf)
-        sheets['Monthly_Returns'] = monthly_returns
-        print("  - Monthly returns table computed")
-    except Exception as e:
-        print(f"  - Warning: Could not compute monthly returns: {e}")
-    
-    # -------------------------------------------------------------------------
-    # Quarter Analysis (from trade results)
-    # -------------------------------------------------------------------------
-    try:
-        quarter_analysis = get_comprehensive_quarter_analysis(trade_results)
-        sheets['Quarter_Analysis'] = quarter_analysis
-        print("  - Quarter analysis computed")
-    except Exception as e:
-        print(f"  - Warning: Could not compute quarter analysis: {e}")
-    
-    # -------------------------------------------------------------------------
-    # Benchmark Metrics (if comparison data available)
-    # -------------------------------------------------------------------------
-    if comparison_df is not None:
-        try:
-            benchmark_metrics = compute_benchmark_metrics(comparison_df)
-            sheets['Benchmark_Metrics'] = pd.DataFrame([benchmark_metrics])
-            print("  - Benchmark metrics computed")
-        except Exception as e:
-            print(f"  - Warning: Could not compute benchmark metrics: {e}")
-    
-    # -------------------------------------------------------------------------
-    # Save Excel file with all sheets
-    # -------------------------------------------------------------------------
-    try:
-        with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
-            for sheet_name, df in sheets.items():
-                df.to_excel(writer, sheet_name=sheet_name, index=True)
-        print(f"  - Excel report saved to: {excel_path}")
-    except Exception as e:
-        print(f"  - Warning: Could not save Excel file: {e}")
-    
-    # -------------------------------------------------------------------------
-    # Generate and Save Plots
-    # -------------------------------------------------------------------------
-    print("  - Generating plots...")
-    
-    # Drawdown chart
-    try:
-        plot_drawdown(daily_pf, save_path=os.path.join(plots_dir, 'drawdown_chart.png'))
-        print("    - Drawdown chart saved")
-    except Exception as e:
-        print(f"    - Warning: Could not generate drawdown chart: {e}")
-    
-    # Monthly returns heatmap
-    try:
-        plot_monthly_returns_heatmap(daily_pf, save_path=os.path.join(plots_dir, 'monthly_returns_heatmap.png'))
-        print("    - Monthly returns heatmap saved")
-    except Exception as e:
-        print(f"    - Warning: Could not generate monthly returns heatmap: {e}")
-    
-    # Return distribution
-    try:
-        plot_return_distribution(daily_pf, save_path=os.path.join(plots_dir, 'return_distribution.png'))
-        print("    - Return distribution chart saved")
-    except Exception as e:
-        print(f"    - Warning: Could not generate return distribution chart: {e}")
-    
-    # Category performance summary (4-panel dashboard)
-    try:
-        plot_category_performance_summary(trade_results, save_path=os.path.join(plots_dir, 'category_performance_summary.png'))
-        print("    - Category performance summary saved")
-    except Exception as e:
-        print(f"    - Warning: Could not generate category performance summary: {e}")
-    
-    print(f"  - All plots saved to: {plots_dir}")
-    
-    return excel_path
 
 
 def backtest_core(
@@ -703,9 +578,8 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
     has_default_tpsl = default_tpsl is not None
     
     # Analysis report options
-    generate_report = config.get('generate_analysis_report', DEFAULT_GENERATE_ANALYSIS_REPORT)
-    generate_detailed = config.get('generate_detailed_report', DEFAULT_GENERATE_DETAILED_REPORT)
-    detailed_sub_periods = config.get('detailed_report_sub_periods', None)
+    generate_report = config.get('generate_report', DEFAULT_GENERATE_REPORT)
+    report_sub_periods = config.get('report_sub_periods', None)
     
     print(f"  - Input data: {input_data_path}")
     print(f"  - Price data: {price_data_path}")
@@ -802,114 +676,46 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
     # Save config for traceability
     save_config_copy(config, output_dir)
     
-    # Save trade results
-    trade_results_path = os.path.join(output_dir, 'trade_results.csv')
-    trade_results.to_csv(trade_results_path, index=False)
-    print(f"  - Trade results saved to: {trade_results_path}")
-    
-    # Save daily portfolio values
-    if equity_curve is not None and not equity_curve.empty:
-        equity_curve_path = os.path.join(output_dir, 'daily_portfolio_values.csv')
-        equity_curve_to_save = equity_curve.reset_index()
-        equity_curve_to_save.columns = ['date', 'portfolio_value', 'quarter']
-        equity_curve_to_save.to_csv(equity_curve_path, index=False)
-        print(f"  - Daily portfolio values saved to: {equity_curve_path}")
-    else:
-        print("  - Warning: No equity curve data to save")
-    
-    # Save data quality issues report (if any issues were found)
-    if data_issues is not None and not data_issues.empty:
-        data_issues_path = os.path.join(output_dir, 'data_issues.csv')
-        data_issues.to_csv(data_issues_path, index=False)
-        print(f"  - Data quality issues saved to: {data_issues_path}")
-    
     # -------------------------------------------------------------------------
-    # 5. Generate Comparison Plot (if index data available)
+    # 5. Compute comparison data (if index data available)
     # -------------------------------------------------------------------------
     comparison_df = None
     if index_data_path:
-        plot_path = os.path.join(output_dir, 'portfolio_vs_index.png')
-        comparison_df = plot_pf_vs_index(
+        comparison_df = compute_pf_vs_index(
             trade_results,
             price_data,
             index_data,
             first_quarter,
             last_quarter,
             INITIAL_CAPITAL,
-            save_path=plot_path,
             daily_pf_values=equity_curve  # Reuse pre-computed equity curve for consistency
         )
-        
-        if comparison_df is not None:
-            # Save comparison data
-            comparison_path = os.path.join(output_dir, 'portfolio_vs_index.csv')
-            comparison_df.to_csv(comparison_path, index=False)
-            print(f"  - Comparison data saved to: {comparison_path}")
     else:
         print("  - Skipping index comparison (no index data path specified)")
     
     # -------------------------------------------------------------------------
-    # 6. Generate Analysis Report (optional)
+    # 6. Generate Consolidated Report
     # -------------------------------------------------------------------------
     if generate_report and equity_curve is not None and not equity_curve.empty:
         # Prepare daily_pf in the expected format
         daily_pf = equity_curve.reset_index()
         daily_pf.columns = ['date', 'portfolio_value', 'quarter']
         
-        generate_analysis_report(
-            trade_results=trade_results,
+        report_path = os.path.join(output_dir, f'backtest_report.xlsx')
+        generate_backtest_report(
             daily_pf=daily_pf,
+            trade_results=trade_results,
             comparison_df=comparison_df,
-            output_dir=output_dir
+            output_path=report_path,
+            sub_periods=report_sub_periods,
+            input_frequency="daily",
+            report_title="Backtest Report",
+            data_issues=data_issues,
+            first_quarter=first_quarter,
+            last_quarter=last_quarter,
         )
     elif generate_report:
-        print("\nSkipping analysis report (no equity curve data available)")
-    
-    # -------------------------------------------------------------------------
-    # 7. Generate Detailed Report (optional)
-    # -------------------------------------------------------------------------
-    if generate_detailed and equity_curve is not None and not equity_curve.empty:
-        print("\nGenerating detailed summary statistics report...")
-        
-        # Convert portfolio values to daily returns
-        daily_pf = equity_curve.reset_index()
-        daily_pf.columns = ['date', 'portfolio_value', 'quarter']
-        daily_pf['date'] = pd.to_datetime(daily_pf['date'])
-        daily_pf = daily_pf.set_index('date').sort_index()
-        
-        # Compute daily returns from portfolio values
-        daily_returns = daily_pf['portfolio_value'].pct_change().dropna()
-        daily_returns.name = 'Portfolio'
-        
-        # If we have comparison data, add index returns too
-        if comparison_df is not None and not comparison_df.empty:
-            comp_df = comparison_df.copy()
-            comp_df['date'] = pd.to_datetime(comp_df['date'])
-            comp_df = comp_df.set_index('date').sort_index()
-            
-            # Compute index returns
-            index_returns = comp_df['index_fund_value'].pct_change().dropna()
-            index_returns.name = 'Benchmark'
-            
-            # Combine into single DataFrame
-            combined_returns = pd.concat([daily_returns, index_returns], axis=1).dropna()
-        else:
-            combined_returns = daily_returns.to_frame()
-        
-        combined_returns.index.name = 'Date'
-        
-        # Generate the detailed report
-        detailed_report_path = os.path.join(output_dir, 'MO_report.xlsx')
-        generate_mo_report(
-            daily_returns_df=combined_returns,
-            output_path=detailed_report_path,
-            sub_periods=detailed_sub_periods,
-            input_frequency="daily",
-            report_title="Backtest Analysis",
-            trade_results=trade_results
-        )
-    elif generate_detailed:
-        print("\nSkipping detailed report (no equity curve data available)")
+        print("\nSkipping report (no equity curve data available)")
     
     # -------------------------------------------------------------------------
     # Summary
@@ -920,18 +726,8 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
     print(f"\nAll outputs saved to: {output_dir}")
     print("\nFiles generated:")
     print(f"  - config_used.yaml (configuration traceability)")
-    print(f"  - trade_results.csv (trade-level results)")
-    print(f"  - daily_portfolio_values.csv (daily equity curve)")
-    if data_issues is not None and not data_issues.empty:
-        print(f"  - data_issues.csv (gaps in price data))")
-    if index_data_path:
-        print(f"  - portfolio_vs_index.csv (comparison data)")
-        print(f"  - portfolio_vs_index.png (comparison plot)")
     if generate_report and equity_curve is not None and not equity_curve.empty:
-        print(f"  - analysis_report.xlsx (comprehensive metrics)")
-        print(f"  - plots/ (analysis charts)")
-    if generate_detailed and equity_curve is not None and not equity_curve.empty:
-        print(f"  - MO_report.xlsx (MO-style summary stats with embedded charts)")
+        print(f"  - backtest_report.xlsx (metrics, charts, trade data — all in one)")
     print(f"  - backtest_log.txt (full execution log)")
     
     # Calculate and print execution time

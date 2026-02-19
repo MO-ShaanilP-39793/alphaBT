@@ -5,7 +5,7 @@ This file contains hardcoded date ranges for:
 1. Crisis Regimes - Specific crisis events and their recovery periods
 2. Market Regimes - Bull, bear, and recovery market phases
 
-These dates are used by summary_stats.py to compute regime-specific returns.
+These dates are used by backtest_report.py to compute regime-specific returns.
 Dates are in DD-MM-YYYY format for easy reading/editing.
 
 Note: The analysis code will automatically skip regimes that fall outside

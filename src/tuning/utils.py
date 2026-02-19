@@ -588,9 +588,8 @@ def export_best_config(
     # Build full config from best params
     config = build_config(tuning_config['fixed'], best_params)
     
-    # Add report generation flags (enable for final run)
-    config['generate_analysis_report'] = True
-    config['generate_detailed_report'] = True
+    # Add report generation flag (enable for final run)
+    config['generate_report'] = True
     
     # Write to YAML
     with open(output_path, 'w') as f:

@@ -126,8 +126,7 @@ def _build_config_from_trial(trial: optuna.trial.FrozenTrial,
     # Expand index-based params (e.g., category_counts_idx -> category_counts)
     expanded_params = _expand_trial_params(trial.params, tuning_config)
     config = build_config(tuning_config['fixed'], expanded_params)
-    config['generate_analysis_report'] = True
-    config['generate_detailed_report'] = True
+    config['generate_report'] = True
     return config
 
 

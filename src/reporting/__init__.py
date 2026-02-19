@@ -1,3 +1,3 @@
 """Reporting and summary statistics."""
 
-from reporting.summary_stats import generate_mo_report
+from reporting.backtest_report import generate_backtest_report, compute_trailing_returns
