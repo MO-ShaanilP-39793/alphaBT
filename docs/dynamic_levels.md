@@ -2,7 +2,7 @@
 
 ## Overview
 
-`dynamic_levels.py` provides utility functions for calculating dynamic support/resistance levels used to set adaptive TP/SL thresholds. This module is used internally by `TP_SL_bt.py` when running in ATR or Pivot mode.
+`dynamic_levels.py` provides utility functions for calculating dynamic support/resistance levels used to set adaptive TP/SL thresholds. This module is used internally by `backtest/tpsl.py` when running in ATR or Pivot mode.
 
 ---
 
@@ -169,7 +169,7 @@ if should_exit:
 
 ---
 
-## Usage in TP_SL_bt.py
+## Usage in backtest/tpsl.py
 
 These functions are called automatically based on the `tp_mode` and `sl_mode` settings:
 
@@ -215,4 +215,4 @@ All functions return `None` (or tuples with `None` values) when:
 - Stock not found in price data
 - Date range has no valid trading days
 
-The TP_SL_bt module handles these cases by falling back to fixed percentage thresholds.
+The `backtest/tpsl.py` module handles these cases by falling back to fixed percentage thresholds.

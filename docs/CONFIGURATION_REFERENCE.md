@@ -368,14 +368,16 @@ min_prob_threshold: null  # No filtering
 ```yaml
 tp_enabled: true   # Enable take profit exits
 sl_enabled: true   # Enable stop loss exits
+entry_price_window: 3  # Number of trading days averaged for entry price
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `tp_enabled` | Boolean | Allow early exits when profit target hit |
-| `sl_enabled` | Boolean | Allow early exits when stop loss hit |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `tp_enabled` | Boolean | `true` | Allow early exits when profit target hit |
+| `sl_enabled` | Boolean | `true` | Allow early exits when stop loss hit |
+| `entry_price_window` | Integer | `3` | Number of trading days to average for entry price calculation |
 
-**Both `false`** = Hold all positions until quarter-end mandatory exit.
+**Both `tp_enabled` and `sl_enabled` `false`** = Hold all positions until quarter-end mandatory exit.
 
 ---
 
@@ -505,7 +507,7 @@ atr_config:
 - Longer period (14-21) = smoother, less noisy
 - Higher multipliers = wider bands, fewer exits
 
-See [atr_explained.md](atr_explained.md) for details.
+See [dynamic_levels_reference.md](dynamic_levels_reference.md) for details.
 
 ---
 
@@ -542,7 +544,7 @@ S3 = Low - 2 × (High - P)
 - R2/S2 = mid-range (moderate)
 - R3/S3 = extended (aggressive)
 
-See [pivot_points_explained.md](pivot_points_explained.md) for theory.
+See [dynamic_levels_reference.md](dynamic_levels_reference.md) for theory.
 
 ---
 
@@ -610,21 +612,19 @@ index_exit:
 ### Reporting Options
 
 ```yaml
-generate_analysis_report: true   # Create analysis_report.xlsx
-generate_detailed_report: true   # Create MO_report.xlsx
+generate_report: true              # Create backtest_report.xlsx
 
-detailed_report_sub_periods:     # Custom year ranges for MO report
+report_sub_periods:                # Custom year ranges for sub-period analysis
   - [2020, 2022]
   - [2023, 2025]
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `generate_analysis_report` | Boolean | Generate `analysis_report.xlsx` with metrics/plots |
-| `generate_detailed_report` | Boolean | Generate `MO_report.xlsx` (institutional summary) |
-| `detailed_report_sub_periods` | List of [start_year, end_year] | Custom sub-period breakdowns in MO report |
+| `generate_report` | Boolean | Generate `backtest_report.xlsx` (consolidated workbook with all metrics, charts, trade data) |
+| `report_sub_periods` | List of [start_year, end_year] | Custom sub-period breakdowns in report |
 
-**Recommendation**: Keep both `true` for comprehensive analysis. Set to `false` during tuning for speed.
+**Recommendation**: Keep `true` for comprehensive analysis. Set to `false` during tuning for speed.
 
 ---
 
@@ -644,8 +644,7 @@ fixed:
   first_quarter: 202002
   last_quarter: 202411
   run_stock_selection: true
-  generate_analysis_report: false   # Keep false for speed
-  generate_detailed_report: false
+  generate_report: false             # Keep false for speed
   validate_input_data: false        # Set true for first trial, false after
 ```
 
@@ -1215,7 +1214,7 @@ input_data_path: "data/inference_data.csv"  # Missing ../
 **Speed up by**:
 - Narrow quarter range during development (`first_quarter: 202302`, `last_quarter: 202405`)
 - Reduce stock universe (use `min_prob_threshold` to filter)
-- Disable reports during tuning: `generate_analysis_report: false`, `generate_detailed_report: false`
+- Disable reports during tuning: `generate_report: false`
 - Use Parquet format for large datasets (faster than CSV)
 
 **Tuning too slow?**

@@ -118,8 +118,7 @@ flat_config:
   sl_pct: 0.05                    # Exit at -5% loss
 
 # Reports
-generate_analysis_report: true
-generate_detailed_report: true
+generate_report: true
 ```
 
 > **What this does**: Each quarter, select the top 30 stocks by probability (≥0.5), invest equal amounts, exit when a stock hits +10% profit or -5% loss (or at quarter end), then compare to the index.
@@ -150,14 +149,12 @@ Results saved to: ../backtesting_results/run_20260211_094957/
 Navigate to `backtesting_results/run_<timestamp>/` to find:
 
 📊 **Key Files**:
-- `MO_report.xlsx` – **Start here!** Comprehensive performance summary with charts
-- `analysis_report.xlsx` – Detailed metrics (CAGR, Sharpe ratio, drawdown, etc.)
-- `trade_results.csv` – Individual trade details (entry/exit prices, returns)
-- `portfolio_vs_index.csv` – Daily portfolio value vs benchmark
-- `plots/` – Visualizations (drawdown curve, return distributions, etc.)
+- `backtest_report.xlsx` – **Start here!** Consolidated workbook with all metrics, charts, trade details, and comparisons
+- `config_used.yaml` – Exact configuration used (for reproducibility)
+- `backtest_log.txt` – Complete execution log
 
 **Quick Health Check**:
-1. Open `MO_report.xlsx` → "Since Inception" sheet
+1. Open `backtest_report.xlsx` → "periodic_returns" sheet
 2. Look for:
    - **CAGR** (Compound Annual Growth Rate): Is it positive? Higher than the index?
    - **Max Drawdown**: How much did the portfolio fall from peak? (Lower is better)
@@ -271,9 +268,8 @@ See [OUTPUTS_AND_METRICS.md](OUTPUTS_AND_METRICS.md) for:
 ### Reference Documentation
 
 For deeper technical details, see the `docs/` folder:
-- [atr_explained.md](atr_explained.md) – How Average True Range volatility works
-- [pivot_points_explained.md](pivot_points_explained.md) – Support/resistance level theory
-- [benchmark_metrics.md](benchmark_metrics.md) – Beta, Tracking Error, Information Ratio formulas
+- [dynamic_levels_reference.md](dynamic_levels_reference.md) – ATR, Pivot Points, and dynamic TP/SL level calculations
+- [OUTPUTS_AND_METRICS.md](OUTPUTS_AND_METRICS.md) – Beta, Tracking Error, Information Ratio formulas and all metrics explained
 
 ### Important Conventions
 

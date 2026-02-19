@@ -91,7 +91,7 @@ A typical backtest has **dozens of parameters**:
 - Data size (more quarters = slower)
 - Number of stocks per quarter
 - TP/SL complexity (ATR/pivot slower than flat)
-- Report generation (disable for tuning: `generate_*_report: false`)
+- Report generation (disable for tuning: `generate_report: false`)
 
 ---
 
@@ -124,8 +124,7 @@ fixed:
   run_stock_selection: true
   
   # Speed optimizations
-  generate_analysis_report: false   # Disable reports during tuning
-  generate_detailed_report: false
+  generate_report: false             # Disable reports during tuning
   validate_input_data: false        # Set true for first run, then false
 ```
 
@@ -1067,11 +1066,10 @@ cp tuning_logs/my_study/best_config.yaml strategy_config.yaml
 Edit `strategy_config.yaml`:
 
 ```yaml
-generate_analysis_report: true   # Turn on
-generate_detailed_report: true   # Turn on
+generate_report: true   # Turn on
 
-# Optional: Add sub-periods for MO report
-detailed_report_sub_periods:
+# Optional: Add sub-periods for detailed report
+report_sub_periods:
   - [2020, 2022]
   - [2023, 2025]
 ```
@@ -1188,8 +1186,7 @@ k:
 
 5. **Disable reports** (should already be off):
    ```yaml
-   generate_analysis_report: false
-   generate_detailed_report: false
+   generate_report: false
    ```
 
 ---

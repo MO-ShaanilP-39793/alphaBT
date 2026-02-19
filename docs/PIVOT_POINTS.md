@@ -397,5 +397,5 @@ if sl_price >= entry_price:
 ## References
 
 - Implementation: `src/dynamic_levels.py` → `calculate_pivot_points()`, `calculate_pivot_thresholds()`
-- Usage: `src/TP_SL_bt.py` → `calculate_dynamic_thresholds()` (pivot mode)
+- Usage: `src/backtest/tpsl.py` → `calculate_dynamic_thresholds()` (pivot mode)
 - Configuration: `src/strategy_config.yaml` → `pivot_config` section

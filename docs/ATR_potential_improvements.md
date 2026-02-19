@@ -1,5 +1,9 @@
 # ATR Threshold Analysis: Static vs Rolling
 
+> **Status: Not Implemented — Proposal Only**
+>
+> This document describes a potential improvement to ATR-based thresholds. The trailing/rolling approach discussed below is **not currently implemented** in the codebase.
+
 ## Overview
 
 This document analyzes how ATR-based Take Profit (TP) and Stop Loss (SL) thresholds are calculated in the backtesting system, and provides recommendations for potential improvements.
@@ -8,7 +12,7 @@ This document analyzes how ATR-based Take Profit (TP) and Stop Loss (SL) thresho
 
 ## Current Implementation: Static Thresholds
 
-The current implementation in `src/TP_SL_bt.py` computes ATR-based thresholds **once at entry** and keeps them **static throughout the trade**.
+The current implementation in `src/backtest/tpsl.py` computes ATR-based thresholds **once at entry** and keeps them **static throughout the trade**.
 
 ### How It Works
 

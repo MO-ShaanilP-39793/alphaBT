@@ -8,10 +8,9 @@ Complete guide to understanding CCQPF backtest results, reports, and performance
 
 - [Output Directory Structure](#output-directory-structure)
 - [Core Output Files](#core-output-files)
-- [Excel Reports](#excel-reports)
+- [Backtest Report Workbook](#backtest-report-workbook)
 - [Performance Metrics Explained](#performance-metrics-explained)
 - [Benchmark Metrics Explained](#benchmark-metrics-explained)
-- [Visualization Guide](#visualization-guide)
 - [Interpreting Results](#interpreting-results)
 - [Common Patterns and Red Flags](#common-patterns-and-red-flags)
 
@@ -22,22 +21,11 @@ Complete guide to understanding CCQPF backtest results, reports, and performance
 Every backtest creates a timestamped folder in `backtesting_results/`:
 
 ```
-backtesting_results/
+bacektesting_results/
   run_20260211_094957/          ← Timestamp: YYYYMMDD_HHMMSS
     ├── config_used.yaml        ← Full configuration (traceability)
     ├── backtest_log.txt        ← Complete execution log
-    ├── trade_results.csv       ← Trade-level details
-    ├── daily_portfolio_values.csv    ← Daily equity curve
-    ├── portfolio_vs_index.csv  ← Portfolio vs benchmark
-    ├── portfolio_vs_index.png  ← Quick visualization
-    ├── analysis_report.xlsx    ← Metrics & analysis (if enabled)
-    ├── MO_report.xlsx          ← Institutional summary (if enabled)
-    ├── data_issues.csv         ← Data validation warnings (if any)
-    └── plots/                  ← Visualizations folder
-        ├── drawdown_chart.png
-        ├── monthly_returns_heatmap.png
-        ├── return_distribution.png
-        └── category_performance_summary.png
+    └── backtest_report.xlsx    ← Consolidated workbook (if generate_report: true)
 ```
 
 **Timestamp format**: `YYYYMMDD_HHMMSS` (year-month-day_hour-minute-second)
@@ -105,370 +93,42 @@ Backtest complete. Results saved.
 
 ---
 
-### 3. trade_results.csv
-
-**Purpose**: Detailed record of every trade executed.
-
-**Columns**:
-
-| Column | Description | Example |
-|--------|-------------|---------|
-| `quarter` | Quarter when stock was selected | `202002` |
-| `co_name` | Stock name | `Reliance Industries` |
-| `cat` | Volatility category (if applicable) | `high_volatility` |
-| `cat_weight` | Category capital allocation | `0.33` |
-| `mcap_category` | Market cap category (if applicable) | `largecap` |
-| `entry_date` | Date position was entered | `2020-02-17` |
-| `exit_date` | Date position was exited | `2020-03-15` |
-| `entry_price` | Average entry price (mean over N days, configurable) | `1455.50` |
-| `exit_price` | Price at which position was closed | `1530.25` |
-| `holding_period` | Days held | `27` |
-| `SL_triggered` | Stop loss hit? | `False` |
-| `TP_triggered` | Take profit hit? | `True` |
-| `regime_exit` | Regime filter triggered exit? | `False` |
-| `tp_pct_used` | TP threshold used (after vol adj) | `0.05` |
-| `sl_pct_used` | SL threshold used (after vol adj) | `0.05` |
-| `stock_return` | Individual stock return | `0.0514` (5.14%) |
-
-**How to use**:
-
-**Find best/worst trades**:
-```python
-import pandas as pd
-trades = pd.read_csv('trade_results.csv')
-
-# Best performers
-print(trades.nlargest(10, 'stock_return'))
-
-# Worst performers
-print(trades.nsmallest(10, 'stock_return'))
-```
-
-**Analyze exit reasons**:
-```python
-print(trades['TP_triggered'].sum())  # How many hit TP
-print(trades['SL_triggered'].sum())  # How many hit SL
-print(trades['regime_exit'].sum())   # How many regime exits
-```
-
-**Category performance** (if using category-based):
-```python
-print(trades.groupby('cat')['stock_return'].agg(['mean', 'median', 'std']))
-```
-
-**Holding period analysis**:
-```python
-print(trades['holding_period'].describe())
-# Are most trades exiting early (TP/SL) or at quarter end?
-```
-
----
-
-### 4. daily_portfolio_values.csv
-
-**Purpose**: Daily equity curve (portfolio value every trading day).
-
-**Columns**:
-
-| Column | Description | Example |
-|--------|-------------|---------|
-| `date` | Trading date | `2020-02-15` |
-| `portfolio_value` | Total portfolio value in ₹ | `1025000000` (₹102.5 Cr) |
-| `quarter` | Active quarter | `202002` |
-
-**Initial value**: ₹100 Crores (`1,000,000,000`)
-
-**How it works**:
-- Day 1: ₹100 Cr (initial)
-- Day 2: Value changes based on mark-to-market of open positions
-- Exit day: Positions closed → cash balance updated
-- Quarter end: All positions closed → new quarter starts with carried-over capital
-
-**Use cases**:
-
-**Plot equity curve**:
-```python
-import pandas as pd
-import matplotlib.pyplot as plt
-
-df = pd.read_csv('daily_portfolio_values.csv')
-df['date'] = pd.to_datetime(df['date'])
-
-plt.figure(figsize=(12, 6))
-plt.plot(df['date'], df['portfolio_value'] / 1e7)  # In Crores
-plt.xlabel('Date')
-plt.ylabel('Portfolio Value (₹ Crores)')
-plt.title('Portfolio Growth Over Time')
-plt.grid(True)
-plt.show()
-```
-
-**Calculate drawdown**:
-```python
-df['cummax'] = df['portfolio_value'].cummax()
-df['drawdown'] = (df['portfolio_value'] - df['cummax']) / df['cummax']
-```
-
----
-
-### 5. portfolio_vs_index.csv
-
-**Purpose**: Daily comparison of portfolio vs benchmark index.
-
-**Columns**:
-
-| Column | Description | Example |
-|--------|-------------|---------|
-| `date` | Trading date | `2020-02-15` |
-| `pf_value` | Portfolio value | `1025000000` |
-| `pf_return` | Portfolio return (from start) | `0.025` (2.5%) |
-| `index_fund_value` | Index investment value (started at ₹100 Cr) | `980000000` |
-| `index_return` | Index return (from start) | `-0.02` (-2%) |
-| `alpha` | Excess return vs index | `0.045` (4.5%) |
-
-**Alpha calculation**: `alpha = pf_return - index_return`
-
-**Use cases**:
-
-**Outperformance analysis**:
-```python
-df = pd.read_csv('portfolio_vs_index.csv')
-final_alpha = df.iloc[-1]['alpha']
-print(f"Final Alpha: {final_alpha:.2%}")
-# Positive = beat index, Negative = underperformed
-```
-
-**Correlation**:
-```python
-correlation = df['pf_return'].corr(df['index_return'])
-print(f"Correlation with index: {correlation:.3f}")
-# High (>0.7) = moves with market, Low (<0.3) = independent
-```
-
----
-
-### 6. portfolio_vs_index.png
-
-**Purpose**: Quick visual comparison (auto-generated chart).
-
-**Contents**: Line plot showing portfolio value vs index fund value over time.
-
-**Ideal pattern**: 
-- Portfolio line consistently above index line = outperformance
-- Widening gap = increasing alpha
-- Narrowing gap = alpha decay
-
----
-
-### 7. data_issues.csv (if present)
-
-**Purpose**: Warning about stocks with price data gaps.
-
-**Columns**: Stock name, issue description (e.g., "Missing data from 2020-03-15 to 2020-04-10")
-
-**When created**: Only if validation finds issues
-
-**Action**: 
-- Review issues
-- Consider filtering problematic stocks
-- Fix data quality if possible
-
----
-
-## Excel Reports
-
-### analysis_report.xlsx
-
-**Generated when**: `generate_analysis_report: true` in config
-
-**Purpose**: Comprehensive metrics and quarter-level analysis.
-
-#### Sheet 1: Portfolio_Metrics
-
-**Key metrics** (see [Performance Metrics Explained](#performance-metrics-explained) for formulas):
-
-| Metric | Typical Range | What's Good |
-|--------|---------------|-------------|
-| Total Return | -50% to 300%+ | Higher = better |
-| CAGR | -20% to 60% | >15% is strong (Indian equities) |
-| Volatility | 10% to 50% | Lower = less risky (but context-dependent) |
-| Sharpe Ratio | -1 to 4 | >1.0 is good, >2.0 is excellent |
-| Sortino Ratio | -1 to 5 | >1.5 is good (only penalizes downside) |
-| Max Drawdown | -5% to -60% | Smaller magnitude = better |
-| Calmar Ratio | 0 to 10 | >2.0 is excellent (CAGR per unit drawdown) |
-| VaR 95% | -5% to -1% | Daily worst-case loss (5% probability) |
-
-**Also includes**:
-- Start/end dates
-- Initial/final values
-- Number of quarters
-- Total trades
-
-#### Sheet 2: Monthly_Returns
-
-**Format**: Table with months as rows, some additional aggregate stats.
-
-**Use**:
-- Identify seasonality (e.g., "Always weak in May")
-- Spot outlier months (crashes or surges)
-- Calculate monthly win rate
-
-**Example**:
-```
-Month     | Return
-----------|--------
-2020-02   |  2.5%
-2020-03   | -8.3%  ← COVID crash
-2020-04   |  5.1%
-...
-```
-
-#### Sheet 3: Quarter_Analysis
-
-**Columns**: 
-- Quarter
-- Number of trades
-- Win rate (% profitable trades)
-- Average return per trade
-- Quarter return (portfolio level)
-
-**Use**:
-- Find best/worst quarters
-- Assess consistency (high variance = inconsistent)
-- Identify if strategy works in all market conditions
-
-**Example**:
-```
-Quarter | Trades | Win Rate | Avg Return | Portfolio Return
---------|--------|----------|------------|------------------
-202002  |   30   |   60%    |   1.2%     |     3.5%
-202005  |   30   |   40%    |  -0.8%     |    -2.1%
-```
-
-#### Sheet 4: Benchmark_Metrics
-
-**Metrics** (see [Benchmark Metrics Explained](#benchmark-metrics-explained)):
-
-| Metric | Description | Good Range |
-|--------|-------------|------------|
-| Beta | Portfolio sensitivity to market | <1.0 = defensive, >1.0 = aggressive |
-| Tracking Error | Std dev of excess returns | Depends on strategy (active = higher) |
-| Information Ratio | Excess return / Tracking Error | >0.5 is good, >1.0 is excellent |
-| Correlation | How closely portfolio follows index | High = market-like, Low = independent |
-| Alpha (annualized) | Excess return vs CAPM | Positive = skill, Negative = underperformance |
-
----
-
-### MO_report.xlsx (Institutional Summary)
-
-**Generated when**: `generate_detailed_report: true` in config
-
-**Purpose**: Professional summary statistics report (MO = Management Overview / Monthly Overview style).
-
-**Audience**: Stakeholders, portfolio managers, investors.
-
-#### Sheet: Since Inception
-
-**Sections**:
-
-**A. Summary Statistics**:
-- CAGR, Volatility, Sharpe, Sortino, Calmar
-- Max Drawdown (value and date)
-- Best/Worst month
-- Win rate (% positive months)
-
-**B. Growth of ₹100 Cr**:
-- Initial: ₹100 Cr
-- Final: ₹XXX Cr
-- Gain: ₹YYY Cr
-
-**C. Risk Metrics**:
-- Volatility (annualized)
-- Downside deviation
-- VaR 95%, VaR 99%
-- Maximum loss month
-
-**D. Embedded Charts**:
-- **Growth of Wealth**: Portfolio vs Index cumulative returns
-- **Drawdown Chart**: Underwater equity curve
-- **Return Distribution**: Histogram with normal curve overlay
-
-#### Sheet: Sub-Periods
-
-**Custom year ranges** (defined in `detailed_report_sub_periods` config):
-
-```yaml
-detailed_report_sub_periods:
-  - [2020, 2022]  # Early period
-  - [2023, 2025]  # Recent period
-```
-
-**For each sub-period**: Same metrics as "Since Inception" but calculated only for that year range.
-
-**Use**:
-- Compare performance across market cycles
-- Identify if strategy improves/degrades over time
-- Stakeholder reporting ("Here's how we did in 2020-2022 vs 2023-2025")
-
-#### Sheet: Rolling Returns
-
-**Three timeframes**:
-1. **Daily Rolling Returns**: 1-day, 7-day, 30-day rolling windows
-2. **Monthly Rolling Returns**: 1-month, 3-month, 6-month, 12-month rolling
-3. **Yearly Rolling Returns**: 1-year, 2-year rolling
-
-**Metrics per window**: Mean, Median, Std Dev, Min, Max
-
-**Use**:
-- Assess consistency ("Is 12-month rolling return stable?")
-- Identify regime shifts
-- Risk management (what's worst 30-day period?)
-
-#### Sheet: Calendar Year
-
-**Year-by-year breakdown**:
-
-```
-Year | Return | Volatility | Sharpe | Max DD | Win Rate
------|--------|------------|--------|--------|----------
-2020 | 18.5%  |    28%     |  0.65  | -12%   |   55%
-2021 | 32.1%  |    22%     |  1.46  |  -8%   |   67%
-2022 | -5.3%  |    35%     | -0.15  | -18%   |   42%
-...
-```
-
-**Use**:
-- Understand yearly variability
-- Identify bad years (plan for similar scenarios)
-- Compare to index year-by-year
-
-#### Sheet: Trailing Returns
-
-**Point-in-time analysis**: "If I invested at quarter Q, what's my trailing 6m/12m/24m return?"
-
-**Use**: Understand investor experience at different entry points.
-
-#### Sheet: Crisis Regime Analysis
-
-**Pre-defined** crisis periods (hardcoded in `regime_dates.py`):
-- COVID-19 (Mar-Apr 2020)
-- Taper Tantrum (if applicable)
-- etc.
-
-**For each crisis**: Portfolio return, Index return, Alpha.
-
-**Use**: How did strategy perform during known market stress?
-
-#### Sheet: Market Regime Analysis
-
-**Regime classification** (based on index MA):
-- **Bull**: Index > 200-day MA
-- **Bear**: Index < 200-day MA and declining
-- **Recovery**: Index crossed above MA recently
-
-**For each regime**: Portfolio metrics.
-
-**Use**: "Does strategy work in all market conditions or only bull markets?"
+### 3. backtest_report.xlsx
+
+**Generated when**: `generate_report: true` in config (default: `true`)
+
+**Purpose**: Single consolidated Excel workbook containing all metrics, charts, trade data, and analysis. This replaces the previous multi-file output system.
+
+See [REPORT_SHEETS.md](REPORT_SHEETS.md) for detailed documentation of each sheet.
+
+**Sheets overview**:
+
+| Sheet | Contents |
+|-------|----------|
+| `portfolio_metrics` | CAGR, Sharpe, Sortino, Calmar, Max Drawdown, VaR, etc. |
+| `benchmark_metrics` | Alpha, Beta, Tracking Error, Information Ratio, Correlation |
+| `periodic_returns` | Summary stats since inception + sub-period breakdowns |
+| `rolling_returns` | 1Y, 3Y, 5Y rolling return statistics with probability buckets |
+| `calendar_returns` | Calendar year cumulative returns |
+| `up_down_months` | Count of positive vs negative months |
+| `trailing_returns` | Point-in-time trailing returns (1m, 3m, 6m, 1y, 3y, 5y, 10y) |
+| `quarter_analysis` | Per-quarter stock counts, TP/SL counts, category returns |
+| `quarterly_alpha` | Per-quarter outperformance vs benchmark |
+| `crisis_regimes` | Returns during pre-defined crisis periods (GFC, Covid, etc.) |
+| `market_regimes` | Returns during bull/bear/recovery phases |
+| `stock_counts_by_mcap` | Stocks per quarter by largecap/midcap/smallcap |
+| `charts` | Embedded visualizations (equity curve, drawdown, heatmaps, distributions) |
+| `trade_results` | Raw trade-level data (entry/exit prices, returns, TP/SL triggers) |
+| `daily_portfolio_values` | Raw daily equity curve time series |
+| `portfolio_vs_index` | Daily portfolio vs benchmark comparison |
+| `data_quality_issues` | Data validation warnings (if any) |
+
+**Quick Health Check**:
+1. Open `backtest_report.xlsx` → `periodic_returns` sheet
+2. Look for:
+   - **CAGR** (Compound Annual Growth Rate): Is it positive? Higher than the index?
+   - **Max Drawdown**: How much did the portfolio fall from peak? (Lower is better)
+   - **Sharpe Ratio**: Risk-adjusted return (>1.0 is good, >2.0 is excellent)
 
 ---
 
@@ -788,83 +448,55 @@ Alpha = Portfolio Return - [Risk-Free Rate + Beta × (Index Return - Risk-Free R
 
 ---
 
-## Visualization Guide
+## Charts (Embedded in backtest_report.xlsx)
 
-### plots/drawdown_chart.png
+The `charts` sheet in `backtest_report.xlsx` contains embedded PNG visualizations:
 
-**X-axis**: Date
-**Y-axis**: Drawdown (%)
+### Portfolio vs Index Chart
+
+Line plot showing portfolio value vs index fund value over time.
+
+**Ideal pattern**: Portfolio line consistently above index = outperformance; widening gap = increasing alpha.
+
+---
+
+### Drawdown Chart
+
+**X-axis**: Date | **Y-axis**: Drawdown (%)
 
 **How to read**:
 - **Y = 0%**: At peak (all-time high)
 - **Y < 0%**: Underwater (in drawdown)
-- **Depth**: Magnitude of drawdown
-- **Duration**: Time underwater (peak to recovery)
 
-**Good pattern**: 
-- Shallow drawdowns (< -20%)
-- Quick recoveries (back to 0% fast)
-- Infrequent deep dives
-
-**Bad pattern**:
-- Deep drawdowns (< -40%)
-- Prolonged underwater periods (>6 months)
-- Frequent large drawdowns (no stability)
+**Good pattern**: Shallow drawdowns (< -20%), quick recoveries.
+**Bad pattern**: Deep drawdowns (< -40%), prolonged underwater periods.
 
 ---
 
-### plots/monthly_returns_heatmap.png
+### Monthly Returns Heatmap
 
 **Layout**: Calendar heatmap (years × months grid)
 
-**Colors**: 
-- **Green**: Positive months
-- **Red**: Negative months
-- **Intensity**: Magnitude
+**Colors**: Green = positive months, Red = negative months, Intensity = magnitude.
 
-**How to read**:
-- Spot seasonality (e.g., "Always red in May")
-- Identify crisis periods (clusters of red)
-- Assess consistency (mostly green = win rate)
-
-**Good pattern**: More green than red, few deep red cells.
+**Use**: Spot seasonality, identify crisis periods, assess consistency.
 
 ---
 
-### plots/return_distribution.png
+### Return Distribution
 
-**Type**: Histogram with normal curve overlay
+**Type**: Histogram of monthly returns.
 
-**X-axis**: Daily return (%)
-**Y-axis**: Frequency
-
-**How to read**:
-- **Center**: Mean return (should be slightly positive)
-- **Width**: Volatility (narrow = low vol)
-- **Skew**: Asymmetry (right skew = more big wins than big losses)
-- **Tails**: Fat tails = frequent outliers (good or bad)
-
-**Good pattern**: 
-- Right-skewed (tail extends right)
-- Positive mean
-- No extreme left tail (catastrophic losses)
+**Good pattern**: Right-skewed (more big wins than big losses), positive mean, no extreme left tail.
 
 ---
 
-### plots/category_performance_summary.png
+### Additional Charts
 
-**Generated when**: Using category-based selection
-
-**4-panel dashboard**:
-1. **Returns by Category**: Bar chart (which category performed best)
-2. **Trade Count by Category**: How many trades per category
-3. **Win Rate by Category**: % profitable per category
-4. **TP/SL Trigger Rates by Category**: How often each exit triggered
-
-**Use**:
-- Identify best/worst performing categories
-- Check if allocation is balanced
-- See if certain categories trigger SL more (higher risk)
+- **Growth of Wealth**: Cumulative growth of investment
+- **Calendar Year Heatmap**: Year-by-year returns
+- **Correlation Heatmap**: Portfolio vs index return correlations
+- **Box-Whisker Plot**: Monthly return distribution by period
 
 ---
 
@@ -977,7 +609,7 @@ After a backtest, systematically review:
 **Hockey Stick Equity Curve**:
 - Flat/declining for most of period, then sudden spike at end
 - **Warning**: Likely overfitting or data error (check recent trades)
-- **Action**: Inspect trade_results.csv for anomalies
+- **Action**: Inspect the `trade_results` sheet in `backtest_report.xlsx` for anomalies
 
 **Frequent Deep Drawdowns**:
 - Drawdown chart shows repeated -30% dips
@@ -1028,10 +660,10 @@ After a backtest, systematically review:
 
 ### After Each Backtest
 
-1. **Open MO_report.xlsx** → "Since Inception" sheet
+1. **Open `backtest_report.xlsx`** → `periodic_returns` sheet
 2. **Check CAGR, Sharpe, Calmar** (30-second assessment)
-3. **If promising**: Review drawdown chart, crisis analysis
-4. **If excellent**: Open trade_results.csv, analyze category performance
+3. **If promising**: Review drawdown chart (in `charts` sheet), crisis analysis
+4. **If excellent**: Check `trade_results` sheet, analyze category performance
 5. **Document findings**: Save config_used.yaml with notes
 
 ### Comparing Multiple Backtests

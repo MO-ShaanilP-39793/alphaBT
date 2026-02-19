@@ -241,4 +241,4 @@ Longer periods = Smoother, less reactive to short-term spikes
 
 - Wilder, J. W. (1978). *New Concepts in Technical Trading Systems*
 - Implementation: `src/dynamic_levels.py` → `calculate_atr()`
-- Usage: `src/TP_SL_bt.py` → `calculate_atr_thresholds()`
+- Usage: `src/backtest/tpsl.py` → `calculate_dynamic_thresholds()`
