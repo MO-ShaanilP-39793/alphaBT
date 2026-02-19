@@ -1,17 +1,17 @@
-# CCQPF User Guide
+# User Guide
 
-**Category-based Quarterly Portfolio Framework** – A backtesting framework for Indian equity portfolio strategies using ML probability scores.
+**Quarterly Portfolio Backtesting Framework** – A backtesting framework for Indian equity portfolio strategies using ML probability scores.
 
 ---
 
 ## Welcome!
 
-If you've trained a machine learning model to predict stock performance and want to test how it would perform in a real-world portfolio strategy, you're in the right place. CCQPF (Category-based Quarterly Portfolio Framework) helps you:
+If you've trained a machine learning model to predict stock performance and want to test how it would perform in a real-world portfolio strategy, you're in the right place. This framework helps you:
 
 - ✅ **Select stocks** each quarter using your ML model's probability scores
 - ✅ **Simulate realistic trading** with configurable exit strategies (take profit, stop loss)
-- ✅ **Benchmark performance** against market indices (e.g., Nifty 50)
-- ✅ **Optimize parameters** automatically using hyperparameter tuning
+- ✅ **Benchmark performance** against market indices (e.g., Nifty 500 TRI)
+- ✅ **Optimize parameters** using Optuna
 - ✅ **Generate professional reports** with comprehensive metrics and visualizations
 
 **Who is this for?** Data scientists and ML practitioners who want to backtest quantitative strategies without building backtesting infrastructure from scratch.
@@ -54,7 +54,7 @@ Before you begin, make sure you have:
    2020-02-15, Reliance Industries, 1450.0, 1475.0, 1440.0, 1460.0
    ```
 
-4. **Index Data** – Benchmark index values (e.g., Nifty 50):
+4. **Index Data** – Benchmark index values (e.g., Nifty 500 TRI):
    ```
    date, value
    2020-02-15, 12000.5
@@ -66,7 +66,7 @@ Before you begin, make sure you have:
 
 ## Quick Start: Your First Backtest
 
-**Goal**: Run a simple backtest in ~15 minutes to see how your ML predictions perform as a portfolio strategy.
+**Goal**: Run a simple backtest in ~5 minutes to see how your ML predictions perform as a portfolio strategy.
 
 ### Step 1: Prepare Your Data
 
@@ -76,7 +76,7 @@ ccqpf/
   data/
     inference_data.csv          # Your ML predictions
     price_data/ohlcv.parquet    # Historical prices
-    index_data/nifty50.csv      # Benchmark index
+    index_data/nifty500.csv      # Benchmark index
 ```
 
 ### Step 2: Configure the Backtest
@@ -87,13 +87,13 @@ Open `src/strategy_config.yaml` and update three key sections:
 ```yaml
 input_data_path: "../data/inference_data.csv"
 price_data_path: "../data/price_data/ohlcv.parquet"
-index_data_path: "../data/index_data/nifty50.csv"
+index_data_path: "../data/index_data/nifty500.csv"
 ```
 
 **B. Define the backtest period**:
 ```yaml
 first_quarter: 202002  # Start from Feb 2020
-last_quarter: 202411   # End at Nov 2024
+last_quarter: 202411   # End at Feb 2025
 ```
 
 **C. Choose a simple strategy** (we'll start basic):
@@ -274,16 +274,15 @@ For deeper technical details, see the `docs/` folder:
 - [atr_explained.md](atr_explained.md) – How Average True Range volatility works
 - [pivot_points_explained.md](pivot_points_explained.md) – Support/resistance level theory
 - [benchmark_metrics.md](benchmark_metrics.md) – Beta, Tracking Error, Information Ratio formulas
-- [stock_selection_design.md](stock_selection_design.md) – Selection paradigm architecture notes
 
 ### Important Conventions
 
 - **Working Directory**: Always run scripts from `src/` directory: `cd src && python backtest_strategy.py`
 - **Quarter Format**: Quarters are encoded as `YYYYMM` where MM ∈ {02, 05, 08, 11}
-  - `202002` = Feb-May 2020
-  - `202405` = May-Aug 2024
-  - `202408` = Aug-Nov 2024
-  - `202411` = Nov 2024-Feb 2025
+  - `202002` = Feb 15th - May 30th 2020
+  - `202405` = May 31st - Aug 14th 2024
+  - `202408` = Aug 15th - Nov 14th 2024
+  - `202411` = Nov 15th 2024 - Feb 14th 2025
 - **Initial Capital**: Hardcoded to ₹100 Crores (1 billion rupees) for position sizing
 - **Risk-Free Rate**: Hardcoded to 6.5% (Indian market) for Sharpe/Sortino calculations
 - **File Paths**: All config paths are relative to `src/` directory (e.g., `../data/...`)
