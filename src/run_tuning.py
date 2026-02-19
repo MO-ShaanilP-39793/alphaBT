@@ -143,15 +143,15 @@ def set_trial_user_attributes(
                 for i, label in enumerate(cat_labels):
                     trial.set_user_attr(f'category_weight_{label}', round(category_weights[i], 3))
     
-    # Expand fixed TP/SL thresholds (if fixed mode)
-    if cat_labels and sampled_params.get('tpsl_mode') == 'fixed':
-        if sampled_params.get('tp_enabled'):
+    # Expand fixed TP/SL thresholds (if fixed mode is used for that side)
+    if cat_labels:
+        if sampled_params.get('tp_enabled') and sampled_params.get('tp_mode') == 'fixed':
             fixed_tp = sampled_params.get('fixed_tp_thresholds')
             if fixed_tp is not None:
                 for i, label in enumerate(cat_labels):
                     trial.set_user_attr(f'tp_threshold_{label}', round(fixed_tp[i], 3))
         
-        if sampled_params.get('sl_enabled'):
+        if sampled_params.get('sl_enabled') and sampled_params.get('sl_mode') == 'fixed':
             fixed_sl = sampled_params.get('fixed_sl_thresholds')
             if fixed_sl is not None:
                 for i, label in enumerate(cat_labels):

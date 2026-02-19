@@ -122,21 +122,39 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
     params['sl_enabled'] = sample_parameter(trial, 'sl_enabled', search_space['sl_enabled'])
     sl_enabled = params['sl_enabled']
 
-    # Sample tpsl_mode if at least one of TP or SL is enabled
-    tpsl_mode = None
-    if tp_enabled or sl_enabled:
-        params['tpsl_mode'] = sample_parameter(trial, 'tpsl_mode', search_space['tpsl_mode'])
-        tpsl_mode = params['tpsl_mode']
+    # Sample TP/SL modes
+    # independent_tpsl_modes: when False (default), one mode is sampled and used for both
+    # when True, tp_mode and sl_mode are sampled independently from the same choices
+    independent_tpsl_modes = tuning_config.get('independent_tpsl_modes', False)
+    tp_mode = None
+    sl_mode = None
+    
+    if independent_tpsl_modes:
+        # Independent mode: sample tp_mode and sl_mode separately
+        if tp_enabled and 'tpsl_mode' in search_space:
+            params['tp_mode'] = sample_parameter(trial, 'tp_mode', search_space['tpsl_mode'])
+            tp_mode = params['tp_mode']
+        if sl_enabled and 'tpsl_mode' in search_space:
+            params['sl_mode'] = sample_parameter(trial, 'sl_mode', search_space['tpsl_mode'])
+            sl_mode = params['sl_mode']
+    else:
+        # Linked mode (default): sample one mode and assign to both sides
+        if (tp_enabled or sl_enabled) and 'tpsl_mode' in search_space:
+            shared_mode = sample_parameter(trial, 'tpsl_mode', search_space['tpsl_mode'])
+            tp_mode = shared_mode
+            sl_mode = shared_mode
+            params['tp_mode'] = shared_mode
+            params['sl_mode'] = shared_mode
     
     # category_scheme needs to be sampled if
-    # tpsl_mode is fixed
+    # either tp_mode or sl_mode is 'fixed'
     # or if run stock selection is True and selection type is category based
-    needs_category_scheme = (run_stock_selection and selection_type == 'category_based') or (tpsl_mode == 'fixed')
+    needs_category_scheme = (run_stock_selection and selection_type == 'category_based') or (tp_mode == 'fixed') or (sl_mode == 'fixed')
     
     # ----- Sample base parameters (excluding conditional ones) -----
     for name, spec in search_space.items():
         # Skip already sampled parameters
-        if name in ('selection_type', 'tp_enabled', 'sl_enabled', 'tpsl_mode', 'category_based_selection_weighting_scheme'):
+        if name in ('selection_type', 'tp_enabled', 'sl_enabled', 'tpsl_mode', 'tp_mode', 'sl_mode', 'category_based_selection_weighting_scheme'):
             continue
         # Skip all selection related params if run_stock_selection is False
         if not run_stock_selection and name in selection_params:
@@ -159,35 +177,46 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
         for name, spec in top_k_space.items():
             params[f'top_k_{name}'] = sample_parameter(trial, f'top_k_{name}', spec)
     
-    # ----- Sample TP/SL mode-specific parameters (conditional) -----
-    if tpsl_mode == 'fixed':
+    # ----- Sample TP/SL mode-specific parameters (conditional per-side) -----
+    # Collect which modes are active across both sides
+    active_modes = set()
+    if tp_mode:
+        active_modes.add(tp_mode)
+    if sl_mode:
+        active_modes.add(sl_mode)
+    
+    # Fixed mode: sample thresholds per side
+    if 'fixed' in active_modes and 'fixed_tpsl' in tuning_config:
         fixed_tpsl_config = tuning_config['fixed_tpsl']
-        if tp_enabled:
+        if tp_enabled and tp_mode == 'fixed':
             params['fixed_tp_thresholds'] = sample_parameter(trial, 'fixed_tp_thresholds', fixed_tpsl_config['tp_thresholds'])
-        if sl_enabled:
+        if sl_enabled and sl_mode == 'fixed':
             params['fixed_sl_thresholds'] = sample_parameter(trial, 'fixed_sl_thresholds', fixed_tpsl_config['sl_thresholds'])
     
-    elif tpsl_mode == 'atr':
+    # ATR mode: shared period, per-side multipliers
+    if 'atr' in active_modes and 'atr_tpsl' in tuning_config:
         atr_config = tuning_config['atr_tpsl']
         params['atr_period'] = sample_parameter(trial, 'atr_period', atr_config['period'])
-        if tp_enabled:
+        if tp_enabled and tp_mode == 'atr':
             params['atr_tp_multiplier'] = sample_parameter(trial, 'atr_tp_multiplier', atr_config['tp_multiplier'])
-        if sl_enabled:
+        if sl_enabled and sl_mode == 'atr':
             params['atr_sl_multiplier'] = sample_parameter(trial, 'atr_sl_multiplier', atr_config['sl_multiplier'])
     
-    elif tpsl_mode == 'pivot':
+    # Pivot mode: shared lookback, per-side levels
+    if 'pivot' in active_modes and 'pivot_tpsl' in tuning_config:
         pivot_config = tuning_config['pivot_tpsl']
         params['pivot_lookback_days'] = sample_parameter(trial, 'pivot_lookback_days', pivot_config['lookback_days'])
-        if tp_enabled:
+        if tp_enabled and tp_mode == 'pivot':
             params['pivot_tp_level'] = sample_parameter(trial, 'pivot_tp_level', pivot_config['tp_level'])
-        if sl_enabled:
+        if sl_enabled and sl_mode == 'pivot':
             params['pivot_sl_level'] = sample_parameter(trial, 'pivot_sl_level', pivot_config['sl_level'])
     
-    elif tpsl_mode == 'flat':
+    # Flat mode: per-side percentages
+    if 'flat' in active_modes and 'flat_tpsl' in tuning_config:
         flat_config = tuning_config['flat_tpsl']
-        if tp_enabled:
+        if tp_enabled and tp_mode == 'flat':
             params['flat_tp'] = sample_parameter(trial, 'flat_tp', flat_config['tp'])
-        if sl_enabled:
+        if sl_enabled and sl_mode == 'flat':
             params['flat_sl'] = sample_parameter(trial, 'flat_sl', flat_config['sl'])
     
     # ----- Sample index exit parameters (conditional) -----
@@ -274,7 +303,8 @@ def build_config(fixed_config: dict, sampled_params: dict) -> dict:
     # Fill out TP SL params
     config['tp_enabled'] = get('tp_enabled', False)
     config['sl_enabled'] = get('sl_enabled', False)
-    config['tpsl_mode'] = get('tpsl_mode')
+    config['tp_mode'] = get('tp_mode', 'fixed')
+    config['sl_mode'] = get('sl_mode', 'fixed')
     
     config['atr_config'] = {
         'period': get('atr_period', 14),
@@ -309,7 +339,7 @@ def build_config(fixed_config: dict, sampled_params: dict) -> dict:
         }
     }
     
-    # Build TP_CONFIG/SL_CONFIG (used only when tpsl_mode == 'fixed')
+    # Build TP_CONFIG/SL_CONFIG (used when tp_mode or sl_mode == 'fixed')
     tp_thresholds = get('fixed_tp_thresholds', [0.05, 0.05, 0.05])
     sl_thresholds = get('fixed_sl_thresholds', [0.05, 0.05, 0.05])
     

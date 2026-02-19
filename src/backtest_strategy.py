@@ -217,14 +217,15 @@ def run_stock_selection(input_data, category_scheme, category_counts, category_w
         raise ValueError(f"Unknown selection_type: {selection_type}. Use 'category_based' or 'top_k'.")
 
 
-def validate_preselected_input(df, category_scheme, tpsl_mode, tp_enabled, sl_enabled, has_default_tpsl):
+def validate_preselected_input(df, category_scheme, tp_mode, sl_mode, tp_enabled, sl_enabled, has_default_tpsl):
     """
     Validate and prepare preselected portfolio input.
     
     Parameters:
     - df: Input DataFrame (should have quarter, co_name, stock_weight, and optionally category)
     - category_scheme: 'volatility' or 'mcap' (used for category validation if present)
-    - tpsl_mode: 'fixed', 'flat', 'atr', or 'pivot'
+    - tp_mode: Mode for take profit - 'fixed', 'flat', 'atr', or 'pivot'
+    - sl_mode: Mode for stop loss - 'fixed', 'flat', 'atr', or 'pivot'
     - tp_enabled: Whether take profit is enabled
     - sl_enabled: Whether stop loss is enabled
     - has_default_tpsl: Whether default_tpsl config is present
@@ -242,16 +243,17 @@ def validate_preselected_input(df, category_scheme, tpsl_mode, tp_enabled, sl_en
     # Check for category column
     has_category = 'category' in df.columns
     
-    # Validate: if no category and tpsl_mode is 'fixed' with TP/SL enabled, need default_tpsl
+    # Validate: if no category and a 'fixed' mode is used with TP/SL enabled, need default_tpsl
     # Note: 'flat', 'atr', and 'pivot' modes don't require category
-    if not has_category and tpsl_mode == 'fixed' and (tp_enabled or sl_enabled):
+    needs_fixed_category = (tp_enabled and tp_mode == 'fixed') or (sl_enabled and sl_mode == 'fixed')
+    if not has_category and needs_fixed_category:
         if not has_default_tpsl:
             raise ValueError(
-                "No 'category' column in preselected input and tpsl_mode is 'fixed'. "
+                "No 'category' column in preselected input and tp_mode/sl_mode is 'fixed'. "
                 "Either:\n"
                 "  1. Add 'category' column to input data, or\n"
                 "  2. Add 'default_tpsl' section to config, or\n"
-                "  3. Set tpsl_mode to 'flat', 'atr', or 'pivot', or\n"
+                "  3. Set tp_mode/sl_mode to 'flat', 'atr', or 'pivot', or\n"
                 "  4. Set both tp_enabled and sl_enabled to false"
             )
     
@@ -457,7 +459,8 @@ def backtest_core(
         has_default_tpsl = default_tpsl is not None
         
         # TP/SL mode configuration
-        tpsl_mode = config.get('tpsl_mode', 'fixed')
+        tp_mode = config.get('tp_mode', 'fixed')
+        sl_mode = config.get('sl_mode', 'fixed')
         tp_enabled = config.get('tp_enabled', True)
         sl_enabled = config.get('sl_enabled', True)
         
@@ -546,7 +549,8 @@ def backtest_core(
             selected_stocks, has_category = validate_preselected_input(
                 input_data_filtered,
                 category_scheme,
-                tpsl_mode,
+                tp_mode,
+                sl_mode,
                 tp_enabled,
                 sl_enabled,
                 has_default_tpsl
@@ -567,30 +571,23 @@ def backtest_core(
         if verbose:
             print("\n[3/4] Simulating trades with TP/SL thresholds...")
         
-        # Get custom configs (if provided)
-        custom_tp_config = config.get('TP_CONFIG')
-        custom_sl_config = config.get('SL_CONFIG')
-        custom_default_tpsl = config.get('default_tpsl')
-        custom_atr_config = config.get('atr_config')
-        custom_pivot_config = config.get('pivot_config')
-        custom_flat_config = config.get('flat_config')
-        custom_index_exit_config = config.get('index_exit')
-        
+        # Get configs from strategy config
         trade_results = simulate_trades(
             selected_stocks,
             price_data,
             category_scheme,
             index_data=index_data,
-            tpsl_mode=tpsl_mode,
+            tp_mode=tp_mode,
+            sl_mode=sl_mode,
             tp_enabled=tp_enabled,
             sl_enabled=sl_enabled,
-            custom_tp_config=custom_tp_config,
-            custom_sl_config=custom_sl_config,
-            custom_default_tpsl=custom_default_tpsl,
-            custom_atr_config=custom_atr_config,
-            custom_pivot_config=custom_pivot_config,
-            custom_flat_config=custom_flat_config,
-            custom_index_exit_config=custom_index_exit_config,
+            tp_config=config.get('TP_CONFIG'),
+            sl_config=config.get('SL_CONFIG'),
+            default_tpsl=config.get('default_tpsl'),
+            atr_config=config.get('atr_config'),
+            pivot_config=config.get('pivot_config'),
+            flat_config=config.get('flat_config'),
+            index_exit_config=config.get('index_exit'),
             entry_price_window=entry_price_window
         )
         
@@ -716,12 +713,14 @@ def run_backtest(config_path='strategy_config.yaml'):
             print(f"  - Default TP/SL: TP={default_tpsl.get('tp_pct', 0.05):.1%}, SL={default_tpsl.get('sl_pct', 0.05):.1%}")
     
     # TP/SL mode configuration
-    tpsl_mode = config.get('tpsl_mode', 'fixed')
+    tp_mode = config.get('tp_mode', 'fixed')
+    sl_mode = config.get('sl_mode', 'fixed')
     tp_enabled = config.get('tp_enabled', True)
     sl_enabled = config.get('sl_enabled', True)
-    print(f"  - TP/SL mode: {tpsl_mode}")
-    print(f"  - TP enabled: {tp_enabled}" + (" (take profit exits disabled)" if not tp_enabled else ""))
-    print(f"  - SL enabled: {sl_enabled}" + (" (stop loss exits disabled)" if not sl_enabled else ""))
+    print(f"  - TP mode: {tp_mode}" + (" (take profit exits disabled)" if not tp_enabled else ""))
+    print(f"  - SL mode: {sl_mode}" + (" (stop loss exits disabled)" if not sl_enabled else ""))
+    print(f"  - TP enabled: {tp_enabled}")
+    print(f"  - SL enabled: {sl_enabled}")
     
     # Entry price window
     entry_price_window = config.get('entry_price_window', 3)

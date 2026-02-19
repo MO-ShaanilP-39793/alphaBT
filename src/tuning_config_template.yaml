@@ -35,6 +35,16 @@ fixed:
   generate_detailed_report: false
 
 # =============================================================================
+# TP/SL MODE SAMPLING
+# =============================================================================
+# Controls how TP and SL modes are sampled during tuning.
+# - false (default): One mode is sampled from tpsl_mode choices and assigned to
+#   both TP and SL (linked, backward compatible).
+# - true: tp_mode and sl_mode are sampled independently from the same tpsl_mode
+#   choices list, enabling mixed strategies (e.g., ATR for TP, pivot for SL).
+independent_tpsl_modes: false
+
+# =============================================================================
 # SEARCH SPACE DEFINITION
 # =============================================================================
 # Each parameter specifies its type and either choices (categorical) or 
@@ -116,7 +126,10 @@ search_space:
     type: categorical
     choices: [true, false]
   
-  # TP/SL calculation mode
+  # TP/SL calculation mode choices
+  # When independent_tpsl_modes is false: one mode is sampled and used for both TP and SL
+  # When independent_tpsl_modes is true: tp_mode and sl_mode are sampled independently
+  #   from this same choices list
   # - fixed: category-based thresholds 
   # - flat: uniform percentage for all stocks
   # - atr: ATR-based dynamic thresholds
@@ -146,9 +159,9 @@ top_k:
 # =============================================================================
 # TPSL MODE-SPECIFIC SEARCH SPACES
 # =============================================================================
-# These are only sampled when the corresponding tpsl_mode is selected.
+# These are only sampled when the corresponding tp_mode/sl_mode uses that mode.
 
-# Fixed TP/SL thresholds (sampled when tpsl_mode: 'fixed')
+# Fixed TP/SL thresholds (sampled when tp_mode/sl_mode: 'fixed')
 # Format: [cat1, cat2, cat3] matching category_scheme order
 fixed_tpsl:
   tp_thresholds:
@@ -169,7 +182,7 @@ fixed_tpsl:
       - [0.05, 0.05, 0.05] 
       - [0.15, 0.10, 0.08] 
 
-# Flat TP/SL (sampled when tpsl_mode: 'flat')
+# Flat TP/SL (sampled when tp_mode/sl_mode: 'flat')
 # Single uniform percentage applied to ALL stocks (no category dependency)
 flat_tpsl:
   tp:
@@ -184,7 +197,7 @@ flat_tpsl:
     high: 0.15
     step: 0.01
 
-# ATR-based TP/SL (sampled when tpsl_mode: 'atr')
+# ATR-based TP/SL (sampled when tp_mode/sl_mode: 'atr')
 atr_tpsl:
   period:
     type: int
@@ -201,7 +214,7 @@ atr_tpsl:
     low: 1.0
     high: 2.5
 
-# Pivot-based TP/SL (sampled when tpsl_mode: 'pivot')
+# Pivot-based TP/SL (sampled when tp_mode/sl_mode: 'pivot')
 pivot_tpsl:
   lookback_days:
     type: int
