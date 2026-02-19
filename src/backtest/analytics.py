@@ -1372,8 +1372,20 @@ def get_comprehensive_quarter_analysis(trade_results: pd.DataFrame) -> pd.DataFr
         ['quarter', 'total_stocks', '{cat}_count', 'avg_holding_period', '{cat}_avg_hp',
          '{cat}_return', 'portfolio_return', 'TP_count', 'SL_count', 'time_exit_count',
          'avg_holding_period_SL', 'avg_holding_period_TP']
+    
+    Note:
+    - Works with either 'cat_weight' (category-based weighting) or 'stock_weight' (equal weighting)
+    - Portfolio return calculation adapts based on available weight column
     """
-    required_cols = {'quarter', 'cat', 'cat_weight', 'holding_period', 'stock_return'}
+    # Check which weight column is available
+    has_cat_weight = 'cat_weight' in trade_results.columns
+    has_stock_weight = 'stock_weight' in trade_results.columns
+    
+    if not (has_cat_weight or has_stock_weight):
+        raise ValueError("Missing weight column: need either 'cat_weight' or 'stock_weight'")
+    
+    # Required columns (excluding weight columns which are checked above)
+    required_cols = {'quarter', 'cat', 'holding_period', 'stock_return'}
     if not required_cols.issubset(trade_results.columns):
         missing = required_cols - set(trade_results.columns)
         raise ValueError(f"Missing required columns: {missing}")
@@ -1434,13 +1446,20 @@ def get_comprehensive_quarter_analysis(trade_results: pd.DataFrame) -> pd.DataFr
             else:
                 row[f'{cat}_return'] = None
         
-        # Portfolio return (weighted category returns)
+        # Portfolio return calculation (adapts to available weight column)
         if len(valid_returns) > 0:
-            cat_ret_df = valid_returns.groupby('cat').agg({
-                'stock_return': 'mean',
-                'cat_weight': 'first'
-            })
-            row['portfolio_return'] = round((cat_ret_df['stock_return'] * cat_ret_df['cat_weight']).sum(), 6)
+            if has_cat_weight:
+                # Category-weighted: aggregate by category, weight by cat_weight
+                cat_ret_df = valid_returns.groupby('cat').agg({
+                    'stock_return': 'mean',
+                    'cat_weight': 'first'
+                })
+                row['portfolio_return'] = round((cat_ret_df['stock_return'] * cat_ret_df['cat_weight']).sum(), 6)
+            elif has_stock_weight:
+                # Stock-weighted: weight each stock's return by its individual weight
+                row['portfolio_return'] = round((valid_returns['stock_return'] * valid_returns['stock_weight']).sum(), 6)
+            else:
+                raise ValueError("No valid weight column found for portfolio return calculation")
         else:
             row['portfolio_return'] = None
         
