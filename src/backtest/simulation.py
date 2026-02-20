@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import warnings
 from config.defaults import INITIAL_CAPITAL, DEFAULT_ENTRY_PRICE_WINDOW
+from utils.quarter import get_quarter_dates
+from utils.formatting import crores_formatter
 
 # --------------------------------------------------------------------------------
 # 1. POSITION SIZING LOGIC
@@ -65,22 +67,7 @@ def generate_quarter_equity_curve(trades, price_data, quarter, entry_price_windo
         and a column called Total_Portfolio_Value
     """
     # 1. Determine the Date Range of the quarter
-    quarter_str = str(quarter)
-    year = int(quarter_str[:4])
-    mm = int(quarter_str[4:])
-    
-    if mm == 2: 
-        quarter_start_date = pd.Timestamp(year, 2, 15)
-        quarter_end_date = pd.Timestamp(year, 5, 30)
-    elif mm == 5: 
-        quarter_start_date = pd.Timestamp(year, 5, 31)
-        quarter_end_date = pd.Timestamp(year, 8, 14)
-    elif mm == 8: 
-        quarter_start_date = pd.Timestamp(year, 8, 15)
-        quarter_end_date = pd.Timestamp(year, 11, 14)
-    elif mm == 11: 
-        quarter_start_date = pd.Timestamp(year, 11, 15)
-        quarter_end_date = pd.Timestamp(year + 1, 2, 14)
+    quarter_start_date, quarter_end_date = get_quarter_dates(quarter)
     
     # 2. Identify the entry phase trading days for this quarter
     all_dates = sorted(price_data[price_data['date'] >= quarter_start_date]['date'].unique())
@@ -370,9 +357,6 @@ def plot_pf_value_over_quarter(trades, price_data, target_quarter, initial_capit
     plt.grid(True, linestyle=':', alpha=0.6)
     
     # Formatters
-    def crores_formatter(x, pos):
-        return f'{x/10000000:.1f} Cr'
-    
     ax = plt.gca()
     ax.yaxis.set_major_formatter(plt.FuncFormatter(crores_formatter))
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
@@ -450,9 +434,6 @@ def plot_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter,
     plt.grid(True, linestyle=':', alpha=0.6)
     
     # Formatters
-    def crores_formatter(x, pos):
-        return f'{x/10000000:.1f} Cr'
-    
     ax = plt.gca()
     ax.yaxis.set_major_formatter(plt.FuncFormatter(crores_formatter))
     

@@ -28,6 +28,8 @@ from config.defaults import (
     VAR_CONFIDENCE_LEVEL,
     INITIAL_CAPITAL,
 )
+from utils.quarter import get_quarter_dates
+from utils.formatting import crores_formatter
 
 
 # =============================================================================
@@ -604,27 +606,6 @@ def compute_quarterly_alpha(daily_returns_df, trade_results):
     if len(quarters) == 0:
         return pd.DataFrame()
 
-    def get_quarter_dates(quarter_int):
-        quarter_str = str(quarter_int)
-        year = int(quarter_str[:4])
-        month = int(quarter_str[4:])
-
-        if month == 2:
-            start = pd.Timestamp(year=year, month=2, day=15)
-            end = pd.Timestamp(year=year, month=5, day=30)
-        elif month == 5:
-            start = pd.Timestamp(year=year, month=5, day=31)
-            end = pd.Timestamp(year=year, month=8, day=14)
-        elif month == 8:
-            start = pd.Timestamp(year=year, month=8, day=15)
-            end = pd.Timestamp(year=year, month=11, day=14)
-        elif month == 11:
-            start = pd.Timestamp(year=year, month=11, day=15)
-            end = pd.Timestamp(year=year + 1, month=2, day=14)
-        else:
-            raise ValueError(f"Invalid quarter month: {month}. Expected 2, 5, 8, or 11.")
-        return start, end
-
     results = []
     cols = daily_returns_df.columns.tolist()
     pf_col = cols[0] if len(cols) > 0 else 'Portfolio'
@@ -843,8 +824,6 @@ def create_pf_vs_index_chart(comparison_df, first_quarter, last_quarter, initial
     ax1.grid(True, linestyle=':', alpha=0.6)
     ax1.legend(loc='upper left')
 
-    def crores_formatter(x, pos):
-        return f'{x/10000000:.1f} Cr'
     ax1.yaxis.set_major_formatter(FuncFormatter(crores_formatter))
 
     start_date = df['date'].iloc[0]

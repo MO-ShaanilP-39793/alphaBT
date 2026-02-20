@@ -47,34 +47,7 @@ from config.defaults import (
     DEFAULT_REGIME_MA_PERIOD,
     DEFAULT_REGIME_EXIT_THRESHOLD,
 )
-
-def get_date_params(quarter_str):
-    """
-    Parses YYYYMM string to determine entry search start date 
-    and mandatory exit cutoff date.
-    """
-    year = int(quarter_str[:4])
-    mm = int(quarter_str[4:])
-    
-    entry_search_start = None
-    mandatory_exit_date = None
-    
-    if mm == 2:  # 15th Feb to 30th May endpoints inclusive
-        entry_search_start = pd.Timestamp(year=year, month=2, day=15)
-        mandatory_exit_date = pd.Timestamp(year=year, month=5, day=30)
-    elif mm == 5:  # 31st May to 14th August
-        entry_search_start = pd.Timestamp(year=year, month=5, day=31)
-        mandatory_exit_date = pd.Timestamp(year=year, month=8, day=14)
-    elif mm == 8:  # 15th August to 14th November
-        entry_search_start = pd.Timestamp(year=year, month=8, day=15)
-        mandatory_exit_date = pd.Timestamp(year=year, month=11, day=14)
-    elif mm == 11:  # 15th November to 14th Feb (but the next year)
-        entry_search_start = pd.Timestamp(year=year, month=11, day=15)
-        # Note: Nov quarter exits in Feb of the NEXT year
-        mandatory_exit_date = pd.Timestamp(year=year + 1, month=2, day=14)
-        
-    return entry_search_start, mandatory_exit_date
-
+from utils.quarter import get_quarter_dates
 
 def calculate_thresholds_tiered(
         entry_price, 
@@ -327,7 +300,7 @@ def process_trade(row, price_df, category_scheme, index_df=None,
     null_result = pd.Series([None] * len(result_cols), index=result_cols)
     
     # 1. Get Date Boundaries
-    entry_start_limit, mandatory_exit_limit = get_date_params(quarter)
+    entry_start_limit, mandatory_exit_limit = get_quarter_dates(quarter)
     
     # Filter price data for this company
     co_prices = price_df[price_df['co_name'] == co_name].sort_values('date')

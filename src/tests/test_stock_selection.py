@@ -1,8 +1,7 @@
 """
 Phase 3: Tests for selection/stock_selection.py.
 
-Covers select_top_k_stocks, select_and_weight_stocks_volatility,
-select_and_weight_stocks_mcap, select_and_weight_stocks (cross-dimensional),
+Covers select_top_k_stocks, select_and_weight_stocks (cross-dimensional),
 get_entry_start_date, validate_price_data_coverage, filter_tradeable_stocks.
 """
 
@@ -106,98 +105,33 @@ class TestSelectTopKStocks:
 
 
 # =============================================================================
-# select_and_weight_stocks_volatility
-# =============================================================================
-
-class TestSelectAndWeightStocksVolatility:
-
-    def test_category_based_weights(self):
-        from selection.stock_selection import select_and_weight_stocks_volatility
-        df = _make_input_data()
-        result = select_and_weight_stocks_volatility(
-            df, selection_counts=[1, 1, 1], category_weights=[0.33, 0.33, 0.34],
-            weighting_scheme="use_category_weights",
-        )
-        assert "cat_weight" in result.columns
-        for q in result["quarter"].unique():
-            q_rows = result[result["quarter"] == q]
-            assert len(q_rows) == 3  # 1 per Vol category
-
-    def test_equal_weights(self):
-        from selection.stock_selection import select_and_weight_stocks_volatility
-        df = _make_input_data()
-        result = select_and_weight_stocks_volatility(
-            df, selection_counts=[1, 1, 1], category_weights=[0.33, 0.33, 0.34],
-            weighting_scheme="equal",
-        )
-        assert "stock_weight" in result.columns
-        for q in result["quarter"].unique():
-            q_rows = result[result["quarter"] == q]
-            expected_w = 1.0 / len(q_rows)
-            assert all(abs(q_rows["stock_weight"] - expected_w) < 1e-9)
-
-    def test_invalid_counts_length_raises(self):
-        from selection.stock_selection import select_and_weight_stocks_volatility
-        df = _make_input_data()
-        with pytest.raises(ValueError):
-            select_and_weight_stocks_volatility(
-                df, selection_counts=[1, 1], category_weights=[0.5, 0.5],
-            )
-
-
-# =============================================================================
-# select_and_weight_stocks_mcap
-# =============================================================================
-
-class TestSelectAndWeightStocksMcap:
-
-    def test_basic_mcap_selection(self):
-        from selection.stock_selection import select_and_weight_stocks_mcap
-        df = _make_input_data()
-        result = select_and_weight_stocks_mcap(
-            df, lms_count=[1, 1, 1], lms_w=[0.33, 0.33, 0.34],
-            weighting_scheme="use_category_weights",
-        )
-        assert "cat_weight" in result.columns
-        for q in result["quarter"].unique():
-            q_rows = result[result["quarter"] == q]
-            assert len(q_rows) == 3
-
-    def test_invalid_counts_length_raises(self):
-        from selection.stock_selection import select_and_weight_stocks_mcap
-        df = _make_input_data()
-        with pytest.raises(ValueError):
-            select_and_weight_stocks_mcap(df, lms_count=[1, 1], lms_w=[0.5, 0.5])
-
-
-# =============================================================================
-# get_entry_start_date
+# get_entry_start_date (now in utils.quarter)
 # =============================================================================
 
 class TestGetEntryStartDate:
 
     def test_feb_quarter(self):
-        from selection.stock_selection import get_entry_start_date
+        from utils.quarter import get_entry_start_date
         result = get_entry_start_date(202302)
         assert result == pd.Timestamp(2023, 2, 15)
 
     def test_may_quarter(self):
-        from selection.stock_selection import get_entry_start_date
+        from utils.quarter import get_entry_start_date
         result = get_entry_start_date(202305)
         assert result == pd.Timestamp(2023, 5, 31)
 
     def test_aug_quarter(self):
-        from selection.stock_selection import get_entry_start_date
+        from utils.quarter import get_entry_start_date
         result = get_entry_start_date(202308)
         assert result == pd.Timestamp(2023, 8, 15)
 
     def test_nov_quarter(self):
-        from selection.stock_selection import get_entry_start_date
+        from utils.quarter import get_entry_start_date
         result = get_entry_start_date(202311)
         assert result == pd.Timestamp(2023, 11, 15)
 
     def test_invalid_month_raises(self):
-        from selection.stock_selection import get_entry_start_date
+        from utils.quarter import get_entry_start_date
         with pytest.raises(ValueError):
             get_entry_start_date(202304)
 

@@ -54,7 +54,7 @@ All scripts must be run from the `src/` directory — paths in configs are relat
 
 | File | Description |
 |------|-------------|
-| `stock_selection.py` | `select_top_k_stocks()`, `select_and_weight_stocks_volatility()`, `select_and_weight_stocks_mcap()`, plus tradeable-stock filtering & price data validation |
+| `stock_selection.py` | `select_top_k_stocks()`, `select_and_weight_stocks()` (unified cross-dimensional), plus tradeable-stock filtering & price data validation |
 | `__init__.py` | Re-exports all selection functions |
 
 ### `reporting/` — Report Generation
@@ -118,7 +118,7 @@ backtest_core(config, input_data, price_data, index_data)
   │
   ├── [3] simulate_trades(selected_stocks, price_data, ...)
   │     └── For each stock-quarter row: process_trade()
-  │           ├── get_date_params()              — quarter → entry/exit dates
+  │           ├── get_quarter_dates()             — quarter → entry/exit dates (from utils.quarter)
   │           ├── calculate_dynamic_thresholds() — dispatches to mode-specific calc
   │           └── Daily monitoring: SL → TP → regime exit → time exit
   │
