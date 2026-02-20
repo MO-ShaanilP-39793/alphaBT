@@ -61,7 +61,11 @@ All scripts must be run from the `src/` directory — paths in configs are relat
 
 | File | Description |
 |------|-------------|
-| `backtest_report.py` | `generate_backtest_report()` — produces the consolidated multi-sheet Excel workbook with metrics, charts, and raw data |
+| `_helpers.py` | Private utility functions for data preparation, formatting, and statistical building blocks |
+| `metrics.py` | Portfolio value metrics: `compute_portfolio_metrics()`, `compute_drawdown_series()`, `compute_benchmark_metrics()` |
+| `analytics.py` | Returns-based analysis: periodic/rolling/calendar-year performance, trailing returns, regime returns, trade-level analysis |
+| `charts.py` | Matplotlib chart generators — all return `BytesIO` buffers for Excel embedding |
+| `report_writer.py` | `generate_backtest_report()` — orchestrates all modules to produce the consolidated multi-sheet Excel workbook |
 | `__init__.py` | Re-exports `generate_backtest_report`, `compute_trailing_returns` |
 
 ### `config/` — Configuration & Defaults

@@ -11,7 +11,7 @@ import pytest
 import numpy as np
 import pandas as pd
 
-from reporting.backtest_report import (
+from reporting.metrics import (
     compute_portfolio_metrics,
     compute_drawdown_series,
     compute_benchmark_metrics,

@@ -376,7 +376,7 @@ def daily_returns_df():
 @pytest.fixture
 def monthly_returns_df(daily_returns_df):
     """Monthly compounded returns derived from daily_returns_df."""
-    from reporting.backtest_report import compute_monthly_returns_from_daily
+    from reporting.analytics import compute_monthly_returns_from_daily
     return compute_monthly_returns_from_daily(daily_returns_df, input_frequency="daily")
 
 

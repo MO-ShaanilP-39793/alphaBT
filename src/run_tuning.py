@@ -76,7 +76,7 @@ from selection import (
     validate_price_data_coverage,
 )
 
-from reporting.backtest_report import compute_trailing_returns
+from reporting.analytics import compute_trailing_returns
 
 
 class DataCache:

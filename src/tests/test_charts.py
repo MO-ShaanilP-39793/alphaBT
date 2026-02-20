@@ -54,13 +54,13 @@ def _make_monthly_returns(n=24):
 class TestCreatePfVsIndexChart:
 
     def test_returns_bytesio(self):
-        from reporting.backtest_report import create_pf_vs_index_chart
+        from reporting.charts import create_pf_vs_index_chart
         buf = create_pf_vs_index_chart(_make_comparison_df(), 202302, 202305)
         assert isinstance(buf, io.BytesIO)
         assert buf.getvalue()[:4] == b'\x89PNG'
 
     def test_none_on_empty(self):
-        from reporting.backtest_report import create_pf_vs_index_chart
+        from reporting.charts import create_pf_vs_index_chart
         empty = pd.DataFrame()
         result = create_pf_vs_index_chart(empty, 202302, 202305)
         assert result is None
@@ -73,7 +73,7 @@ class TestCreatePfVsIndexChart:
 class TestCreateGrowthOfWealthChart:
 
     def test_returns_bytesio(self):
-        from reporting.backtest_report import create_growth_of_wealth_chart
+        from reporting.charts import create_growth_of_wealth_chart
         buf = create_growth_of_wealth_chart(_make_monthly_returns())
         assert isinstance(buf, io.BytesIO)
         assert len(buf.getvalue()) > 100
@@ -86,7 +86,7 @@ class TestCreateGrowthOfWealthChart:
 class TestCreateDailyDrawdownChart:
 
     def test_returns_bytesio(self):
-        from reporting.backtest_report import create_daily_drawdown_chart
+        from reporting.charts import create_daily_drawdown_chart
         buf = create_daily_drawdown_chart(_make_daily_pf())
         assert isinstance(buf, io.BytesIO)
         assert len(buf.getvalue()) > 100
@@ -99,7 +99,7 @@ class TestCreateDailyDrawdownChart:
 class TestCreateMonthlyReturnsHeatmap:
 
     def test_returns_bytesio(self):
-        from reporting.backtest_report import create_monthly_returns_heatmap
+        from reporting.charts import create_monthly_returns_heatmap
         buf = create_monthly_returns_heatmap(_make_daily_pf(n=504))
         assert isinstance(buf, io.BytesIO)
 
@@ -111,7 +111,7 @@ class TestCreateMonthlyReturnsHeatmap:
 class TestCreateCalendarYearHeatmap:
 
     def test_returns_bytesio(self):
-        from reporting.backtest_report import create_calendar_year_heatmap
+        from reporting.charts import create_calendar_year_heatmap
         # Build a simple calendar year DataFrame
         df = pd.DataFrame(
             {"Portfolio": [12.5, 8.3], "Benchmark": [10.1, 6.2]},
@@ -121,7 +121,7 @@ class TestCreateCalendarYearHeatmap:
         assert isinstance(buf, io.BytesIO)
 
     def test_none_on_empty(self):
-        from reporting.backtest_report import create_calendar_year_heatmap
+        from reporting.charts import create_calendar_year_heatmap
         result = create_calendar_year_heatmap(pd.DataFrame())
         assert result is None
 
@@ -133,7 +133,7 @@ class TestCreateCalendarYearHeatmap:
 class TestCreateCorrelationHeatmap:
 
     def test_returns_bytesio(self):
-        from reporting.backtest_report import create_correlation_heatmap
+        from reporting.charts import create_correlation_heatmap
         buf = create_correlation_heatmap(_make_monthly_returns())
         assert isinstance(buf, io.BytesIO)
 
@@ -145,7 +145,7 @@ class TestCreateCorrelationHeatmap:
 class TestCreateDistributionChart:
 
     def test_returns_bytesio(self):
-        from reporting.backtest_report import create_distribution_chart
+        from reporting.charts import create_distribution_chart
         buf = create_distribution_chart(_make_monthly_returns())
         assert isinstance(buf, io.BytesIO)
 
@@ -157,6 +157,6 @@ class TestCreateDistributionChart:
 class TestCreateBoxPlot:
 
     def test_returns_bytesio(self):
-        from reporting.backtest_report import create_box_plot
+        from reporting.charts import create_box_plot
         buf = create_box_plot(_make_monthly_returns())
         assert isinstance(buf, io.BytesIO)
