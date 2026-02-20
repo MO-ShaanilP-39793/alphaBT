@@ -5,7 +5,7 @@ TP and SL modes can be configured independently, allowing mixed combinations
 (e.g., ATR for take profit with pivot points for stop loss).
 
 Supported modes (for each of tp_mode / sl_mode):
-- 'fixed': Static percentage per category (requires category column or default_tpsl)
+- 'tiered': Per-category percentage thresholds (requires tiered_config with category mapping)
 - 'flat': Single percentage for all stocks (no category required)
 - 'atr': Dynamic thresholds based on Average True Range
 - 'pivot': Dynamic thresholds based on pivot point support/resistance levels
@@ -76,34 +76,34 @@ def get_date_params(quarter_str):
     return entry_search_start, mandatory_exit_date
 
 
-def calculate_thresholds_fixed(
+def calculate_thresholds_tiered(
         entry_price, 
-        category_scheme, 
         cat,
-        tp_config, 
-        sl_config, 
-        default_tpsl):
+        tiered_config):
     """
-    Calculate fixed percentage-based TP/SL thresholds.
+    Calculate tiered (per-category) percentage-based TP/SL thresholds.
     
     Parameters:
     - entry_price: Entry price of the trade
-    - category_scheme: 'volatility' or 'mcap'
-    - cat: Category name (e.g., 'high_volatility', 'largecap'), or '_default'
-    - tp_config: Dict mapping {category_scheme: {cat: pct}}
-    - sl_config: Dict mapping {category_scheme: {cat: pct}}
-    - default_tpsl: Dict with 'tp_pct' and 'sl_pct' fallback values
+    - cat: Category name (e.g., 'high_volatility', 'largecap'), or '_default' / None
+    - tiered_config: Dict with structure:
+        {
+            'tp_pct': {category_name: float, ...},
+            'sl_pct': {category_name: float, ...},
+            'default_tp_pct': float,  # fallback when cat is None/_default
+            'default_sl_pct': float,
+        }
     
     Returns:
     - Tuple of (tp_price, sl_price, tp_pct, sl_pct)
     """
     if cat is None or cat == '_default':
         # Use default thresholds when no category is provided
-        tp_pct = default_tpsl.get('tp_pct', DEFAULT_TPSL_FALLBACK_PCT)
-        sl_pct = default_tpsl.get('sl_pct', DEFAULT_TPSL_FALLBACK_PCT)
+        tp_pct = tiered_config.get('default_tp_pct', DEFAULT_TPSL_FALLBACK_PCT)
+        sl_pct = tiered_config.get('default_sl_pct', DEFAULT_TPSL_FALLBACK_PCT)
     else:
-        tp_pct = tp_config.get(category_scheme, {}).get(cat, DEFAULT_TPSL_FALLBACK_PCT)
-        sl_pct = sl_config.get(category_scheme, {}).get(cat, DEFAULT_TPSL_FALLBACK_PCT)
+        tp_pct = tiered_config.get('tp_pct', {}).get(cat, DEFAULT_TPSL_FALLBACK_PCT)
+        sl_pct = tiered_config.get('sl_pct', {}).get(cat, DEFAULT_TPSL_FALLBACK_PCT)
     
     tp_price = entry_price * (1 + tp_pct)
     sl_price = entry_price * (1 - sl_pct)
@@ -113,17 +113,17 @@ def calculate_thresholds_fixed(
 
 def _compute_single_side(side, mode, price_df, co_name, entry_price, entry_date,
                          category_scheme, cat, *, atr_config, pivot_config,
-                         flat_config, tp_config, sl_config, default_tpsl):
+                         flat_config, tiered_config):
     """
     Compute the threshold price for one side (TP or SL) using the specified mode.
     
     Parameters:
     - side: 'tp' or 'sl'
-    - mode: 'fixed', 'flat', 'atr', or 'pivot'
+    - mode: 'tiered', 'flat', 'atr', or 'pivot'
     - price_df, co_name, entry_price, entry_date: trade context
-    - category_scheme, cat: category info for fixed-mode lookup
+    - category_scheme, cat: category info for tiered-mode lookup
     - atr_config, pivot_config, flat_config: mode-specific configs
-    - tp_config, sl_config, default_tpsl: fixed-mode configs
+    - tiered_config: tiered-mode config dict
     
     Returns:
     - Tuple of (price, side_metadata_dict)
@@ -140,14 +140,14 @@ def _compute_single_side(side, mode, price_df, co_name, entry_price, entry_date,
         )
         
         if tp_price is None:
-            # Fallback to fixed if ATR calculation fails
-            f_tp, f_sl, f_tp_pct, f_sl_pct = calculate_thresholds_fixed(
-                entry_price, category_scheme, cat,
-                tp_config, sl_config, default_tpsl
-            )
-            price = f_tp if side == 'tp' else f_sl
-            pct = f_tp_pct if side == 'tp' else f_sl_pct
-            meta['fallback'] = 'fixed'
+            # Fallback to flat if ATR calculation fails
+            if side == 'tp':
+                pct = flat_config.get('tp_pct', DEFAULT_FLAT_TP_PCT)
+                price = entry_price * (1 + pct)
+            else:
+                pct = flat_config.get('sl_pct', DEFAULT_FLAT_SL_PCT)
+                price = entry_price * (1 - pct)
+            meta['fallback'] = 'flat'
             meta['pct'] = pct
         else:
             price = tp_price if side == 'tp' else sl_price
@@ -166,14 +166,14 @@ def _compute_single_side(side, mode, price_df, co_name, entry_price, entry_date,
         )
         
         if tp_price is None:
-            # Fallback to fixed if pivot calculation fails
-            f_tp, f_sl, f_tp_pct, f_sl_pct = calculate_thresholds_fixed(
-                entry_price, category_scheme, cat,
-                tp_config, sl_config, default_tpsl
-            )
-            price = f_tp if side == 'tp' else f_sl
-            pct = f_tp_pct if side == 'tp' else f_sl_pct
-            meta['fallback'] = 'fixed'
+            # Fallback to flat if pivot calculation fails
+            if side == 'tp':
+                pct = flat_config.get('tp_pct', DEFAULT_FLAT_TP_PCT)
+                price = entry_price * (1 + pct)
+            else:
+                pct = flat_config.get('sl_pct', DEFAULT_FLAT_SL_PCT)
+                price = entry_price * (1 - pct)
+            meta['fallback'] = 'flat'
             meta['pct'] = pct
         else:
             price = tp_price if side == 'tp' else sl_price
@@ -192,10 +192,9 @@ def _compute_single_side(side, mode, price_df, co_name, entry_price, entry_date,
             price = entry_price * (1 - pct)
         meta['pct'] = pct
     
-    else:  # 'fixed' mode (default)
-        f_tp, f_sl, f_tp_pct, f_sl_pct = calculate_thresholds_fixed(
-            entry_price, category_scheme, cat,
-            tp_config, sl_config, default_tpsl
+    elif mode == 'tiered':
+        f_tp, f_sl, f_tp_pct, f_sl_pct = calculate_thresholds_tiered(
+            entry_price, cat, tiered_config
         )
         if side == 'tp':
             price = f_tp
@@ -204,6 +203,9 @@ def _compute_single_side(side, mode, price_df, co_name, entry_price, entry_date,
             price = f_sl
             meta['pct'] = f_sl_pct
     
+    else:
+        raise ValueError(f"Unknown TP/SL mode: '{mode}'. Use 'tiered', 'flat', 'atr', or 'pivot'.")
+    
     return price, meta
 
 
@@ -211,8 +213,7 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
                                   category_scheme, cat, tp_mode, sl_mode,
                                   index_df=None,
                                   *, atr_config, pivot_config, flat_config,
-                                  index_exit_config, tp_config, sl_config,
-                                  default_tpsl):
+                                  index_exit_config, tiered_config):
     """
     Calculate TP/SL thresholds using independently specified modes.
     
@@ -226,16 +227,14 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
     - entry_date: Entry date of the trade
     - category_scheme: 'volatility' or 'mcap'
     - cat: Category name
-    - tp_mode: Mode for take profit - 'fixed', 'flat', 'atr', or 'pivot'
-    - sl_mode: Mode for stop loss - 'fixed', 'flat', 'atr', or 'pivot'
+    - tp_mode: Mode for take profit - 'tiered', 'flat', 'atr', or 'pivot'
+    - sl_mode: Mode for stop loss - 'tiered', 'flat', 'atr', or 'pivot'
     - index_df: Optional DataFrame with index data for volatility adjustment
     - atr_config: ATR mode config dict
     - pivot_config: Pivot mode config dict
     - flat_config: Flat mode config dict
     - index_exit_config: Index-guided exit config dict
-    - tp_config: Fixed-mode TP config dict
-    - sl_config: Fixed-mode SL config dict
-    - default_tpsl: Default TP/SL fallback dict
+    - tiered_config: Tiered-mode config dict
     
     Returns:
     - Tuple of (tp_price, sl_price, metadata_dict)
@@ -244,8 +243,7 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
         price_df=price_df, co_name=co_name, entry_price=entry_price,
         entry_date=entry_date, category_scheme=category_scheme, cat=cat,
         atr_config=atr_config, pivot_config=pivot_config,
-        flat_config=flat_config, tp_config=tp_config,
-        sl_config=sl_config, default_tpsl=default_tpsl
+        flat_config=flat_config, tiered_config=tiered_config
     )
     
     tp_price, tp_meta = _compute_single_side('tp', tp_mode, **common_kwargs)
@@ -292,7 +290,7 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
 def process_trade(row, price_df, category_scheme, index_df=None,
                    tp_mode=DEFAULT_TP_MODE, sl_mode=DEFAULT_SL_MODE,
                    tp_enabled=DEFAULT_TP_ENABLED, sl_enabled=DEFAULT_SL_ENABLED, entry_price_window=DEFAULT_ENTRY_PRICE_WINDOW,
-                   *, tp_config, sl_config, default_tpsl, atr_config,
+                   *, tiered_config, atr_config,
                    pivot_config, flat_config, index_exit_config):
     """
     Calculates entry and exit data for a single row from selected_stocks.
@@ -302,14 +300,12 @@ def process_trade(row, price_df, category_scheme, index_df=None,
     - price_df: DataFrame with price data
     - category_scheme: 'volatility' or 'mcap' to determine TP/SL config
     - index_df: Optional DataFrame with index data for regime-based exits
-    - tp_mode: Mode for take profit - 'fixed', 'flat', 'atr', or 'pivot'
-    - sl_mode: Mode for stop loss - 'fixed', 'flat', 'atr', or 'pivot'
+    - tp_mode: Mode for take profit - 'tiered', 'flat', 'atr', or 'pivot'
+    - sl_mode: Mode for stop loss - 'tiered', 'flat', 'atr', or 'pivot'
     - tp_enabled: Whether take profit is active
     - sl_enabled: Whether stop loss is active
     - entry_price_window: Number of trading days to average for entry price (default: 3)
-    - tp_config: Fixed-mode TP config dict
-    - sl_config: Fixed-mode SL config dict
-    - default_tpsl: Default TP/SL fallback dict
+    - tiered_config: Tiered-mode config dict
     - atr_config: ATR mode config dict
     - pivot_config: Pivot mode config dict
     - flat_config: Flat mode config dict
@@ -363,8 +359,7 @@ def process_trade(row, price_df, category_scheme, index_df=None,
             category_scheme, cat, tp_mode, sl_mode, index_df,
             atr_config=atr_config, pivot_config=pivot_config,
             flat_config=flat_config, index_exit_config=index_exit_config,
-            tp_config=tp_config, sl_config=sl_config,
-            default_tpsl=default_tpsl
+            tiered_config=tiered_config
         )
         
         if tp_enabled:
@@ -451,9 +446,7 @@ def simulate_trades(
     sl_mode: str = None,
     tp_enabled: bool = None,
     sl_enabled: bool = None,
-    tp_config: dict = None,
-    sl_config: dict = None,
-    default_tpsl: dict = None,
+    tiered_config: dict = None,
     atr_config: dict = None,
     pivot_config: dict = None,
     flat_config: dict = None,
@@ -474,13 +467,12 @@ def simulate_trades(
     - price_data: ['date', 'co_name', 'open', 'high', 'low', 'close']
     - category_scheme: 'volatility' or 'mcap' to determine which TP/SL config to use
     - index_data: Optional DataFrame with ['date', 'value'] for index-guided exits
-    - tp_mode: Take profit mode ('fixed', 'flat', 'atr', 'pivot'). Defaults to 'fixed' if None.
-    - sl_mode: Stop loss mode ('fixed', 'flat', 'atr', 'pivot'). Defaults to 'fixed' if None.
+    - tp_mode: Take profit mode ('tiered', 'flat', 'atr', 'pivot'). Defaults to 'flat' if None.
+    - sl_mode: Stop loss mode ('tiered', 'flat', 'atr', 'pivot'). Defaults to 'flat' if None.
     - tp_enabled: Whether take profit is active. Defaults to True if None.
     - sl_enabled: Whether stop loss is active. Defaults to True if None.
-    - tp_config: TP config dict for fixed mode ({category_scheme: {cat: pct}})
-    - sl_config: SL config dict for fixed mode ({category_scheme: {cat: pct}})
-    - default_tpsl: Default TP/SL dict with 'tp_pct' and 'sl_pct'
+    - tiered_config: Per-category TP/SL config dict with 'tp_pct', 'sl_pct' mappings,
+      plus 'default_tp_pct' and 'default_sl_pct' fallbacks
     - atr_config: ATR config dict with 'period', 'tp_multiplier', 'sl_multiplier'
     - pivot_config: Pivot config dict with 'lookback_days', 'tp_level', 'sl_level'
     - flat_config: Flat config dict with 'tp_pct', 'sl_pct'
@@ -503,23 +495,11 @@ def simulate_trades(
     if use_sl:
         active_modes.add(resolved_sl_mode)
 
-    # fixed mode (or any mode that can fall back to fixed) needs tp/sl_config & default_tpsl
-    needs_fixed = 'fixed' in active_modes
-    # dynamic modes (atr/pivot) also fall back to fixed on failure, so they need fixed configs too
-    needs_fixed_fallback = bool(active_modes & {'atr', 'pivot'})
-
-    if needs_fixed or needs_fixed_fallback:
-        if tp_config is None:
+    # tiered mode requires tiered_config
+    if 'tiered' in active_modes:
+        if tiered_config is None:
             raise ValueError(
-                f"tp_config is required for mode(s) {active_modes} but was not provided"
-            )
-        if sl_config is None:
-            raise ValueError(
-                f"sl_config is required for mode(s) {active_modes} but was not provided"
-            )
-        if default_tpsl is None:
-            raise ValueError(
-                f"default_tpsl is required for mode(s) {active_modes} but was not provided"
+                f"tiered_config is required when tp_mode or sl_mode is 'tiered' but was not provided"
             )
 
     if 'atr' in active_modes and atr_config is None:
@@ -528,8 +508,9 @@ def simulate_trades(
     if 'pivot' in active_modes and pivot_config is None:
         raise ValueError("pivot_config is required when tp_mode or sl_mode is 'pivot'")
 
-    if 'flat' in active_modes and flat_config is None:
-        raise ValueError("flat_config is required when tp_mode or sl_mode is 'flat'")
+    # flat_config is always needed (used as fallback for atr/pivot failures too)
+    if flat_config is None:
+        flat_config = {}
 
     if index_exit_config is None:
         raise ValueError("index_exit_config is required but was not provided")
@@ -583,8 +564,7 @@ def simulate_trades(
             row, price_data, category_scheme, index_df,
             resolved_tp_mode, resolved_sl_mode,
             use_tp, use_sl, entry_price_window,
-            tp_config=tp_config, sl_config=sl_config,
-            default_tpsl=default_tpsl, atr_config=atr_config,
+            tiered_config=tiered_config, atr_config=atr_config,
             pivot_config=pivot_config, flat_config=flat_config,
             index_exit_config=index_exit_config),
         axis=1

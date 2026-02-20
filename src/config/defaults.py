@@ -38,7 +38,7 @@ DEFAULT_MIN_PROB_THRESHOLD = None
 DEFAULT_WEIGHTING_SCHEME = 'use_category_weights'
 
 # Cross-dimensional selection/weighting
-# Controls which dimension TP/SL fixed-mode config uses: 'selection', 'weighting',
+# Controls which dimension TP/SL tiered-mode config uses: 'selection', 'weighting',
 # or explicit 'volatility'/'mcap'. Defaults to 'selection' (legacy behavior).
 DEFAULT_TPSL_CATEGORY_DIMENSION = 'selection'
 
@@ -59,12 +59,12 @@ DEFAULT_ENTRY_PRICE_WINDOW = 3
 # TP / SL CORE
 # =============================================================================
 
-DEFAULT_TP_MODE = 'fixed'
-DEFAULT_SL_MODE = 'fixed'
+DEFAULT_TP_MODE = 'flat'
+DEFAULT_SL_MODE = 'flat'
 DEFAULT_TP_ENABLED = True
 DEFAULT_SL_ENABLED = True
 
-# Fallback percentage when no category or config entry is found
+# Fallback percentage when no category or config entry is found (tiered mode)
 DEFAULT_TPSL_FALLBACK_PCT = 0.05       # 5 %
 
 # =============================================================================
@@ -159,8 +159,8 @@ DEFAULT_SAMPLER = 'TPE'
 DEFAULT_MULTI_OBJ_SAMPLER = 'NSGA-II'
 SAMPLER_SEED = 42
 
-DEFAULT_FIXED_TP_THRESHOLDS = [0.05, 0.05, 0.05]
-DEFAULT_FIXED_SL_THRESHOLDS = [0.05, 0.05, 0.05]
+DEFAULT_TIERED_TP_THRESHOLDS = [0.05, 0.05, 0.05]
+DEFAULT_TIERED_SL_THRESHOLDS = [0.05, 0.05, 0.05]
 DEFAULT_INDEPENDENT_TPSL_MODES = False
 
 # =============================================================================

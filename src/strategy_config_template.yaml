@@ -30,7 +30,7 @@ selection_type: 'category_based'
 
 # Specify category scheme (how to bucket stocks before selection from each bucket)
 # Used when selection_type is 'category_based'
-# Also used for TP/SL threshold lookup when tp_mode/sl_mode is 'fixed' and category column exists
+# Also used for TP/SL threshold lookup when tp_mode/sl_mode is 'tiered' and category column exists
 category_scheme: 'volatility'  # choose from 'volatility' or 'mcap'
 
 # Cross-dimensional selection/weighting (optional, advanced)
@@ -45,8 +45,8 @@ category_scheme: 'volatility'  # choose from 'volatility' or 'mcap'
 # selection_dimension: 'volatility'
 # weighting_dimension: 'volatility'
 
-# Controls which dimension fixed-mode TP/SL thresholds are keyed by.
-# Only relevant when tp_mode/sl_mode is 'fixed' and selection/weighting dimensions differ.
+# Controls which dimension tiered-mode TP/SL thresholds are keyed by.
+# Only relevant when tp_mode/sl_mode is 'tiered' and selection/weighting dimensions differ.
 # Options: 'selection', 'weighting', 'volatility', 'mcap'
 # Default: 'selection' (TP/SL uses the same categories stocks were selected into)
 # tpsl_category_dimension: 'selection'
@@ -118,13 +118,13 @@ sl_enabled: true    # Set to false to disable stop loss exits
 # TP/SL calculation modes (only used when the respective tp/sl is enabled):
 # Each can be set independently, enabling mixed strategies
 # (e.g., tp_mode: 'atr' with sl_mode: 'pivot')
-# Options: 'fixed', 'flat', 'atr', 'pivot'
-# - 'fixed': Static percentage per category (requires category column or default_tpsl)
+# Options: 'flat', 'tiered', 'atr', 'pivot'
 # - 'flat': Single percentage for all stocks (no category required - simplest)
+# - 'tiered': Per-category percentage thresholds (requires tiered_config)
 # - 'atr': Thresholds based on Average True Range (volatility-adaptive)
 # - 'pivot': Thresholds based on support/resistance pivot points
-tp_mode: 'fixed'    # Mode for take profit calculation
-sl_mode: 'fixed'    # Mode for stop loss calculation
+tp_mode: 'flat'    # Mode for take profit calculation
+sl_mode: 'flat'    # Mode for stop loss calculation
 
 # ATR-based configuration (used when tp_mode or sl_mode is 'atr')
 # TP = entry_price + (tp_multiplier × ATR)
@@ -172,38 +172,38 @@ index_exit:
     low_vol_multiplier: 0.8    # Tighten TP/SL by 20% in low vol markets
 
 # =============================================================================
-# FIXED TP/SL THRESHOLDS (used when tp_mode/sl_mode: 'fixed')
+# TIERED TP/SL THRESHOLDS (used when tp_mode/sl_mode: 'tiered')
 # =============================================================================
 
-# Default TP/SL thresholds used when:
-# - run_stock_selection: false AND
-# - category column is not provided in input AND
-# - tp_mode or sl_mode is 'fixed'
-default_tpsl:
-  tp_pct: 0.05    # 5% take profit
-  sl_pct: 0.05    # 5% stop loss
-
-# Set thresholds for Take Profit for each category
-TP_CONFIG:
-  volatility:
+# Per-category percentage thresholds for TP and SL.
+# Only specify categories for the active category_scheme.
+# Includes default fallbacks when a stock has no category.
+#
+# Example for volatility scheme:
+tiered_config:
+  tp_pct:
     high_volatility: 0.10
     medium_volatility: 0.05
     low_volatility: 0.02
-  mcap:
-    largecap: 0.04
-    midcap: 0.06
-    smallcap: 0.08
-
-# Set thresholds for Stop Loss for each category
-SL_CONFIG:
-  volatility:
+  sl_pct:
     high_volatility: 0.10
     medium_volatility: 0.10
     low_volatility: 0.10
-  mcap:
-    largecap: 0.02
-    midcap: 0.03
-    smallcap: 0.04
+  default_tp_pct: 0.05    # fallback when stock has no category
+  default_sl_pct: 0.05
+
+# Example for mcap scheme (uncomment and replace the above if using mcap):
+# tiered_config:
+#   tp_pct:
+#     largecap: 0.04
+#     midcap: 0.06
+#     smallcap: 0.08
+#   sl_pct:
+#     largecap: 0.02
+#     midcap: 0.03
+#     smallcap: 0.04
+#   default_tp_pct: 0.05
+#   default_sl_pct: 0.05
 
 # =============================================================================
 # REPORT CONFIGURATION

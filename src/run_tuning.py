@@ -156,19 +156,19 @@ def set_trial_user_attributes(
                 for i, label in enumerate(cat_labels):
                     trial.set_user_attr(f'category_weight_{label}', round(category_weights[i], 3))
     
-    # Expand fixed TP/SL thresholds (if fixed mode is used for that side)
+    # Expand tiered TP/SL thresholds (if tiered mode is used for that side)
     if cat_labels:
-        if sampled_params.get('tp_enabled') and sampled_params.get('tp_mode') == 'fixed':
-            fixed_tp = sampled_params.get('fixed_tp_thresholds')
-            if fixed_tp is not None:
+        if sampled_params.get('tp_enabled') and sampled_params.get('tp_mode') == 'tiered':
+            tiered_tp = sampled_params.get('tiered_tp_thresholds')
+            if tiered_tp is not None:
                 for i, label in enumerate(cat_labels):
-                    trial.set_user_attr(f'tp_threshold_{label}', round(fixed_tp[i], 3))
+                    trial.set_user_attr(f'tp_threshold_{label}', round(tiered_tp[i], 3))
         
-        if sampled_params.get('sl_enabled') and sampled_params.get('sl_mode') == 'fixed':
-            fixed_sl = sampled_params.get('fixed_sl_thresholds')
-            if fixed_sl is not None:
+        if sampled_params.get('sl_enabled') and sampled_params.get('sl_mode') == 'tiered':
+            tiered_sl = sampled_params.get('tiered_sl_thresholds')
+            if tiered_sl is not None:
                 for i, label in enumerate(cat_labels):
-                    trial.set_user_attr(f'sl_threshold_{label}', round(fixed_sl[i], 3))
+                    trial.set_user_attr(f'sl_threshold_{label}', round(tiered_sl[i], 3))
     
     # -------------------------------------------------------------------------
     # Store performance metrics

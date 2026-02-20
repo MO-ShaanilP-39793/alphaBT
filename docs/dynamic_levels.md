@@ -215,4 +215,4 @@ All functions return `None` (or tuples with `None` values) when:
 - Stock not found in price data
 - Date range has no valid trading days
 
-The `backtest/tpsl.py` module handles these cases by falling back to fixed percentage thresholds.
+The `backtest/tpsl.py` module handles these cases by falling back to flat percentage thresholds.

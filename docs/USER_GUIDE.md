@@ -209,7 +209,7 @@ graph LR
 
 Read [STRATEGIC_OPTIONS.md](STRATEGIC_OPTIONS.md) to understand:
 - **Stock selection strategies**: Should you use category-based diversification (by volatility or market cap) or simple top-K ranking?
-- **Exit strategies**: Fixed %, volatility-based (ATR), support/resistance levels (pivots), or hold until quarter-end?
+- **Exit strategies**: Tiered % (per-category), flat %, volatility-based (ATR), support/resistance levels (pivots), or hold until quarter-end?
 - **Advanced features**: Market regime filters, dynamic TP/SL adjustment based on index volatility
 
 ### Master Configuration

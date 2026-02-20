@@ -74,7 +74,7 @@ quarter,co_name,stock_weight,category
 | Column | Required? | Description |
 |--------|-----------|-------------|
 | `stock_weight` | Yes | Capital allocation (should sum to ≈1.0 per quarter) |
-| `category` | Only if using `tp_mode: 'fixed'` and `sl_mode: 'fixed'` | For category-specific TP/SL |
+| `category` | Only if using `tp_mode: 'tiered'` and `sl_mode: 'tiered'` | For category-specific TP/SL |
 
 **File Format**: CSV or Parquet (auto-detected by extension)
 
@@ -386,8 +386,8 @@ entry_price_window: 3  # Number of trading days averaged for entry price
 TP and SL modes can be configured **independently**, allowing different threshold strategies for take-profit and stop-loss exits.
 
 ```yaml
-tp_mode: 'fixed'   # Category-specific TP percentages
-sl_mode: 'fixed'   # Category-specific SL percentages
+tp_mode: 'tiered'  # Category-specific TP percentages
+sl_mode: 'tiered'  # Category-specific SL percentages
 # OR
 tp_mode: 'flat'    # Uniform TP percentage
 sl_mode: 'flat'    # Uniform SL percentage
@@ -401,12 +401,12 @@ sl_mode: 'pivot'   # Support levels for SL
 
 | Parameter | Type | Valid Values | Description |
 |-----------|------|--------------|-------------|
-| `tp_mode` | String | `'fixed'`, `'flat'`, `'atr'`, `'pivot'` | Take-profit threshold strategy |
-| `sl_mode` | String | `'fixed'`, `'flat'`, `'atr'`, `'pivot'` | Stop-loss threshold strategy |
+| `tp_mode` | String | `'tiered'`, `'flat'`, `'atr'`, `'pivot'` | Take-profit threshold strategy |
+| `sl_mode` | String | `'tiered'`, `'flat'`, `'atr'`, `'pivot'` | Stop-loss threshold strategy |
 
 | Value | Description | Required Config Section |
 |-------|-------------|-------------------------|
-| `'fixed'` | Category-specific TP/SL | `TP_CONFIG`, `SL_CONFIG` (or `default_tpsl`) |
+| `'tiered'` | Category-specific TP/SL | `tiered_config` |
 | `'flat'` | Same % for all stocks | `flat_config` |
 | `'atr'` | ATR-based dynamic levels | `atr_config` |
 | `'pivot'` | Pivot point levels | `pivot_config` |
@@ -415,25 +415,25 @@ sl_mode: 'pivot'   # Support levels for SL
 
 ---
 
-### Fixed Mode Configuration
+### Tiered Mode Configuration
 
-Used when `tp_mode: 'fixed'` and/or `sl_mode: 'fixed'`:
+Used when `tp_mode: 'tiered'` and/or `sl_mode: 'tiered'`:
 
 ```yaml
-TP_CONFIG:
-  volatility:                    # or 'mcap'
+tiered_config:
+  tp_pct:
     high_volatility: 0.10        # 10% TP
     medium_volatility: 0.05      # 5% TP
     low_volatility: 0.02         # 2% TP
-
-SL_CONFIG:
-  volatility:                    # or 'mcap'
+  sl_pct:
     high_volatility: 0.10        # 10% SL
     medium_volatility: 0.10      # 10% SL
     low_volatility: 0.10         # 10% SL
+  default_tp_pct: 0.05           # 5% default TP (fallback)
+  default_sl_pct: 0.05           # 5% default SL (fallback)
 ```
 
-**Structure**: Dictionary with scheme (`volatility` or `mcap`) → category → percentage
+**Structure**: Single `tiered_config` block with `tp_pct` and `sl_pct` dictionaries keyed by category, plus `default_tp_pct` / `default_sl_pct` fallbacks.
 
 **Category Keys**:
 - For `volatility` scheme: `high_volatility`, `medium_volatility`, `low_volatility`
@@ -445,19 +445,7 @@ SL_CONFIG:
 - TP = ₹100 × (1 + 0.10) = ₹110
 - SL = ₹100 × (1 - 0.10) = ₹90
 
----
-
-### Default TP/SL (Fallback)
-
-Used when `tp_mode: 'fixed'` and/or `sl_mode: 'fixed'` but stock has no category label:
-
-```yaml
-default_tpsl:
-  tp_pct: 0.05   # 5% default TP
-  sl_pct: 0.05   # 5% default SL
-```
-
-**When needed**: Preselected mode (`run_stock_selection: false`) with `tp_mode: 'fixed'` / `sl_mode: 'fixed'` and no `category` column in input.
+**Default fallback**: When a stock has no category label (e.g., preselected mode with no `category` column), `default_tp_pct` and `default_sl_pct` are used.
 
 ---
 
@@ -669,7 +657,7 @@ search_space:
   
   tpsl_mode:
     type: categorical
-    choices: ['fixed', 'flat', 'atr', 'pivot']
+    choices: ['tiered', 'flat', 'atr', 'pivot']
   
   independent_tpsl_modes:        # Optional: sample tp_mode and sl_mode independently
     type: categorical
@@ -762,16 +750,16 @@ category_weights:
 
 Sampled only when `selection_type` trial value is `'category_based'`.
 
-#### fixed_tpsl Section (when `tpsl_mode: 'fixed'`)
+#### tiered_tpsl Section (when `tpsl_mode: 'tiered'`)
 
 ```yaml
-fixed_tpsl:
-  high_vol_tp:
+tiered_tpsl:
+  tiered_tp_thresholds:
     type: float
     low: 0.05
     high: 0.20
     step: 0.01
-  medium_vol_tp:
+  tiered_sl_thresholds:
     type: float
     low: 0.02
     high: 0.10
@@ -779,7 +767,7 @@ fixed_tpsl:
   # ... etc for all categories
 ```
 
-Sampled only when `tpsl_mode` trial value is `'fixed'`.
+Sampled only when `tpsl_mode` trial value is `'tiered'`.
 
 #### flat_tpsl Section (when `tpsl_mode: 'flat'`)
 
@@ -979,18 +967,19 @@ selection_method: 'probability'
 
 tp_enabled: true
 sl_enabled: true
-tp_mode: 'fixed'
-sl_mode: 'fixed'
-TP_CONFIG:
-  mcap:
+tp_mode: 'tiered'
+sl_mode: 'tiered'
+tiered_config:
+  tp_pct:
     largecap: 0.05
     midcap: 0.08
     smallcap: 0.15
-SL_CONFIG:
-  mcap:
+  sl_pct:
     largecap: 0.05
     midcap: 0.08
     smallcap: 0.12
+  default_tp_pct: 0.05
+  default_sl_pct: 0.05
 
 index_exit:
   regime_filter:
@@ -1121,7 +1110,7 @@ Before running backtest:
 ✅ **Price data coverage** spans quarter range with minimal gaps
 ✅ **Stock names** match exactly between inference and price data
 ✅ **TP/SL config** matches mode:
-   - `tp_mode`/`sl_mode: 'fixed'` → `TP_CONFIG`, `SL_CONFIG` (or `default_tpsl`)
+   - `tp_mode`/`sl_mode: 'tiered'` → `tiered_config`
    - `tp_mode`/`sl_mode: 'flat'` → `flat_config`
    - `tp_mode`/`sl_mode: 'atr'` → `atr_config`
    - `tp_mode`/`sl_mode: 'pivot'` → `pivot_config`
@@ -1148,9 +1137,9 @@ Before running backtest:
 
 **Needed when**:
 - `category_scheme: 'mcap'`
-- `run_stock_selection: false` with `tp_mode: 'fixed'` / `sl_mode: 'fixed'` (without `default_tpsl`)
+- `run_stock_selection: false` with `tp_mode: 'tiered'` / `sl_mode: 'tiered'` (without `default_tp_pct`/`default_sl_pct` in `tiered_config`)
 
-**Fix**: Add `category` column OR use `category_scheme: 'volatility'` OR set `default_tpsl` in config.
+**Fix**: Add `category` column OR use `category_scheme: 'volatility'` OR set `default_tp_pct`/`default_sl_pct` in `tiered_config`.
 
 ---
 

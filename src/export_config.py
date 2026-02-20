@@ -86,7 +86,7 @@ def _expand_trial_params(trial_params: dict, tuning_config: dict) -> dict:
     
     # Collect all search spaces (base + conditional mode-specific blocks)
     search_spaces = [tuning_config.get('search_space', {})]
-    for block_name in ['top_k', 'fixed_tpsl', 'flat_tpsl', 'atr_tpsl', 'pivot_tpsl', 'index_exit']:
+    for block_name in ['top_k', 'tiered_tpsl', 'flat_tpsl', 'atr_tpsl', 'pivot_tpsl', 'index_exit']:
         if block_name in tuning_config:
             search_spaces.append(tuning_config[block_name])
     

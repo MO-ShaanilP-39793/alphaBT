@@ -52,7 +52,6 @@ from config.defaults import (
     DEFAULT_TP_ENABLED,
     DEFAULT_SL_ENABLED,
     DEFAULT_ENTRY_PRICE_WINDOW,
-    DEFAULT_TPSL_FALLBACK_PCT,
     DEFAULT_GENERATE_REPORT,
     DEFAULT_TPSL_CATEGORY_DIMENSION,
 )
@@ -231,18 +230,18 @@ def run_stock_selection(input_data, category_scheme, category_counts, category_w
         raise ValueError(f"Unknown selection_type: {selection_type}. Use 'category_based' or 'top_k'.")
 
 
-def validate_preselected_input(df, category_scheme, tp_mode, sl_mode, tp_enabled, sl_enabled, has_default_tpsl):
+def validate_preselected_input(df, category_scheme, tp_mode, sl_mode, tp_enabled, sl_enabled, has_tiered_config):
     """
     Validate and prepare preselected portfolio input.
     
     Parameters:
     - df: Input DataFrame (should have quarter, co_name, stock_weight, and optionally category)
     - category_scheme: 'volatility' or 'mcap' (used for category validation if present)
-    - tp_mode: Mode for take profit - 'fixed', 'flat', 'atr', or 'pivot'
-    - sl_mode: Mode for stop loss - 'fixed', 'flat', 'atr', or 'pivot'
+    - tp_mode: Mode for take profit - 'tiered', 'flat', 'atr', or 'pivot'
+    - sl_mode: Mode for stop loss - 'tiered', 'flat', 'atr', or 'pivot'
     - tp_enabled: Whether take profit is enabled
     - sl_enabled: Whether stop loss is enabled
-    - has_default_tpsl: Whether default_tpsl config is present
+    - has_tiered_config: Whether tiered_config is present in config
     
     Returns:
     - Tuple of (prepared_df, has_category)
@@ -257,16 +256,16 @@ def validate_preselected_input(df, category_scheme, tp_mode, sl_mode, tp_enabled
     # Check for category column
     has_category = 'category' in df.columns
     
-    # Validate: if no category and a 'fixed' mode is used with TP/SL enabled, need default_tpsl
+    # Validate: if no category and 'tiered' mode is used with TP/SL enabled, need tiered_config
     # Note: 'flat', 'atr', and 'pivot' modes don't require category
-    needs_fixed_category = (tp_enabled and tp_mode == 'fixed') or (sl_enabled and sl_mode == 'fixed')
-    if not has_category and needs_fixed_category:
-        if not has_default_tpsl:
+    needs_tiered_category = (tp_enabled and tp_mode == 'tiered') or (sl_enabled and sl_mode == 'tiered')
+    if not has_category and needs_tiered_category:
+        if not has_tiered_config:
             raise ValueError(
-                "No 'category' column in preselected input and tp_mode/sl_mode is 'fixed'. "
+                "No 'category' column in preselected input and tp_mode/sl_mode is 'tiered'. "
                 "Either:\n"
                 "  1. Add 'category' column to input data, or\n"
-                "  2. Add 'default_tpsl' section to config, or\n"
+                "  2. Add 'tiered_config' section to config (with default_tp_pct/default_sl_pct), or\n"
                 "  3. Set tp_mode/sl_mode to 'flat', 'atr', or 'pivot', or\n"
                 "  4. Set both tp_enabled and sl_enabled to false"
             )
@@ -376,9 +375,9 @@ def backtest_core(
         top_k_config = config.get('top_k_config', None)
         category_based_weighting_scheme = config.get('category_based_selection_weighting_scheme', DEFAULT_WEIGHTING_SCHEME)
         
-        # Default TP/SL config
-        default_tpsl = config.get('default_tpsl', None)
-        has_default_tpsl = default_tpsl is not None
+        # Tiered TP/SL config
+        tiered_config = config.get('tiered_config', None)
+        has_tiered_config = tiered_config is not None
         
         # TP/SL mode configuration
         tp_mode = config.get('tp_mode', DEFAULT_TP_MODE)
@@ -477,7 +476,7 @@ def backtest_core(
                 sl_mode,
                 tp_enabled,
                 sl_enabled,
-                has_default_tpsl
+                has_tiered_config
             )
             if verbose:
                 print(f"  - Preselected stocks: {len(selected_stocks)} positions across all quarters")
@@ -516,9 +515,7 @@ def backtest_core(
             sl_mode=sl_mode,
             tp_enabled=tp_enabled,
             sl_enabled=sl_enabled,
-            tp_config=config.get('TP_CONFIG'),
-            sl_config=config.get('SL_CONFIG'),
-            default_tpsl=config.get('default_tpsl'),
+            tiered_config=config.get('tiered_config'),
             atr_config=config.get('atr_config'),
             pivot_config=config.get('pivot_config'),
             flat_config=config.get('flat_config'),
@@ -616,8 +613,8 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
     category_based_weighting_scheme = config.get('category_based_selection_weighting_scheme', DEFAULT_WEIGHTING_SCHEME)
     
     # Default TP/SL config (used when no category in preselected mode)
-    default_tpsl = config.get('default_tpsl', None)
-    has_default_tpsl = default_tpsl is not None
+    tiered_config = config.get('tiered_config', None)
+    has_tiered_config = tiered_config is not None
     
     # Analysis report options
     generate_report = config.get('generate_report', DEFAULT_GENERATE_REPORT)
@@ -650,8 +647,8 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
             print(f"  - Min probability threshold: {min_prob_threshold}")
     else:
         print("  - Using preselected portfolio (selection config options ignored)")
-        if has_default_tpsl:
-            print(f"  - Default TP/SL: TP={default_tpsl.get('tp_pct', DEFAULT_TPSL_FALLBACK_PCT):.1%}, SL={default_tpsl.get('sl_pct', DEFAULT_TPSL_FALLBACK_PCT):.1%}")
+        if has_tiered_config:
+            print(f"  - Tiered TP/SL config provided")
     
     # TP/SL mode configuration
     tp_mode = config.get('tp_mode', DEFAULT_TP_MODE)

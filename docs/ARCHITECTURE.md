@@ -44,7 +44,7 @@ All scripts must be run from the `src/` directory — paths in configs are relat
 
 | File | Description |
 |------|-------------|
-| `tpsl.py` | Core TP/SL trade simulation. 4 modes (fixed/flat/atr/pivot), independent TP & SL mode selection, index-guided exits |
+| `tpsl.py` | Core TP/SL trade simulation. 4 modes (tiered/flat/atr/pivot), independent TP & SL mode selection, index-guided exits |
 | `simulation.py` | Position sizing (`calculate_position_sizes`), daily equity curves (`compute_pf_value_over_quarters`), portfolio vs index comparison |
 | `dynamic_levels.py` | ATR calculation, pivot point calculation, index volatility & regime detection functions |
 | `regime_dates.py` | Hardcoded crisis regimes (GFC, Covid, etc.) and market regimes (bull/bear/recovery, 2008–2025) |
@@ -261,8 +261,8 @@ See [TUNING_GUIDE.md](TUNING_GUIDE.md) for configuration details.
 | `INITIAL_CAPITAL` | 1,000,000,000 | ₹100 Crores |
 | `RISK_FREE_RATE` | 0.065 | 6.5% annual |
 | `TRADING_DAYS_PER_YEAR` | 252 | Standard for India |
-| `DEFAULT_TP_MODE` | `'fixed'` | Default TP calculation mode |
-| `DEFAULT_SL_MODE` | `'fixed'` | Default SL calculation mode |
+| `DEFAULT_TP_MODE` | `'flat'` | Default TP calculation mode |
+| `DEFAULT_SL_MODE` | `'flat'` | Default SL calculation mode |
 | `DEFAULT_ENTRY_PRICE_WINDOW` | 3 | Trading days averaged for entry |
 | `DEFAULT_SELECTION_TYPE` | `'category_based'` | Default stock selection method |
 | `DEFAULT_CATEGORY_SCHEME` | `'volatility'` | Default category grouping |

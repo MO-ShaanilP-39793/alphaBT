@@ -32,10 +32,10 @@ TP and SL modes can be configured **independently**, enabling mixed strategies (
 
 | Mode | Description | Requires |
 |------|-------------|----------|
-| `fixed` | Static percentage per category | `tp_config`, `sl_config`, `default_tpsl` |
+| `tiered` | Static percentage per category | `tiered_config` |
 | `flat` | Single percentage for all stocks | `flat_config` |
-| `atr` | Dynamic thresholds based on Average True Range | `atr_config` (falls back to `fixed` on failure) |
-| `pivot` | Dynamic thresholds based on pivot point S/R levels | `pivot_config` (falls back to `fixed` on failure) |
+| `atr` | Dynamic thresholds based on Average True Range | `atr_config` (falls back to `flat` on failure) |
+| `pivot` | Dynamic thresholds based on pivot point S/R levels | `pivot_config` (falls back to `flat` on failure) |
 
 ---
 
@@ -68,12 +68,12 @@ Where N = `entry_price_window` (default: 3). Only days with actual trading data 
 
 TP and SL thresholds are computed independently via `calculate_dynamic_thresholds()`:
 
-- **Fixed mode**: `tp_price = entry_price × (1 + tp_pct)`, `sl_price = entry_price × (1 - sl_pct)`
+- **Tiered mode**: `tp_price = entry_price × (1 + tp_pct)`, `sl_price = entry_price × (1 - sl_pct)`
 - **Flat mode**: Same formula, but a single percentage for all stocks
 - **ATR mode**: `tp_price = entry + (multiplier × ATR)`, `sl_price = entry - (multiplier × ATR)`
 - **Pivot mode**: TP = resistance level (R1/R2/R3), SL = support level (S1/S2/S3)
 
-If ATR or pivot calculation fails (insufficient data), the module automatically falls back to **fixed** mode.
+If ATR or pivot calculation fails (insufficient data), the module automatically falls back to **flat** mode.
 
 Optional **volatility adjustment**: If enabled, the threshold distances are scaled by a market-volatility multiplier.
 
@@ -101,27 +101,25 @@ For each trading day after entry:
 
 ## TP/SL Modes
 
-### Fixed Mode
+### Tiered Mode
 
-Static percentages looked up by category. The category column (`cat`) maps to per-category configs under `tp_config` / `sl_config`.
+Static percentages looked up by category. The category column (`cat`) maps to per-category configs under `tiered_config`.
 
 ```yaml
-tp_mode: 'fixed'
-sl_mode: 'fixed'
+tp_mode: 'tiered'
+sl_mode: 'tiered'
 category_scheme: 'volatility'   # or 'mcap'
-tp_config:
-  volatility:
+tiered_config:
+  tp_pct:
     low_volatility: 0.08
     medium_volatility: 0.10
     high_volatility: 0.12
-sl_config:
-  volatility:
+  sl_pct:
     low_volatility: 0.05
     medium_volatility: 0.07
     high_volatility: 0.10
-default_tpsl:
-  tp_pct: 0.10
-  sl_pct: 0.05
+  default_tp_pct: 0.10
+  default_sl_pct: 0.05
 ```
 
 ### Flat Mode
@@ -225,15 +223,15 @@ Parses a `YYYYMM` quarter string to determine the entry search start and mandato
 
 ---
 
-### `calculate_thresholds_fixed(entry_price, category_scheme, cat, tp_config, sl_config, default_tpsl)`
+### `calculate_thresholds_tiered(entry_price, category_scheme, cat, tiered_config)`
 
-Calculates fixed percentage-based TP/SL thresholds.
+Calculates tiered percentage-based TP/SL thresholds.
 
 **Returns:** `(tp_price, sl_price, tp_pct, sl_pct)`
 
 ---
 
-### `calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date, category_scheme, cat, tp_mode, sl_mode, index_df=None, *, atr_config, pivot_config, flat_config, index_exit_config, tp_config, sl_config, default_tpsl)`
+### `calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date, category_scheme, cat, tp_mode, sl_mode, index_df=None, *, atr_config, pivot_config, flat_config, index_exit_config, tiered_config)`
 
 Main threshold calculation function. Dispatches to the appropriate mode for each side (TP/SL) independently, applies volatility adjustment if enabled.
 
@@ -244,12 +242,12 @@ The `metadata_dict` contains:
 - `tp_pct`, `sl_pct` — effective percentages
 - `tp_atr`, `sl_atr` — ATR values (if ATR mode)
 - `tp_pivots`, `sl_pivots` — pivot dicts (if pivot mode)
-- `tp_fallback`, `sl_fallback` — set to `'fixed'` if a dynamic mode fell back
+- `tp_fallback`, `sl_fallback` — set to `'flat'` if a dynamic mode fell back
 - `vol_adjustment_multiplier` — if volatility adjustment was applied
 
 ---
 
-### `process_trade(row, price_df, category_scheme, index_df=None, tp_mode, sl_mode, tp_enabled, sl_enabled, entry_price_window, *, tp_config, sl_config, default_tpsl, atr_config, pivot_config, flat_config, index_exit_config)`
+### `process_trade(row, price_df, category_scheme, index_df=None, tp_mode, sl_mode, tp_enabled, sl_enabled, entry_price_window, *, tiered_config, atr_config, pivot_config, flat_config, index_exit_config)`
 
 Processes a single trade (one row from `selected_stocks`) through the full lifecycle: entry calculation → threshold computation → daily monitoring → exit.
 
@@ -257,7 +255,7 @@ Processes a single trade (one row from `selected_stocks`) through the full lifec
 
 ---
 
-### `simulate_trades(selected_stocks, price_data, category_scheme, index_data=None, tp_mode=None, sl_mode=None, tp_enabled=None, sl_enabled=None, tp_config=None, sl_config=None, default_tpsl=None, atr_config=None, pivot_config=None, flat_config=None, index_exit_config=None, entry_price_window=3)`
+### `simulate_trades(selected_stocks, price_data, category_scheme, index_data=None, tp_mode=None, sl_mode=None, tp_enabled=None, sl_enabled=None, tiered_config=None, atr_config=None, pivot_config=None, flat_config=None, index_exit_config=None, entry_price_window=3)`
 
 Main entry point — processes all trades in a portfolio. Applies `process_trade()` row-by-row and appends `stock_return` column.
 
@@ -277,14 +275,12 @@ Key config keys consumed by this module:
 
 | Config Key | Default | Description |
 |-----------|---------|-------------|
-| `tp_mode` | `'fixed'` | Take profit calculation mode |
-| `sl_mode` | `'fixed'` | Stop loss calculation mode |
+| `tp_mode` | `'flat'` | Take profit calculation mode |
+| `sl_mode` | `'flat'` | Stop loss calculation mode |
 | `tp_enabled` | `true` | Enable/disable take profit |
 | `sl_enabled` | `true` | Enable/disable stop loss |
 | `entry_price_window` | `3` | Trading days averaged for entry price |
-| `tp_config` | — | Per-category TP percentages (fixed mode) |
-| `sl_config` | — | Per-category SL percentages (fixed mode) |
-| `default_tpsl` | — | Fallback TP/SL percentages |
+| `tiered_config` | — | Tiered mode: per-category TP/SL percentages + defaults |
 | `atr_config` | — | ATR mode parameters |
 | `pivot_config` | — | Pivot mode parameters |
 | `flat_config` | — | Flat mode parameters |
@@ -297,8 +293,8 @@ Key config keys consumed by this module:
 1. **Insufficient entry data** — If fewer than N trading days exist after entry start, returns `None` values
 2. **No monitoring data** — If no price data between entry and mandatory exit, returns `entry_price` but `None` exit
 3. **Missing trading days** — Uses available trading days only (no assumption of continuous dates)
-4. **Dynamic mode failure** — ATR/pivot calculation failures fall back to fixed-mode thresholds automatically
-5. **No category column** — If `cat` column is missing, a `'_default'` placeholder is used and `default_tpsl` provides thresholds
+4. **Dynamic mode failure** — ATR/pivot calculation failures fall back to flat-mode thresholds automatically
+5. **No category column** — If `cat` column is missing, a `'_default'` placeholder is used and `default_tp_pct`/`default_sl_pct` in `tiered_config` provides thresholds
 6. **TP disabled / SL disabled** — When `tp_enabled: false` or `sl_enabled: false`, that side's threshold is not checked during monitoring
 
 ---

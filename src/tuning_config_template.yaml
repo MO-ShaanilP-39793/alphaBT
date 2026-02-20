@@ -128,8 +128,8 @@ search_space:
   #   type: categorical
   #   choices: ['volatility', 'mcap']
   
-  # tpsl_category_dimension: which dimension's categories are used for fixed
-  # TP/SL threshold lookup. Only relevant when tp_mode or sl_mode is 'fixed'.
+  # tpsl_category_dimension: which dimension's categories are used for tiered
+  # TP/SL threshold lookup. Only relevant when tp_mode or sl_mode is 'tiered'.
   #   'selection' → use selection_dimension categories (default)
   #   'weighting' → use weighting_dimension categories
   # Uncomment to enable tuning:
@@ -163,13 +163,13 @@ search_space:
   # When independent_tpsl_modes is false: one mode is sampled and used for both TP and SL
   # When independent_tpsl_modes is true: tp_mode and sl_mode are sampled independently
   #   from this same choices list
-  # - fixed: category-based thresholds 
+  # - tiered: per-category percentage thresholds 
   # - flat: uniform percentage for all stocks
   # - atr: ATR-based dynamic thresholds
   # - pivot: pivot point based thresholds
   tpsl_mode:
     type: categorical
-    choices: ['fixed', 'flat', 'atr', 'pivot']
+    choices: ['tiered', 'flat', 'atr', 'pivot']
 
 # =============================================================================
 # SELECTION TYPE-SPECIFIC SEARCH SPACES
@@ -194,9 +194,9 @@ top_k:
 # =============================================================================
 # These are only sampled when the corresponding tp_mode/sl_mode uses that mode.
 
-# Fixed TP/SL thresholds (sampled when tp_mode/sl_mode: 'fixed')
+# Tiered TP/SL thresholds (sampled when tp_mode/sl_mode: 'tiered')
 # Format: [cat1, cat2, cat3] matching category_scheme order
-fixed_tpsl:
+tiered_tpsl:
   tp_thresholds:
     type: categorical
     choices:

@@ -318,26 +318,26 @@ sl_enabled: false
 
 ---
 
-### Strategy 2: Fixed Percentage TP/SL
+### Strategy 2: Tiered Percentage TP/SL
 
 **Configuration**:
 ```yaml
 tp_enabled: true
 sl_enabled: true
-tp_mode: 'fixed'
-sl_mode: 'fixed'
+tp_mode: 'tiered'
+sl_mode: 'tiered'
 
-TP_CONFIG:
-  volatility:  # or 'mcap' depending on your categories
+tiered_config:
+  tp_pct:
     high_volatility: 0.10     # 10% TP for high-vol stocks
     medium_volatility: 0.05   # 5% TP for medium-vol
     low_volatility: 0.02      # 2% TP for low-vol
-
-SL_CONFIG:
-  volatility:
+  sl_pct:
     high_volatility: 0.10     # 10% SL for high-vol
     medium_volatility: 0.10   # 10% SL for medium-vol (same for all)
     low_volatility: 0.10
+  default_tp_pct: 0.05
+  default_sl_pct: 0.05
 ```
 
 **How it works**: Each stock gets **category-specific** TP/SL thresholds at entry.
@@ -400,7 +400,7 @@ flat_config:
 - You want a baseline TP/SL test
 - Your portfolio is already homogeneous (e.g., all large-caps)
 
-**Tip**: Start here if unsure, then evolve to fixed (category-based) or ATR (volatility-adaptive) if needed.
+**Tip**: Start here if unsure, then evolve to tiered (per-category) or ATR (volatility-adaptive) if needed.
 
 ---
 
@@ -654,10 +654,10 @@ Use this table to choose strategies based on your goals:
 |----------------|----------------------|------------------|-----------|
 | **Just getting started** | Top-K (k=30) | Flat TP/SL (5%/5%) | Simplest, no labels needed |
 | **Have volatility data** | Category-based (volatility) | ATR-based | Diversify by risk, adaptive exits |
-| **Have market cap labels** | Category-based (mcap) | Fixed TP/SL by category | Sector-style allocation |
+| **Have market cap labels** | Category-based (mcap) | Tiered TP/SL by category | Sector-style allocation |
 | **Model is very confident** | Top-K (probability) | Hold til quarter end | Trust signals, max time horizon |
-| **Model has false positives** | Top-K with `min_prob_threshold` | Fixed or Flat TP/SL | Filter weak signals, manage risk |
-| **Portfolio concentrates in one segment** | Category-based (equal weights) | Fixed TP/SL by category | Force diversification |
+| **Model has false positives** | Top-K with `min_prob_threshold` | Tiered or Flat TP/SL | Filter weak signals, manage risk |
+| **Portfolio concentrates in one segment** | Category-based (equal weights) | Tiered TP/SL by category | Force diversification |
 | **Stocks have very different volatility** | Top-K (risk-adjusted) | ATR-based | Balance risk across positions |
 | **Bear markets kill performance** | Any selection | Enable regime filter | Tactical exits in downturns |
 | **Market volatility varies a lot** | Any selection | Enable vol adjustment | Adapt bands to conditions |
@@ -697,7 +697,7 @@ START: Do you have category labels?
     │   └─ Pure diversification → category_based_selection_weighting_scheme: 'equal'
     │
     └─ Exit strategy?
-        ├─ Category-specific → tp_mode/sl_mode: 'fixed' (requires TP_CONFIG/SL_CONFIG)
+        ├─ Category-specific → tp_mode/sl_mode: 'tiered' (requires tiered_config)
         ├─ Uniform → tp_mode/sl_mode: 'flat'
         ├─ Volatility-aware → tp_mode/sl_mode: 'atr'
         └─ Technical → tp_mode/sl_mode: 'pivot'

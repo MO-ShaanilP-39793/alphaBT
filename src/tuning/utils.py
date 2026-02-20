@@ -44,11 +44,12 @@ from config.defaults import (
     DEFAULT_LOW_VOL_THRESHOLD,
     DEFAULT_HIGH_VOL_MULTIPLIER,
     DEFAULT_LOW_VOL_MULTIPLIER,
-    DEFAULT_FIXED_TP_THRESHOLDS,
-    DEFAULT_FIXED_SL_THRESHOLDS,
+    DEFAULT_TIERED_TP_THRESHOLDS,
+    DEFAULT_TIERED_SL_THRESHOLDS,
     DEFAULT_CALMAR_CAP,
     DEFAULT_INDEPENDENT_TPSL_MODES,
     DEFAULT_TPSL_CATEGORY_DIMENSION,
+    DEFAULT_TPSL_FALLBACK_PCT,
 )
 
 
@@ -190,14 +191,14 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
             params['sl_mode'] = shared_mode
     
     # category_scheme needs to be sampled if
-    # either tp_mode or sl_mode is 'fixed'
+    # either tp_mode or sl_mode is 'tiered'
     # or if run stock selection is True and selection type is category based
     # AND neither selection_dimension nor weighting_dimension is in the search space
     # (when the new dimension keys are present, category_scheme is no longer needed)
     has_new_dimensions = 'selection_dimension' in search_space or 'weighting_dimension' in search_space
     needs_category_scheme = (
         (run_stock_selection and selection_type == 'category_based' and not has_new_dimensions) or
-        (tp_mode == 'fixed') or (sl_mode == 'fixed')
+        (tp_mode == 'tiered') or (sl_mode == 'tiered')
     )
     
     # ----- Sample base parameters (excluding conditional ones) -----
@@ -217,8 +218,8 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
         # Skip category_weights when weighting scheme is 'equal' (weights are irrelevant)
         if name == 'category_weights' and cat_weighting_scheme == 'equal':
             continue
-        # Skip tpsl_category_dimension when both TP/SL modes are not 'fixed'
-        if name == 'tpsl_category_dimension' and tp_mode != 'fixed' and sl_mode != 'fixed':
+        # Skip tpsl_category_dimension when both TP/SL modes are not 'tiered'
+        if name == 'tpsl_category_dimension' and tp_mode != 'tiered' and sl_mode != 'tiered':
             continue
         params[name] = sample_parameter(trial, name, spec)
     
@@ -237,13 +238,13 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
     if sl_mode:
         active_modes.add(sl_mode)
     
-    # Fixed mode: sample thresholds per side
-    if 'fixed' in active_modes and 'fixed_tpsl' in tuning_config:
-        fixed_tpsl_config = tuning_config['fixed_tpsl']
-        if tp_enabled and tp_mode == 'fixed':
-            params['fixed_tp_thresholds'] = sample_parameter(trial, 'fixed_tp_thresholds', fixed_tpsl_config['tp_thresholds'])
-        if sl_enabled and sl_mode == 'fixed':
-            params['fixed_sl_thresholds'] = sample_parameter(trial, 'fixed_sl_thresholds', fixed_tpsl_config['sl_thresholds'])
+    # Tiered mode: sample thresholds per side
+    if 'tiered' in active_modes and 'tiered_tpsl' in tuning_config:
+        tiered_tpsl_config = tuning_config['tiered_tpsl']
+        if tp_enabled and tp_mode == 'tiered':
+            params['tiered_tp_thresholds'] = sample_parameter(trial, 'tiered_tp_thresholds', tiered_tpsl_config['tp_thresholds'])
+        if sl_enabled and sl_mode == 'tiered':
+            params['tiered_sl_thresholds'] = sample_parameter(trial, 'tiered_sl_thresholds', tiered_tpsl_config['sl_thresholds'])
     
     # ATR mode: shared period, per-side multipliers
     if 'atr' in active_modes and 'atr_tpsl' in tuning_config:
@@ -310,12 +311,25 @@ def _get_categories(category_scheme: str) -> list:
         return ['largecap', 'midcap', 'smallcap']
 
 
-def _build_tpsl_config(category_scheme: str, tp_thresholds: list, sl_thresholds: list) -> tuple:
-    """Build TP_CONFIG and SL_CONFIG dicts from threshold lists."""
+def _build_tiered_config(category_scheme: str, tp_thresholds: list, sl_thresholds: list) -> dict:
+    """Build tiered_config dict from threshold lists.
+    
+    Returns:
+        Dict with structure: {
+            'tp_pct': {cat_name: float, ...},
+            'sl_pct': {cat_name: float, ...},
+            'default_tp_pct': 0.05,
+            'default_sl_pct': 0.05,
+        }
+    """
     categories = _get_categories(category_scheme)
-    tp_config = {category_scheme: dict(zip(categories, tp_thresholds))}
-    sl_config = {category_scheme: dict(zip(categories, sl_thresholds))}
-    return tp_config, sl_config
+    tiered_config = {
+        'tp_pct': dict(zip(categories, tp_thresholds)),
+        'sl_pct': dict(zip(categories, sl_thresholds)),
+        'default_tp_pct': DEFAULT_TPSL_FALLBACK_PCT,
+        'default_sl_pct': DEFAULT_TPSL_FALLBACK_PCT,
+    }
+    return tiered_config
 
 
 def build_config(fixed_config: dict, sampled_params: dict) -> dict:
@@ -396,20 +410,21 @@ def build_config(fixed_config: dict, sampled_params: dict) -> dict:
         }
     }
     
-    # Build TP_CONFIG/SL_CONFIG (used when tp_mode or sl_mode == 'fixed')
-    tp_thresholds = get('fixed_tp_thresholds', DEFAULT_FIXED_TP_THRESHOLDS)
-    sl_thresholds = get('fixed_sl_thresholds', DEFAULT_FIXED_SL_THRESHOLDS)
-    
-    # Resolve which dimension to use for fixed TP/SL category keys
-    tpsl_cat_dim = config['tpsl_category_dimension']
-    if tpsl_cat_dim == 'selection':
-        tpsl_scheme = config['selection_dimension']
-    elif tpsl_cat_dim == 'weighting':
-        tpsl_scheme = config['weighting_dimension']
-    else:  # Direct dimension name: 'volatility' or 'mcap'
-        tpsl_scheme = tpsl_cat_dim
-    
-    config['TP_CONFIG'], config['SL_CONFIG'] = _build_tpsl_config(tpsl_scheme, tp_thresholds, sl_thresholds)
+    # Build tiered_config (only when tp_mode or sl_mode == 'tiered')
+    if config['tp_mode'] == 'tiered' or config['sl_mode'] == 'tiered':
+        tp_thresholds = get('tiered_tp_thresholds', DEFAULT_TIERED_TP_THRESHOLDS)
+        sl_thresholds = get('tiered_sl_thresholds', DEFAULT_TIERED_SL_THRESHOLDS)
+        
+        # Resolve which dimension to use for tiered TP/SL category keys
+        tpsl_cat_dim = config['tpsl_category_dimension']
+        if tpsl_cat_dim == 'selection':
+            tpsl_scheme = config['selection_dimension']
+        elif tpsl_cat_dim == 'weighting':
+            tpsl_scheme = config['weighting_dimension']
+        else:  # Direct dimension name: 'volatility' or 'mcap'
+            tpsl_scheme = tpsl_cat_dim
+        
+        config['tiered_config'] = _build_tiered_config(tpsl_scheme, tp_thresholds, sl_thresholds)
     
     return config
 

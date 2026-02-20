@@ -26,7 +26,7 @@ Comprehensive guide to strategy optimization using Optuna.
 A typical backtest has **dozens of parameters**:
 
 - **Stock selection**: k (20-50), category counts (many combinations), selection method (2 options), min threshold (0.4-0.8)
-- **TP/SL thresholds**: Fixed (3 categories × 2 values = 6 params), Flat (2 params), ATR (3 params), Pivot (3 params)
+- **TP/SL thresholds**: Tiered (3 categories × 2 values = 6 params), Flat (2 params), ATR (3 params), Pivot (3 params)
 - **Index exits**: MA period (10-50), thresholds (-0.01 to -0.05), multipliers (0.5-2.0)
 
 **Manual exploration**: Testing even 5 values per parameter across 10 parameters = **9,765,625 combinations**. Infeasible.
@@ -194,7 +194,7 @@ flat_tpsl:
 **How it works**:
 - Trial samples `selection_type: 'top_k'` → `k` is sampled from `top_k` section
 - Trial samples `selection_type: 'category_based'` → `k` is NOT sampled (not relevant)
-- This prevents invalid configurations (e.g., sampling ATR period when using fixed TP/SL)
+- This prevents invalid configurations (e.g., sampling ATR period when using tiered TP/SL)
 
 **Note**: The `tpsl_mode` search space key controls which mode-specific params are sampled. At runtime, the sampled mode is assigned to `tp_mode` and `sl_mode`. If `independent_tpsl_modes: true`, they are sampled separately.
 
@@ -204,7 +204,7 @@ flat_tpsl:
 ```yaml
 tpsl_mode:
   type: categorical
-  choices: ['fixed', 'flat', 'atr', 'pivot']
+  choices: ['tiered', 'flat', 'atr', 'pivot']
 ```
 - Use for: Strings, booleans, specific discrete values
 - Optuna samples uniformly from choices
