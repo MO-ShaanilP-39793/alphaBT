@@ -1301,7 +1301,6 @@ def generate_backtest_report(
             comparison_df, first_quarter, last_quarter, INITIAL_CAPITAL
         )
 
-    gow_chart = create_growth_of_wealth_chart(monthly_df, f"Growth of Rs 10,000 - {report_title}")
     drawdown_chart = create_daily_drawdown_chart(daily_pf)
     heatmap_chart = create_monthly_returns_heatmap(daily_pf)
     cy_heatmap = create_calendar_year_heatmap(calendar_df) if not calendar_df.empty else None
@@ -1415,37 +1414,26 @@ def generate_backtest_report(
         row_offset = 2
 
         if pf_vs_index_chart:
-            charts_sheet.write(row_offset - 1, 0, "Portfolio vs Index")
-            charts_sheet.insert_image(f'A{row_offset + 1}', "plot.png", {"image_data": pf_vs_index_chart})
+            charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": pf_vs_index_chart})
             row_offset += 40
 
-        charts_sheet.write(row_offset - 1, 0, "Growth of Wealth")
-        charts_sheet.insert_image(f'A{row_offset + 1}', "plot.png", {"image_data": gow_chart})
-        row_offset += 33
-
-        charts_sheet.write(row_offset - 1, 0, "Daily Drawdown")
-        charts_sheet.insert_image(f'A{row_offset + 1}', "plot.png", {"image_data": drawdown_chart})
+        charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": drawdown_chart})
         row_offset += 40
 
-        charts_sheet.write(row_offset - 1, 0, "Monthly Returns Heatmap")
-        charts_sheet.insert_image(f'A{row_offset + 1}', "plot.png", {"image_data": heatmap_chart})
+        charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": heatmap_chart})
         row_offset += 33
 
         if cy_heatmap:
-            charts_sheet.write(row_offset - 1, 0, "Calendar Year Returns Heatmap")
-            charts_sheet.insert_image(f'A{row_offset + 1}', "plot.png", {"image_data": cy_heatmap})
+            charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": cy_heatmap})
             row_offset += 22
 
-        charts_sheet.write(row_offset - 1, 0, "Correlation Matrix")
-        charts_sheet.insert_image(f'A{row_offset + 1}', "plot.png", {"image_data": corr_heatmap})
+        charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": corr_heatmap})
         row_offset += 22
 
-        charts_sheet.write(row_offset - 1, 0, "Distribution of Monthly Returns")
-        charts_sheet.insert_image(f'A{row_offset + 1}', "plot.png", {"image_data": bell_curve})
+        charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": bell_curve})
         row_offset += 33
 
-        charts_sheet.write(row_offset - 1, 0, "Box-Whisker Plot")
-        charts_sheet.insert_image(f'A{row_offset + 1}', "plot.png", {"image_data": box_plot})
+        charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": box_plot})
 
         # ----- Sheet: trade_results (raw data) -----
         trade_results.to_excel(
