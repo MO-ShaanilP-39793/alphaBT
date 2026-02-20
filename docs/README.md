@@ -1,6 +1,6 @@
 # Documentation Index
 
-> CCQPF — Quarterly Portfolio Backtesting Framework for Indian Equities
+> alphaBT — Quarterly Portfolio Backtesting Framework for Indian Equities
 
 ---
 

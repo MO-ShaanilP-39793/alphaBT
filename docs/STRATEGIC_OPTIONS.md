@@ -1,6 +1,6 @@
 # Strategic Options Guide
 
-This guide explains all the strategic choices available in CCQPF and helps you decide which strategies to use for your portfolio.
+This guide explains all the strategic choices available in alphaBT and helps you decide which strategies to use for your portfolio.
 
 ---
 
@@ -17,7 +17,7 @@ This guide explains all the strategic choices available in CCQPF and helps you d
 
 ## Introduction: The Quarterly Rebalancing Concept
 
-CCQPF operates on a **quarterly rebalancing** schedule, mirroring how many institutional portfolios work:
+alphaBT operates on a **quarterly rebalancing** schedule, mirroring how many institutional portfolios work:
 
 ```
 Quarter 1 (Feb-May)  → Select stocks → Trade → Exit → Evaluate
@@ -103,7 +103,7 @@ If you're coming from a pure ML/data science background, here are essential trad
 
 ## Stock Selection Strategies
 
-Every quarter, you need to decide **which stocks to buy** from the universe your ML model scored. CCQPF offers two main approaches:
+Every quarter, you need to decide **which stocks to buy** from the universe your ML model scored. alphaBT offers two main approaches:
 
 ### Strategy 1: Category-Based Selection
 
@@ -289,7 +289,7 @@ min_prob_threshold: null  # No filtering (use all stocks)
 
 ## Exit Strategies
 
-Once you've bought stocks, you need a plan for **when to sell**. CCQPF offers five main approaches:
+Once you've bought stocks, you need a plan for **when to sell**. alphaBT offers five main approaches:
 
 ### Strategy 1: Hold Until Quarter End
 
@@ -527,7 +527,7 @@ sl_enabled: true
 
 ## Advanced Exit Features
 
-Beyond basic TP/SL, CCQPF offers **index-guided exits** that react to broader market conditions:
+Beyond basic TP/SL, alphaBT offers **index-guided exits** that react to broader market conditions:
 
 ### Regime Filter (Market Downturn Protection)
 

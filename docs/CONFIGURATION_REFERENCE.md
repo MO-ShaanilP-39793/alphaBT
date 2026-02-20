@@ -1,6 +1,6 @@
 # Configuration Reference
 
-Complete guide to all configuration parameters in CCQPF. This is your YAML reference manual.
+Complete guide to all configuration parameters in alphaBT. This is your YAML reference manual.
 
 ---
 
@@ -17,7 +17,7 @@ Complete guide to all configuration parameters in CCQPF. This is your YAML refer
 
 ## Configuration File Overview
 
-CCQPF uses **two YAML configuration files**, each serving a different purpose:
+alphaBT uses **two YAML configuration files**, each serving a different purpose:
 
 | File | Purpose | When to Edit |
 |------|---------|--------------|
@@ -161,7 +161,7 @@ input_data_path: "../data/inference_data.csv"
 price_data_path: "../data/price_data/ohlcv.parquet"
 
 # Incorrect (absolute paths may break portability)
-input_data_path: "C:/Users/you/ccqpf/data/inference_data.csv"
+input_data_path: "C:/Users/you/alphaBT/data/inference_data.csv"
 ```
 
 **Why?** All scripts run from `src/` as the working directory: `cd src && python backtest_strategy.py`

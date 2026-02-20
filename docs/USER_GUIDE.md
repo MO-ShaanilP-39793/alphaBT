@@ -72,7 +72,7 @@ Before you begin, make sure you have:
 
 Place your files in the `data/` directory:
 ```
-ccqpf/
+alphaBT/
   data/
     inference_data.csv          # Your ML predictions
     price_data/ohlcv.parquet    # Historical prices
@@ -166,7 +166,7 @@ Navigate to `backtesting_results/run_<timestamp>/` to find:
 
 ## Understanding the Workflow
 
-CCQPF supports two main workflows:
+alphaBT supports two main workflows:
 
 ### Workflow A: Single Backtest (Strategic Exploration)
 

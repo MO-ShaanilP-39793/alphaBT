@@ -1,6 +1,6 @@
 # Outputs and Metrics Guide
 
-Complete guide to understanding CCQPF backtest results, reports, and performance metrics.
+Complete guide to understanding alphaBT backtest results, reports, and performance metrics.
 
 ---
 

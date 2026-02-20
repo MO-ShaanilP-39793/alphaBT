@@ -1,7 +1,7 @@
 """
 Centralized Default Values & Constants
 
-Every default value / hardcoded constant used across the CCQPF codebase lives
+Every default value / hardcoded constant used across the alphaBT codebase lives
 here.  All consumer modules should import from this file instead of defining
 inline fallbacks, ensuring a single source of truth.
 

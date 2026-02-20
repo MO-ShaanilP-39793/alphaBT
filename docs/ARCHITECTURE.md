@@ -1,6 +1,6 @@
 # Architecture
 
-> System overview, module inventory, data flows, and pipeline structure for the CCQPF backtesting framework.
+> System overview, module inventory, data flows, and pipeline structure for the alphaBT backtesting framework.
 
 ---
 

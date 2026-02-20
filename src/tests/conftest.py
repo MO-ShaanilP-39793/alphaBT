@@ -1,5 +1,5 @@
 """
-Shared pytest fixtures for CCQPF backtesting tests.
+Shared pytest fixtures for alphaBT backtesting tests.
 
 All synthetic data is deterministic — no randomness, no dependency on real data files.
 """
