@@ -22,6 +22,7 @@ from io import StringIO
 from selection import (
     select_and_weight_stocks_volatility, 
     select_and_weight_stocks_mcap,
+    select_and_weight_stocks,
     select_top_k_stocks,
     filter_tradeable_stocks,
     validate_price_data_coverage,
@@ -53,6 +54,7 @@ from config.defaults import (
     DEFAULT_ENTRY_PRICE_WINDOW,
     DEFAULT_TPSL_FALLBACK_PCT,
     DEFAULT_GENERATE_REPORT,
+    DEFAULT_TPSL_CATEGORY_DIMENSION,
 )
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for saving plots
@@ -172,13 +174,14 @@ def save_config_copy(config, output_dir):
 def run_stock_selection(input_data, category_scheme, category_counts, category_weights,
                         selection_method=DEFAULT_SELECTION_METHOD, min_prob_threshold=DEFAULT_MIN_PROB_THRESHOLD,
                         selection_type=DEFAULT_SELECTION_TYPE, top_k_config=None,
-                        category_based_weighting_scheme=DEFAULT_WEIGHTING_SCHEME):
+                        category_based_weighting_scheme=DEFAULT_WEIGHTING_SCHEME,
+                        selection_dimension=None, weighting_dimension=None):
     """
     Run stock selection based on the specified selection type and category scheme.
     
     Parameters:
     - input_data: DataFrame with stock data
-    - category_scheme: 'volatility' or 'mcap' (used for category_based selection)
+    - category_scheme: 'volatility' or 'mcap' (legacy; used as fallback for dimensions)
     - category_counts: [n1, n2, n3] stocks to select per category (category_based only)
     - category_weights: [w1, w2, w3] weights per category (category_based only,
       ignored when category_based_weighting_scheme is 'equal')
@@ -188,11 +191,14 @@ def run_stock_selection(input_data, category_scheme, category_counts, category_w
     - top_k_config: dict with 'k' and 'weighting_scheme' (top_k only)
     - category_based_weighting_scheme: 'use_category_weights' (default) or 'equal'
       Controls how capital is allocated for category_based selection.
+    - selection_dimension: 'volatility' or 'mcap' — axis to bucket/select by.
+      Defaults to category_scheme if None.
+    - weighting_dimension: 'volatility' or 'mcap' — axis to assign weights by.
+      Defaults to category_scheme if None.
     
     Returns:
     - DataFrame with selected stocks
-      - category_based (use_category_weights): [quarter, co_name, cat, cat_weight]
-      - category_based (equal): [quarter, co_name, cat, stock_weight]
+      - category_based: [quarter, co_name, cat, selection_cat, cat_weight/stock_weight]
       - top_k: [quarter, co_name, stock_weight] (+ cat if category in input)
     """
     if selection_type == 'top_k':
@@ -207,26 +213,20 @@ def run_stock_selection(input_data, category_scheme, category_counts, category_w
             weighting_scheme=top_k_config.get('weighting_scheme', DEFAULT_TOP_K_WEIGHTING)
         )
     elif selection_type == 'category_based':
-        if category_scheme == 'volatility':
-            return select_and_weight_stocks_volatility(
-                input_data, 
-                selection_counts=category_counts, 
-                category_weights=category_weights,
-                selection_method=selection_method,
-                min_prob_threshold=min_prob_threshold,
-                weighting_scheme=category_based_weighting_scheme
-            )
-        elif category_scheme == 'mcap':
-            return select_and_weight_stocks_mcap(
-                input_data, 
-                lms_count=category_counts, 
-                lms_w=category_weights,
-                selection_method=selection_method,
-                min_prob_threshold=min_prob_threshold,
-                weighting_scheme=category_based_weighting_scheme
-            )
-        else:
-            raise ValueError(f"Unknown category_scheme: {category_scheme}. Use 'volatility' or 'mcap'.")
+        # Resolve dimensions (backward compatible: fall back to category_scheme)
+        sel_dim = selection_dimension if selection_dimension is not None else category_scheme
+        wgt_dim = weighting_dimension if weighting_dimension is not None else category_scheme
+        
+        return select_and_weight_stocks(
+            input_data,
+            selection_dimension=sel_dim,
+            weighting_dimension=wgt_dim,
+            selection_counts=category_counts,
+            category_weights=category_weights,
+            selection_method=selection_method,
+            min_prob_threshold=min_prob_threshold,
+            weighting_scheme=category_based_weighting_scheme,
+        )
     else:
         raise ValueError(f"Unknown selection_type: {selection_type}. Use 'category_based' or 'top_k'.")
 
@@ -338,6 +338,30 @@ def backtest_core(
         last_quarter = config.get('last_quarter')
         category_scheme = config.get('category_scheme', DEFAULT_CATEGORY_SCHEME)
         
+        # Cross-dimensional selection/weighting (backward compatible: fall back to category_scheme)
+        selection_dimension = config.get('selection_dimension', category_scheme)
+        weighting_dimension = config.get('weighting_dimension', category_scheme)
+        tpsl_category_dimension = config.get('tpsl_category_dimension', DEFAULT_TPSL_CATEGORY_DIMENSION)
+        
+        # Resolve the actual TP/SL category scheme and column name
+        if tpsl_category_dimension == 'selection':
+            tpsl_scheme = selection_dimension
+        elif tpsl_category_dimension == 'weighting':
+            tpsl_scheme = weighting_dimension
+        elif tpsl_category_dimension in ('volatility', 'mcap'):
+            tpsl_scheme = tpsl_category_dimension
+        else:
+            raise ValueError(f"tpsl_category_dimension must be 'selection', 'weighting', 'volatility', or 'mcap', got '{tpsl_category_dimension}'")
+        
+        # Validate that tpsl_scheme is covered by at least one dimension
+        if tpsl_scheme not in (selection_dimension, weighting_dimension):
+            raise ValueError(
+                f"tpsl_category_dimension resolves to '{tpsl_scheme}', but neither "
+                f"selection_dimension ('{selection_dimension}') nor weighting_dimension "
+                f"('{weighting_dimension}') uses this dimension. Cannot produce "
+                f"correct TP/SL category labels."
+            )
+        
         # Stock selection mode
         run_stock_selection_flag = config.get('run_stock_selection', DEFAULT_RUN_STOCK_SELECTION)
         
@@ -421,7 +445,9 @@ def backtest_core(
                 min_prob_threshold=min_prob_threshold,
                 selection_type=selection_type,
                 top_k_config=top_k_config,
-                category_based_weighting_scheme=category_based_weighting_scheme
+                category_based_weighting_scheme=category_based_weighting_scheme,
+                selection_dimension=selection_dimension,
+                weighting_dimension=weighting_dimension
             )
             if verbose:
                 print(f"  - Selected stocks: {len(selected_stocks)} positions across all quarters")
@@ -469,11 +495,22 @@ def backtest_core(
         if verbose:
             print("\n[3/4] Simulating trades with TP/SL thresholds...")
         
+        # Set up tpsl_cat column for TP/SL category lookup
+        # When selection and weighting dimensions differ, the TP/SL lookup dimension
+        # is controlled by tpsl_category_dimension
+        if 'selection_cat' in selected_stocks.columns:
+            if tpsl_category_dimension in ('selection', selection_dimension):
+                selected_stocks['tpsl_cat'] = selected_stocks['selection_cat']
+            else:
+                # tpsl uses weighting dimension or an explicitly specified one matching it
+                selected_stocks['tpsl_cat'] = selected_stocks['cat']
+        # else: top_k or preselected mode — no tpsl_cat needed, process_trade falls back to 'cat'
+        
         # Get configs from strategy config
         trade_results = simulate_trades(
             selected_stocks,
             price_data,
-            category_scheme,
+            tpsl_scheme,
             index_data=index_data,
             tp_mode=tp_mode,
             sl_mode=sl_mode,
@@ -557,7 +594,12 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
     index_data_path = config['index_data_path']
     first_quarter = config['first_quarter']
     last_quarter = config['last_quarter']
-    category_scheme = config['category_scheme']
+    category_scheme = config.get('category_scheme', DEFAULT_CATEGORY_SCHEME)
+    
+    # Cross-dimensional selection/weighting
+    selection_dimension = config.get('selection_dimension', category_scheme)
+    weighting_dimension = config.get('weighting_dimension', category_scheme)
+    tpsl_category_dimension = config.get('tpsl_category_dimension', DEFAULT_TPSL_CATEGORY_DIMENSION)
     
     # Stock selection mode (new: can skip selection for preselected portfolios)
     run_stock_selection_flag = config.get('run_stock_selection', DEFAULT_RUN_STOCK_SELECTION)
@@ -586,6 +628,10 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
     print(f"  - Index data: {index_data_path}")
     print(f"  - Quarter range: {first_quarter} to {last_quarter}")
     print(f"  - Category scheme: {category_scheme}")
+    if selection_dimension != category_scheme or weighting_dimension != category_scheme:
+        print(f"  - Selection dimension: {selection_dimension}")
+        print(f"  - Weighting dimension: {weighting_dimension}")
+        print(f"  - TP/SL category dimension: {tpsl_category_dimension}")
     print(f"  - Run stock selection: {run_stock_selection_flag}")
     
     if run_stock_selection_flag:

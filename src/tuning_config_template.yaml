@@ -103,6 +103,40 @@ search_space:
     type: categorical
     choices: ['use_category_weights', 'equal']
   
+  # -------------------------------------------------------------------------
+  # Cross-Dimensional Selection/Weighting (optional, category_based only)
+  # -------------------------------------------------------------------------
+  # These enable independent control of which dimension is used for stock
+  # selection vs. capital weighting. When omitted, both default to category_scheme.
+  #
+  # selection_dimension: which axis to bucket stocks by for selection
+  #   'volatility' → tercile-based (high/med/low volatility)
+  #   'mcap' → market-cap based (largecap/midcap/smallcap)
+  #
+  # weighting_dimension: which axis to allocate capital by
+  #   Same choices as selection_dimension.
+  #
+  # Cross-dimensional example: select by volatility, weight by mcap
+  #   → Stocks are picked from volatility buckets using category_counts,
+  #     but capital is allocated across mcap groups using category_weights.
+  #
+  # Uncomment to enable cross-dimensional tuning:
+  # selection_dimension:
+  #   type: categorical
+  #   choices: ['volatility', 'mcap']
+  # weighting_dimension:
+  #   type: categorical
+  #   choices: ['volatility', 'mcap']
+  
+  # tpsl_category_dimension: which dimension's categories are used for fixed
+  # TP/SL threshold lookup. Only relevant when tp_mode or sl_mode is 'fixed'.
+  #   'selection' → use selection_dimension categories (default)
+  #   'weighting' → use weighting_dimension categories
+  # Uncomment to enable tuning:
+  # tpsl_category_dimension:
+  #   type: categorical
+  #   choices: ['selection', 'weighting']
+  
   # Stock ranking method
   selection_method:
     type: categorical

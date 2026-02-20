@@ -48,6 +48,7 @@ from config.defaults import (
     DEFAULT_FIXED_SL_THRESHOLDS,
     DEFAULT_CALMAR_CAP,
     DEFAULT_INDEPENDENT_TPSL_MODES,
+    DEFAULT_TPSL_CATEGORY_DIMENSION,
 )
 
 
@@ -128,11 +129,16 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
         'min_prob_threshold',
         'category_counts',
         'category_weights',
-        'category_based_selection_weighting_scheme'
+        'category_based_selection_weighting_scheme',
+        'selection_dimension',
+        'weighting_dimension',
     }
     
     # Create set of params that need to be sampled only when selection_type is 'category_based'
-    category_based_only_params = {'category_counts', 'category_weights', 'category_based_selection_weighting_scheme'}
+    category_based_only_params = {
+        'category_counts', 'category_weights', 'category_based_selection_weighting_scheme',
+        'selection_dimension', 'weighting_dimension',
+    }
     
     # ----- Sample key parameters first to enable conditional sampling -----
     
@@ -186,7 +192,13 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
     # category_scheme needs to be sampled if
     # either tp_mode or sl_mode is 'fixed'
     # or if run stock selection is True and selection type is category based
-    needs_category_scheme = (run_stock_selection and selection_type == 'category_based') or (tp_mode == 'fixed') or (sl_mode == 'fixed')
+    # AND neither selection_dimension nor weighting_dimension is in the search space
+    # (when the new dimension keys are present, category_scheme is no longer needed)
+    has_new_dimensions = 'selection_dimension' in search_space or 'weighting_dimension' in search_space
+    needs_category_scheme = (
+        (run_stock_selection and selection_type == 'category_based' and not has_new_dimensions) or
+        (tp_mode == 'fixed') or (sl_mode == 'fixed')
+    )
     
     # ----- Sample base parameters (excluding conditional ones) -----
     for name, spec in search_space.items():
@@ -204,6 +216,9 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
             continue
         # Skip category_weights when weighting scheme is 'equal' (weights are irrelevant)
         if name == 'category_weights' and cat_weighting_scheme == 'equal':
+            continue
+        # Skip tpsl_category_dimension when both TP/SL modes are not 'fixed'
+        if name == 'tpsl_category_dimension' and tp_mode != 'fixed' and sl_mode != 'fixed':
             continue
         params[name] = sample_parameter(trial, name, spec)
     
@@ -337,6 +352,11 @@ def build_config(fixed_config: dict, sampled_params: dict) -> dict:
     config['selection_method'] = get('selection_method', DEFAULT_SELECTION_METHOD)
     config['min_prob_threshold'] = get('min_prob_threshold')
 
+    # Cross-dimensional selection/weighting: fall back to category_scheme when not specified
+    config['selection_dimension'] = get('selection_dimension', config['category_scheme'])
+    config['weighting_dimension'] = get('weighting_dimension', config['category_scheme'])
+    config['tpsl_category_dimension'] = get('tpsl_category_dimension', DEFAULT_TPSL_CATEGORY_DIMENSION)
+
     # Fill out TP SL params
     config['tp_enabled'] = get('tp_enabled', DEFAULT_TP_ENABLED)
     config['sl_enabled'] = get('sl_enabled', DEFAULT_SL_ENABLED)
@@ -380,7 +400,16 @@ def build_config(fixed_config: dict, sampled_params: dict) -> dict:
     tp_thresholds = get('fixed_tp_thresholds', DEFAULT_FIXED_TP_THRESHOLDS)
     sl_thresholds = get('fixed_sl_thresholds', DEFAULT_FIXED_SL_THRESHOLDS)
     
-    config['TP_CONFIG'], config['SL_CONFIG'] = _build_tpsl_config(config['category_scheme'], tp_thresholds, sl_thresholds)
+    # Resolve which dimension to use for fixed TP/SL category keys
+    tpsl_cat_dim = config['tpsl_category_dimension']
+    if tpsl_cat_dim == 'selection':
+        tpsl_scheme = config['selection_dimension']
+    elif tpsl_cat_dim == 'weighting':
+        tpsl_scheme = config['weighting_dimension']
+    else:  # Direct dimension name: 'volatility' or 'mcap'
+        tpsl_scheme = tpsl_cat_dim
+    
+    config['TP_CONFIG'], config['SL_CONFIG'] = _build_tpsl_config(tpsl_scheme, tp_thresholds, sl_thresholds)
     
     return config
 

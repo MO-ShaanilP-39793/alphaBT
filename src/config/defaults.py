@@ -37,6 +37,11 @@ DEFAULT_SELECTION_METHOD = 'probability'
 DEFAULT_MIN_PROB_THRESHOLD = None
 DEFAULT_WEIGHTING_SCHEME = 'use_category_weights'
 
+# Cross-dimensional selection/weighting
+# Controls which dimension TP/SL fixed-mode config uses: 'selection', 'weighting',
+# or explicit 'volatility'/'mcap'. Defaults to 'selection' (legacy behavior).
+DEFAULT_TPSL_CATEGORY_DIMENSION = 'selection'
+
 # Top-k selection
 DEFAULT_TOP_K = 30
 DEFAULT_TOP_K_WEIGHTING = 'equal'

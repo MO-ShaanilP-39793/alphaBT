@@ -320,7 +320,9 @@ def process_trade(row, price_df, category_scheme, index_df=None,
     """
     co_name = row['co_name']
     quarter = str(row['quarter'])
-    cat = row['cat']
+    # Use tpsl_cat for TP/SL threshold lookup if present (cross-dimensional mode),
+    # otherwise fall back to cat (standard mode)
+    cat = row['tpsl_cat'] if 'tpsl_cat' in row.index else row['cat']
     
     # Result columns
     result_cols = ['entry_date', 'exit_date', 'entry_price', 'exit_price', 

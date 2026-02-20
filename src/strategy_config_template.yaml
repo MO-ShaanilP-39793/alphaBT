@@ -33,6 +33,24 @@ selection_type: 'category_based'
 # Also used for TP/SL threshold lookup when tp_mode/sl_mode is 'fixed' and category column exists
 category_scheme: 'volatility'  # choose from 'volatility' or 'mcap'
 
+# Cross-dimensional selection/weighting (optional, advanced)
+# By default both dimensions inherit from category_scheme above.
+# Set these to decouple which axis stocks are selected by vs weighted by.
+# Supported combinations:
+#   1. selection_dimension: volatility + weighting_dimension: volatility  (default)
+#   2. selection_dimension: mcap      + weighting_dimension: mcap         (default with category_scheme: mcap)
+#   3. selection_dimension: volatility + weighting_dimension: mcap         (NEW: select by vol, weight by mcap)
+#   4. selection_dimension: mcap      + weighting_dimension: volatility    (NEW: select by mcap, weight by vol)
+# Cross-dimensional combos require BOTH 'volatility' AND 'category' columns in input data.
+# selection_dimension: 'volatility'
+# weighting_dimension: 'volatility'
+
+# Controls which dimension fixed-mode TP/SL thresholds are keyed by.
+# Only relevant when tp_mode/sl_mode is 'fixed' and selection/weighting dimensions differ.
+# Options: 'selection', 'weighting', 'volatility', 'mcap'
+# Default: 'selection' (TP/SL uses the same categories stocks were selected into)
+# tpsl_category_dimension: 'selection'
+
 # -----------------------------------------------------------------------------
 # Category-based selection config (used when selection_type: 'category_based')
 # -----------------------------------------------------------------------------
