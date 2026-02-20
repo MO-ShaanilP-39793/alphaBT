@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+testpaths = ["src/tests"]
+pythonpath = ["src"]
+filterwarnings = [
+    "ignore::UserWarning",
+]
