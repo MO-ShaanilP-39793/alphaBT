@@ -1415,13 +1415,13 @@ def generate_backtest_report(
 
         if pf_vs_index_chart:
             charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": pf_vs_index_chart})
-            row_offset += 40
+            row_offset += 50
 
         charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": drawdown_chart})
         row_offset += 40
 
         charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": heatmap_chart})
-        row_offset += 33
+        row_offset += 22
 
         if cy_heatmap:
             charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": cy_heatmap})
