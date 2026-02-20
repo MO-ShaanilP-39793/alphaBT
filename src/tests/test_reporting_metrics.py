@@ -171,9 +171,9 @@ class TestCalmarRatio:
             assert abs(metrics["calmar_ratio"] - expected_calmar) < 0.01
 
     def test_calmar_zero_drawdown(self, constant_portfolio):
-        """Zero drawdown → Calmar = 0 (guarded division)."""
+        """Zero drawdown → Calmar capped at max (excellent performance)."""
         metrics = compute_portfolio_metrics(constant_portfolio)
-        assert metrics["calmar_ratio"] == 0.0
+        assert metrics["calmar_ratio"] == 10.0
 
 
 # =============================================================================

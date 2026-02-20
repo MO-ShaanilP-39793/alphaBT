@@ -260,6 +260,94 @@ def calculate_dynamic_thresholds(price_df, co_name, entry_price, entry_date,
     return tp_price, sl_price, metadata
 
 
+# Result columns used by process_trade
+_RESULT_COLS = [
+    'entry_date', 'exit_date', 'entry_price', 'exit_price',
+    'holding_period', 'SL_triggered', 'TP_triggered',
+    'regime_exit', 'tp_pct_used', 'sl_pct_used',
+]
+
+
+def _resolve_entry(co_prices, entry_start_limit, entry_price_window):
+    """Calculate entry price and date from the first N trading days.
+
+    Returns:
+        Tuple of (entry_price, entry_date, last_entry_calc_date) or (None, None, None) if
+        insufficient price data.
+    """
+    potential_entry_days = co_prices[co_prices['date'] >= entry_start_limit]
+
+    if len(potential_entry_days) < entry_price_window:
+        return None, None, None
+
+    entry_window = potential_entry_days.iloc[:entry_price_window]
+    entry_price = entry_window['close'].mean()
+    entry_date = entry_window.iloc[entry_price_window // 2]['date']
+    last_entry_calc_date = entry_window.iloc[-1]['date']
+
+    return entry_price, entry_date, last_entry_calc_date
+
+
+def _resolve_exit(
+    monitoring_df, tp_price, sl_price, entry_date,
+    index_df, index_exit_config,
+):
+    """Walk the monitoring window and determine exit conditions.
+
+    Returns:
+        Tuple of (exit_date, exit_price, sl_triggered, tp_triggered, regime_exit, holding_period).
+        exit_date may be None if monitoring_df is empty with no TP/SL hit.
+    """
+    sl_triggered = False
+    tp_triggered = False
+    regime_exit = False
+    exit_date = None
+    exit_price = None
+
+    # Get regime filter config
+    regime_config = index_exit_config.get('regime_filter', {})
+    regime_filter_enabled = regime_config.get('enabled', False) and index_df is not None
+
+    for idx, day_data in monitoring_df.iterrows():
+        current_date = day_data['date']
+
+        # Check regime exit first (market downturn)
+        if regime_filter_enabled:
+            if check_regime_exit_signal(
+                index_df, current_date,
+                ma_period=regime_config.get('ma_period', DEFAULT_REGIME_MA_PERIOD),
+                exit_threshold=regime_config.get('exit_threshold', DEFAULT_REGIME_EXIT_THRESHOLD),
+            ):
+                exit_date = current_date
+                exit_price = day_data['close']
+                regime_exit = True
+                break
+
+        # Check Stop Loss (against Low)
+        if sl_price is not None and day_data['low'] <= sl_price:
+            exit_date = current_date
+            exit_price = sl_price
+            sl_triggered = True
+            break
+
+        # Check Take Profit (against High)
+        if tp_price is not None and day_data['high'] >= tp_price:
+            exit_date = current_date
+            exit_price = tp_price
+            tp_triggered = True
+            break
+
+    # Time exit — if no TP/SL/Regime triggered
+    if exit_date is None and not monitoring_df.empty:
+        last_day = monitoring_df.iloc[-1]
+        exit_date = last_day['date']
+        exit_price = last_day['close']
+
+    holding_period = (exit_date - entry_date).days if exit_date is not None else None
+
+    return exit_date, exit_price, sl_triggered, tp_triggered, regime_exit, holding_period
+
+
 def process_trade(row, price_df, category_scheme, index_df=None,
                    tp_mode=DEFAULT_TP_MODE, sl_mode=DEFAULT_SL_MODE,
                    tp_enabled=DEFAULT_TP_ENABLED, sl_enabled=DEFAULT_SL_ENABLED, entry_price_window=DEFAULT_ENTRY_PRICE_WINDOW,
@@ -289,15 +377,9 @@ def process_trade(row, price_df, category_scheme, index_df=None,
     """
     co_name = row['co_name']
     quarter = str(row['quarter'])
-    # Use tpsl_cat for TP/SL threshold lookup if present (cross-dimensional mode),
-    # otherwise fall back to cat (standard mode)
     cat = row['tpsl_cat'] if 'tpsl_cat' in row.index else row['cat']
     
-    # Result columns
-    result_cols = ['entry_date', 'exit_date', 'entry_price', 'exit_price', 
-                   'holding_period', 'SL_triggered', 'TP_triggered', 
-                   'regime_exit', 'tp_pct_used', 'sl_pct_used']
-    null_result = pd.Series([None] * len(result_cols), index=result_cols)
+    null_result = pd.Series([None] * len(_RESULT_COLS), index=_RESULT_COLS)
     
     # 1. Get Date Boundaries
     entry_start_limit, mandatory_exit_limit = get_quarter_dates(quarter)
@@ -305,22 +387,14 @@ def process_trade(row, price_df, category_scheme, index_df=None,
     # Filter price data for this company
     co_prices = price_df[price_df['co_name'] == co_name].sort_values('date')
     
-    # ---------------------------------------------
-    # CALCULATE ENTRY
-    # ---------------------------------------------
-    potential_entry_days = co_prices[co_prices['date'] >= entry_start_limit]
-    
-    if len(potential_entry_days) < entry_price_window:
+    # 2. Calculate Entry
+    entry_price, entry_date, last_entry_calc_date = _resolve_entry(
+        co_prices, entry_start_limit, entry_price_window,
+    )
+    if entry_price is None:
         return null_result
     
-    entry_window = potential_entry_days.iloc[:entry_price_window]
-    entry_price = entry_window['close'].mean()
-    entry_date = entry_window.iloc[entry_price_window // 2]['date']
-    last_entry_calc_date = entry_window.iloc[-1]['date']
-    
-    # ---------------------------------------------
-    # CALCULATE THRESHOLDS (only if TP or SL is enabled)
-    # ---------------------------------------------
+    # 3. Calculate Thresholds (only if TP or SL is enabled)
     tp_price = None
     sl_price = None
     tp_pct_used = None
@@ -338,76 +412,35 @@ def process_trade(row, price_df, category_scheme, index_df=None,
         if tp_enabled:
             tp_pct_used = threshold_metadata.get('tp_pct', DEFAULT_TPSL_FALLBACK_PCT)
         else:
-            tp_price = None  # Disable TP threshold
+            tp_price = None
             
         if sl_enabled:
             sl_pct_used = threshold_metadata.get('sl_pct', DEFAULT_TPSL_FALLBACK_PCT)
         else:
-            sl_price = None  # Disable SL threshold
+            sl_price = None
     
-    # ---------------------------------------------
-    # CALCULATE EXIT
-    # ---------------------------------------------
+    # 4. Calculate Exit
     monitoring_df = co_prices[
         (co_prices['date'] > last_entry_calc_date) & 
         (co_prices['date'] <= mandatory_exit_limit)
     ]
     
-    exit_date = None
-    exit_price = None
-    sl_triggered = False
-    tp_triggered = False
-    regime_exit = False
-    
-    # Get regime filter config
-    regime_config = index_exit_config.get('regime_filter', {})
-    regime_filter_enabled = regime_config.get('enabled', False) and index_df is not None
-    
-    # Iterate through days to check for TP/SL and regime exits
-    for idx, day_data in monitoring_df.iterrows():
-        current_date = day_data['date']
-        
-        # Check regime exit first (market downturn)
-        if regime_filter_enabled:
-            if check_regime_exit_signal(
-                index_df, current_date,
-                ma_period=regime_config.get('ma_period', DEFAULT_REGIME_MA_PERIOD),
-                exit_threshold=regime_config.get('exit_threshold', DEFAULT_REGIME_EXIT_THRESHOLD)
-            ):
-                exit_date = current_date
-                exit_price = day_data['close']  # Exit at close
-                regime_exit = True
-                break
-        
-        # Check Stop Loss (Priority: checked against Low) - only if SL is enabled
-        if sl_price is not None and day_data['low'] <= sl_price:
-            exit_date = current_date
-            exit_price = sl_price
-            sl_triggered = True
-            break
-            
-        # Check Take Profit (Checked against High) - only if TP is enabled
-        if tp_price is not None and day_data['high'] >= tp_price:
-            exit_date = current_date
-            exit_price = tp_price
-            tp_triggered = True
-            break
-            
-    # If loop finishes without TP/SL/Regime, use Time Exit
+    exit_date, exit_price, sl_triggered, tp_triggered, regime_exit, holding_period = _resolve_exit(
+        monitoring_df, tp_price, sl_price, entry_date,
+        index_df, index_exit_config,
+    )
+
     if exit_date is None:
-        if not monitoring_df.empty:
-            last_day = monitoring_df.iloc[-1]
-            exit_date = last_day['date']
-            exit_price = last_day['close']
-        else:
-            return pd.Series([entry_date, None, entry_price, None, None, None, None, None, tp_pct_used, sl_pct_used], 
-                           index=result_cols)
+        return pd.Series(
+            [entry_date, None, entry_price, None, None, None, None, None, tp_pct_used, sl_pct_used],
+            index=_RESULT_COLS,
+        )
 
-    holding_period = (exit_date - entry_date).days
-
-    return pd.Series([entry_date, exit_date, entry_price, exit_price, holding_period, 
-                      sl_triggered, tp_triggered, regime_exit, tp_pct_used, sl_pct_used], 
-                     index=result_cols)
+    return pd.Series(
+        [entry_date, exit_date, entry_price, exit_price, holding_period,
+         sl_triggered, tp_triggered, regime_exit, tp_pct_used, sl_pct_used],
+        index=_RESULT_COLS,
+    )
 
 
 def simulate_trades(
@@ -531,20 +564,28 @@ def simulate_trades(
     # Sort the selected_stocks data
     selected_stocks = selected_stocks.sort_values(by=['quarter', 'co_name'], ignore_index=True)
     
-    # Apply the logic row by row
-    results = selected_stocks.apply(
-        lambda row: process_trade(
+    # Process trades via itertuples (faster than .apply(axis=1) — avoids per-row
+    # Series construction overhead). Each iteration yields a namedtuple that we
+    # convert to a dict-like row for process_trade.
+    # TODO: vectorize inner loop for further performance gains
+    trade_results = []
+    cols = selected_stocks.columns.tolist()
+    for tup in selected_stocks.itertuples(index=False):
+        row = pd.Series(tup, index=cols)
+        result = process_trade(
             row, price_data, category_scheme, index_df,
             resolved_tp_mode, resolved_sl_mode,
             use_tp, use_sl, entry_price_window,
             tiered_config=tiered_config, atr_config=atr_config,
             pivot_config=pivot_config, flat_config=flat_config,
-            index_exit_config=index_exit_config),
-        axis=1
-    )
+            index_exit_config=index_exit_config,
+        )
+        trade_results.append(result)
+    
+    results = pd.DataFrame(trade_results)
     
     # Concatenate the generated columns back to original dataframe
-    final_df = pd.concat([selected_stocks, results], axis=1)
+    final_df = pd.concat([selected_stocks.reset_index(drop=True), results.reset_index(drop=True)], axis=1)
     
     # Calculate stock return
     final_df['stock_return'] = (final_df['exit_price'] - final_df['entry_price']) / final_df['entry_price']

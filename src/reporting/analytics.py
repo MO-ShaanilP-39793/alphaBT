@@ -1,9 +1,11 @@
 """Returns-based performance analytics and trade-level analysis."""
 
+from typing import Optional
+
 import pandas as pd
 import numpy as np
 
-from backtest.regime_dates import CRISIS_REGIMES, MARKET_REGIMES
+from config.regime_dates import CRISIS_REGIMES, MARKET_REGIMES
 from utils.quarter import get_quarter_dates
 from utils.logging_config import get_logger
 
@@ -24,7 +26,7 @@ from ._helpers import (
 )
 
 
-def compute_portfolio_performance(returns_df, input_frequency="daily", start_year=None, end_year=None):
+def compute_portfolio_performance(returns_df: pd.DataFrame, input_frequency: str = "daily", start_year: Optional[int] = None, end_year: Optional[int] = None) -> pd.DataFrame:
     """
     Compute comprehensive portfolio performance metrics from daily returns.
 
@@ -83,7 +85,7 @@ def compute_portfolio_performance(returns_df, input_frequency="daily", start_yea
     return strategy_returns_df.transpose()
 
 
-def compute_rolling_performance(returns_df, input_frequency="daily", roll_period=1, roll_type="yearly"):
+def compute_rolling_performance(returns_df: pd.DataFrame, input_frequency: str = "daily", roll_period: int = 1, roll_type: str = "yearly") -> pd.DataFrame:
     """Compute rolling returns statistics with probability distributions."""
     input_frequency = input_frequency.strip().lower()
     roll_type = roll_type.strip().lower()
@@ -113,7 +115,7 @@ def compute_rolling_performance(returns_df, input_frequency="daily", roll_period
     return summary_df.transpose()
 
 
-def compute_calendar_year_performance(returns_df, input_frequency="daily"):
+def compute_calendar_year_performance(returns_df: pd.DataFrame, input_frequency: str = "daily") -> pd.DataFrame:
     """Compute calendar year returns."""
     input_frequency = input_frequency.strip().lower()
     if input_frequency not in ["daily", "monthly"]:
@@ -141,7 +143,7 @@ def compute_calendar_year_performance(returns_df, input_frequency="daily"):
     return summary_df
 
 
-def compute_trailing_returns(returns_df, input_frequency="daily"):
+def compute_trailing_returns(returns_df: pd.DataFrame, input_frequency: str = "daily") -> pd.DataFrame:
     """Compute point-in-time trailing returns."""
     timeline_factor = _annualization_factor(input_frequency)
 
@@ -178,7 +180,7 @@ def compute_trailing_returns(returns_df, input_frequency="daily"):
     return summary_df.T
 
 
-def compute_monthly_returns_from_daily(returns_df, input_frequency="daily"):
+def compute_monthly_returns_from_daily(returns_df: pd.DataFrame, input_frequency: str = "daily") -> pd.DataFrame:
     """Convert daily returns to monthly returns."""
     if input_frequency == "monthly":
         return returns_df.copy()
@@ -203,7 +205,7 @@ def compute_monthly_returns_from_daily(returns_df, input_frequency="daily"):
     return monthly_df
 
 
-def compute_up_down_months(monthly_returns_df):
+def compute_up_down_months(monthly_returns_df: pd.DataFrame) -> pd.DataFrame:
     """Compute number of up and down months."""
     up_months = (monthly_returns_df > 0).sum()
     down_months = monthly_returns_df.shape[0] - up_months
@@ -216,7 +218,7 @@ def compute_up_down_months(monthly_returns_df):
     return up_down_df
 
 
-def compute_crisis_regime_returns(returns_df, data_start_date=None, data_end_date=None):
+def compute_crisis_regime_returns(returns_df: pd.DataFrame, data_start_date: Optional[pd.Timestamp] = None, data_end_date: Optional[pd.Timestamp] = None) -> pd.DataFrame:
     """Compute returns during crisis and recovery periods."""
     results = []
 
@@ -263,7 +265,7 @@ def compute_crisis_regime_returns(returns_df, data_start_date=None, data_end_dat
     return np.round(crisis_df, 2)
 
 
-def compute_market_regime_returns(returns_df, data_start_date=None, data_end_date=None):
+def compute_market_regime_returns(returns_df: pd.DataFrame, data_start_date: Optional[pd.Timestamp] = None, data_end_date: Optional[pd.Timestamp] = None) -> pd.DataFrame:
     """Compute returns during different market regimes (bull/bear/recovery)."""
     results = []
 
@@ -303,7 +305,7 @@ def compute_market_regime_returns(returns_df, data_start_date=None, data_end_dat
     return np.round(market_df, 2)
 
 
-def compute_quarterly_alpha(daily_returns_df, trade_results):
+def compute_quarterly_alpha(daily_returns_df: pd.DataFrame, trade_results: pd.DataFrame) -> pd.DataFrame:
     """Compute quarterly alpha (outperformance) for each quarter in the backtest."""
     if trade_results is None or 'quarter' not in trade_results.columns:
         return pd.DataFrame()

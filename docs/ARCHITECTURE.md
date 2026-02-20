@@ -45,10 +45,10 @@ All scripts must be run from the `src/` directory — paths in configs are relat
 | File | Description |
 |------|-------------|
 | `tpsl.py` | Core TP/SL trade simulation. 4 modes (tiered/flat/atr/pivot), independent TP & SL mode selection, index-guided exits |
-| `simulation.py` | Position sizing (`calculate_position_sizes`), daily equity curves (`compute_pf_value_over_quarters`), portfolio vs index comparison |
+| `simulation.py` | Position sizing (`calculate_position_sizes`), daily equity curves (`compute_portfolio_value_over_quarters`), portfolio vs index comparison |
 | `dynamic_levels.py` | ATR calculation, pivot point calculation, index volatility & regime detection functions |
 | `regime_dates.py` | Hardcoded crisis regimes (GFC, Covid, etc.) and market regimes (bull/bear/recovery, 2008–2025) |
-| `__init__.py` | Re-exports: `simulate_trades`, `compute_pf_value_over_quarters`, `compute_pf_vs_index`, `CRISIS_REGIMES`, `MARKET_REGIMES` |
+| `__init__.py` | Re-exports: `simulate_trades`, `compute_portfolio_value_over_quarters`, `compute_portfolio_vs_index`, `CRISIS_REGIMES`, `MARKET_REGIMES` |
 
 ### `selection/` — Stock Selection & Weighting
 
@@ -126,7 +126,7 @@ backtest_core(config, input_data, price_data, index_data)
   │           ├── calculate_dynamic_thresholds() — dispatches to mode-specific calc
   │           └── Daily monitoring: SL → TP → regime exit → time exit
   │
-  └── [4] compute_pf_value_over_quarters(trade_results, price_data, ...)
+  └── [4] compute_portfolio_value_over_quarters(trade_results, price_data, ...)
         └── For each quarter:
               ├── calculate_position_sizes()       — capital allocation per stock
               └── generate_quarter_equity_curve()   — daily mark-to-market
@@ -142,7 +142,7 @@ Wraps `backtest_core()` with:
 2. Data loading from file paths
 3. `TeeOutput` — captures stdout to buffer for `backtest_log.txt`
 4. Output directory creation (`backtesting_results/run_YYYYMMDD_HHMMSS/`)
-5. `compute_pf_vs_index()` — benchmark comparison DataFrame
+5. `compute_portfolio_vs_index()` — benchmark comparison DataFrame
 6. `generate_backtest_report()` — Excel workbook
 7. Saves `config_used.yaml` and `backtest_log.txt`
 
@@ -182,7 +182,7 @@ Wraps `backtest_core()` with:
 
 ### C. Trade Results → Simulation
 
-`compute_pf_value_over_quarters()` receives:
+`compute_portfolio_value_over_quarters()` receives:
 - Trade results DataFrame
 - Price data
 - Quarter range, initial capital (₹100 Cr)
@@ -196,7 +196,7 @@ For each quarter: allocates capital via weights → tracks daily mark-to-market 
 `generate_backtest_report()` receives:
 - `daily_pf`: equity curve
 - `trade_results`: full trade data
-- `comparison_df`: portfolio vs index (from `compute_pf_vs_index`)
+- `comparison_df`: portfolio vs index (from `compute_portfolio_vs_index`)
 - `data_issues`: optional validation findings
 
 **Output:** `backtest_report.xlsx` with up to 17 sheets (see [REPORT_SHEETS.md](REPORT_SHEETS.md)).

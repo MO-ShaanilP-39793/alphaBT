@@ -18,6 +18,10 @@ from config.defaults import (  # noqa: F401
     DEFAULT_TOP_K,
     DEFAULT_TOP_K_WEIGHTING,
     RISK_ADJUSTED_EPSILON,
+    VOLATILITY_CATEGORIES,
+    MCAP_CATEGORIES,
+    DIMENSION_CATEGORIES,
+    get_dimension_categories,
     # Entry
     DEFAULT_ENTRY_PRICE_WINDOW,
     # TP / SL
@@ -81,6 +85,13 @@ from config.defaults import (  # noqa: F401
     # Misc
     DEFAULT_RUN_STOCK_SELECTION,
     DEFAULT_GENERATE_REPORT,
+)
+
+# Regime dates (loaded from YAML)
+from config.regime_dates import (  # noqa: F401
+    CRISIS_REGIMES,
+    MARKET_REGIMES,
+    check_regime_coverage,
 )
 
 # Schema models

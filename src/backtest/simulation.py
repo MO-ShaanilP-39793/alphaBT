@@ -1,10 +1,9 @@
+from typing import Optional
+
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import warnings
 from config.defaults import INITIAL_CAPITAL, DEFAULT_ENTRY_PRICE_WINDOW
 from utils.quarter import get_quarter_dates
-from utils.formatting import crores_formatter
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -13,7 +12,7 @@ logger = get_logger(__name__)
 # 1. POSITION SIZING LOGIC
 # --------------------------------------------------------------------------------
 
-def calculate_position_sizes(quarterly_pf_stocks, total_capital):
+def calculate_position_sizes(quarterly_pf_stocks: pd.DataFrame, total_capital: float) -> pd.DataFrame:
     """
     Allocates capital to each stock.
     
@@ -56,7 +55,7 @@ def calculate_position_sizes(quarterly_pf_stocks, total_capital):
 # 2. DAILY EQUITY CURVE GENERATION (daily series of portfolio value)
 # --------------------------------------------------------------------------------
 
-def generate_quarter_equity_curve(trades, price_data, quarter, entry_price_window=DEFAULT_ENTRY_PRICE_WINDOW):
+def generate_quarter_equity_curve(trades: pd.DataFrame, price_data: pd.DataFrame, quarter: int, entry_price_window: int = DEFAULT_ENTRY_PRICE_WINDOW) -> pd.DataFrame:
     """
     Creates a daily series of portfolio value.
 
@@ -194,7 +193,7 @@ def generate_quarter_equity_curve(trades, price_data, quarter, entry_price_windo
     return daily_values
 
 
-def _generate_quarter_sequence(first_quarter, last_quarter):
+def _generate_quarter_sequence(first_quarter: int, last_quarter: int) -> list[int]:
     """
     Generates a list of quarters between first_quarter and last_quarter (inclusive).
     Quarters are in format YYYYMM where MM is one of [02, 05, 08, 11].
@@ -226,7 +225,7 @@ def _generate_quarter_sequence(first_quarter, last_quarter):
     return quarters
 
 
-def compute_pf_value_over_quarter(trades, price_data, target_quarter, initial_capital=INITIAL_CAPITAL, entry_price_window=DEFAULT_ENTRY_PRICE_WINDOW):
+def compute_portfolio_value_over_quarter(trades: pd.DataFrame, price_data: pd.DataFrame, target_quarter: int, initial_capital: float = INITIAL_CAPITAL, entry_price_window: int = DEFAULT_ENTRY_PRICE_WINDOW) -> Optional[pd.DataFrame]:
     '''
     trades: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price]
     price_data: [date, co_name, open, high, low, close]
@@ -254,7 +253,7 @@ def compute_pf_value_over_quarter(trades, price_data, target_quarter, initial_ca
     return equity_curve
 
 
-def compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter, initial_capital=INITIAL_CAPITAL, entry_price_window=DEFAULT_ENTRY_PRICE_WINDOW):
+def compute_portfolio_value_over_quarters(trades: pd.DataFrame, price_data: pd.DataFrame, first_quarter: int, last_quarter: int, initial_capital: float = INITIAL_CAPITAL, entry_price_window: int = DEFAULT_ENTRY_PRICE_WINDOW) -> Optional[pd.DataFrame]:
     '''
     Computes portfolio value across multiple quarters at daily frequency.
     The ending value of each quarter becomes the starting capital for the next quarter.
@@ -281,7 +280,7 @@ def compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quart
     
     for quarter in quarters:
         # Compute equity curve for this quarter
-        equity_curve = compute_pf_value_over_quarter(
+        equity_curve = compute_portfolio_value_over_quarter(
             trades, price_data, quarter, current_capital, entry_price_window
         )
         
@@ -322,153 +321,7 @@ def compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quart
     return combined_equity_curve
 
 
-def plot_pf_value_over_quarter(trades, price_data, target_quarter, initial_capital=INITIAL_CAPITAL):
-    '''
-    trades: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price]
-    price_data: [date, co_name, open, high, low, close]
-    target_quarter: integer like 202402
-    initial_capital: sum like 100 crs
-    '''
-    equity_curve = compute_pf_value_over_quarter(trades, price_data, target_quarter, initial_capital)
-    # equity_curve has column Total_Portfolio_Value with dates as index
-
-    plt.figure(figsize=(12, 6))
-    
-    # Plot the equity curve
-    plt.plot(equity_curve.index, equity_curve['Total_Portfolio_Value'], 
-             color='#1f77b4', linewidth=2.5, label='Portfolio Value')
-    
-    # Plot Initial Capital Line
-    plt.axhline(y=initial_capital, color='black', linestyle='--', alpha=0.7, label='Initial Capital')
-    
-    # Fill area between curve and capital line for visual profit/loss indication
-    plt.fill_between(equity_curve.index, 
-                     equity_curve['Total_Portfolio_Value'], 
-                     initial_capital, 
-                     where=(equity_curve['Total_Portfolio_Value'] >= initial_capital),
-                     interpolate=True, color='green', alpha=0.1)
-    
-    plt.fill_between(equity_curve.index, 
-                     equity_curve['Total_Portfolio_Value'], 
-                     initial_capital, 
-                     where=(equity_curve['Total_Portfolio_Value'] < initial_capital),
-                     interpolate=True, color='red', alpha=0.1)
-
-    # Styling
-    plt.title(f'Portfolio Performance: {target_quarter} (Initial Capital: ₹{initial_capital/10000000:.0f} Cr)', fontsize=14, pad=15)
-    plt.ylabel('Value (INR)', fontsize=12)
-    plt.grid(True, linestyle=':', alpha=0.6)
-    
-    # Formatters
-    ax = plt.gca()
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(crores_formatter))
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
-    
-    # Add final return annotation
-    final_val = equity_curve['Total_Portfolio_Value'].iloc[-1]
-    ret_pct = ((final_val - initial_capital) / initial_capital) * 100
-    color = 'green' if ret_pct >= 0 else 'red'
-    
-    plt.figtext(0.15, 0.8, f"Final Return: {ret_pct:.2f}%", 
-                fontsize=12, fontweight='bold', 
-                bbox=dict(facecolor='white', edgecolor=color, boxstyle='round,pad=0.5'))
-
-    plt.legend(loc='upper left')
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter, initial_capital=INITIAL_CAPITAL):
-    '''
-    Plots portfolio value across multiple quarters at daily frequency.
-
-    trades: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price]
-    price_data: [date, co_name, open, high, low, close]
-    first_quarter: integer like 202402 (start quarter, inclusive)
-    last_quarter: integer like 202411 (end quarter, inclusive)
-    initial_capital: sum like 100 crs
-    '''
-    equity_curve = compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter, initial_capital)
-    
-    if equity_curve is None or equity_curve.empty:
-        logger.warning("No data to plot.")
-        return
-    
-    plt.figure(figsize=(14, 7))
-    
-    # Plot the equity curve
-    plt.plot(equity_curve.index, equity_curve['Total_Portfolio_Value'], 
-             color='#1f77b4', linewidth=2, label='Portfolio Value')
-    
-    # Plot Initial Capital Line
-    plt.axhline(y=initial_capital, color='black', linestyle='--', alpha=0.7, label='Initial Capital')
-    
-    # Fill area between curve and capital line for visual profit/loss indication
-    plt.fill_between(equity_curve.index, 
-                     equity_curve['Total_Portfolio_Value'], 
-                     initial_capital, 
-                     where=(equity_curve['Total_Portfolio_Value'] >= initial_capital),
-                     interpolate=True, color='green', alpha=0.1)
-    
-    plt.fill_between(equity_curve.index, 
-                     equity_curve['Total_Portfolio_Value'], 
-                     initial_capital, 
-                     where=(equity_curve['Total_Portfolio_Value'] < initial_capital),
-                     interpolate=True, color='red', alpha=0.1)
-    
-    # Add vertical lines at quarter boundaries
-    quarters_in_data = equity_curve['quarter'].unique()
-    quarter_colors = plt.cm.tab10.colors
-    for i, q in enumerate(quarters_in_data):
-        quarter_data = equity_curve[equity_curve['quarter'] == q]
-        if not quarter_data.empty:
-            first_date = quarter_data.index[0]
-            plt.axvline(x=first_date, color=quarter_colors[i % len(quarter_colors)], 
-                       linestyle=':', alpha=0.5, linewidth=1.5)
-            # Add quarter label at the top
-            plt.text(first_date, plt.gca().get_ylim()[1], f'Q{q}', 
-                    rotation=90, va='top', ha='right', fontsize=8, alpha=0.7)
-
-    # Styling
-    plt.title(f'Portfolio Performance: {first_quarter} to {last_quarter} (Initial Capital: ₹{initial_capital/10000000:.0f} Cr)', 
-              fontsize=14, pad=15)
-    plt.ylabel('Value (INR)', fontsize=12)
-    plt.xlabel('Date', fontsize=12)
-    plt.grid(True, linestyle=':', alpha=0.6)
-    
-    # Formatters
-    ax = plt.gca()
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(crores_formatter))
-    
-    # Use appropriate date formatter based on time span
-    date_range_days = (equity_curve.index[-1] - equity_curve.index[0]).days
-    if date_range_days > 365:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
-    elif date_range_days > 180:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
-    else:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
-        ax.xaxis.set_major_locator(mdates.MonthLocator())
-    
-    plt.xticks(rotation=45)
-    
-    # Add final return annotation
-    final_val = equity_curve['Total_Portfolio_Value'].iloc[-1]
-    ret_pct = ((final_val - initial_capital) / initial_capital) * 100
-    color = 'green' if ret_pct >= 0 else 'red'
-    
-    plt.figtext(0.15, 0.8, f"Total Return: {ret_pct:.2f}%", 
-                fontsize=12, fontweight='bold', 
-                bbox=dict(facecolor='white', edgecolor=color, boxstyle='round,pad=0.5'))
-
-    plt.legend(loc='upper left')
-    plt.tight_layout()
-    plt.show()
-
-
-def compute_pf_vs_index(trades, price_data, index_price_data, first_quarter, last_quarter, initial_capital=INITIAL_CAPITAL, daily_pf_values=None):
+def compute_portfolio_vs_index(trades: pd.DataFrame, price_data: pd.DataFrame, index_price_data: pd.DataFrame, first_quarter: int, last_quarter: int, initial_capital: float = INITIAL_CAPITAL, daily_pf_values: Optional[pd.DataFrame] = None) -> Optional[pd.DataFrame]:
     '''
     Computes portfolio performance vs benchmark index across multiple quarters.
 
@@ -491,7 +344,7 @@ def compute_pf_vs_index(trades, price_data, index_price_data, first_quarter, las
     '''
     # Get portfolio equity curve (reuse if provided, otherwise compute)
     if daily_pf_values is None:
-        daily_pf_values = compute_pf_value_over_quarters(
+        daily_pf_values = compute_portfolio_value_over_quarters(
             trades, price_data, first_quarter, last_quarter, initial_capital
         )
     

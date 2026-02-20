@@ -37,6 +37,35 @@ DEFAULT_SELECTION_METHOD = 'probability'
 DEFAULT_MIN_PROB_THRESHOLD = None
 DEFAULT_WEIGHTING_SCHEME = 'use_category_weights'
 
+# Category name constants (single source of truth)
+VOLATILITY_CATEGORIES = ['high_volatility', 'medium_volatility', 'low_volatility']
+MCAP_CATEGORIES = ['largecap', 'midcap', 'smallcap']
+
+DIMENSION_CATEGORIES = {
+    'volatility': VOLATILITY_CATEGORIES,
+    'mcap': MCAP_CATEGORIES,
+}
+
+
+def get_dimension_categories(dimension: str) -> list:
+    """Return the ordered list of category names for a given dimension.
+
+    Parameters:
+        dimension: 'volatility' or 'mcap'
+
+    Returns:
+        List of category name strings
+
+    Raises:
+        ValueError: If dimension is not recognised
+    """
+    try:
+        return DIMENSION_CATEGORIES[dimension]
+    except KeyError:
+        raise ValueError(
+            f"Unknown dimension: '{dimension}'. Use 'volatility' or 'mcap'."
+        )
+
 # Cross-dimensional selection/weighting
 # Controls which dimension TP/SL tiered-mode config uses: 'selection', 'weighting',
 # or explicit 'volatility'/'mcap'. Defaults to 'selection' (legacy behavior).

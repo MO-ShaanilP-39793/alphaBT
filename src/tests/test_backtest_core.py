@@ -1,7 +1,7 @@
 """
 Unit tests for backtest_core() — orchestration logic.
 
-These tests mock downstream functions (simulate_trades, compute_pf_value_over_quarters,
+These tests mock downstream functions (simulate_trades, compute_portfolio_value_over_quarters,
 select_and_weight_stocks, select_top_k_stocks) to isolate the control-flow and
 config-validation logic inside backtest_core().
 """
@@ -92,7 +92,7 @@ def _mock_equity_curve():
 # =============================================================================
 
 PATCH_SIMULATE = "backtest_strategy.simulate_trades"
-PATCH_COMPUTE_PF = "backtest_strategy.compute_pf_value_over_quarters"
+PATCH_COMPUTE_PF = "backtest_strategy.compute_portfolio_value_over_quarters"
 PATCH_SELECT_AND_WEIGHT = "backtest_strategy.run_stock_selection"
 PATCH_SELECT_TOP_K = "backtest_strategy.select_top_k_stocks"
 

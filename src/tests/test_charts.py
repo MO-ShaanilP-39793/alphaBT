@@ -48,21 +48,21 @@ def _make_monthly_returns(n=24):
 
 
 # =============================================================================
-# create_pf_vs_index_chart
+# create_portfolio_vs_index_chart
 # =============================================================================
 
 class TestCreatePfVsIndexChart:
 
     def test_returns_bytesio(self):
-        from reporting.charts import create_pf_vs_index_chart
-        buf = create_pf_vs_index_chart(_make_comparison_df(), 202302, 202305)
+        from reporting.charts import create_portfolio_vs_index_chart
+        buf = create_portfolio_vs_index_chart(_make_comparison_df(), 202302, 202305)
         assert isinstance(buf, io.BytesIO)
         assert buf.getvalue()[:4] == b'\x89PNG'
 
     def test_none_on_empty(self):
-        from reporting.charts import create_pf_vs_index_chart
+        from reporting.charts import create_portfolio_vs_index_chart
         empty = pd.DataFrame()
-        result = create_pf_vs_index_chart(empty, 202302, 202305)
+        result = create_portfolio_vs_index_chart(empty, 202302, 202305)
         assert result is None
 
 

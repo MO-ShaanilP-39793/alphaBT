@@ -15,8 +15,9 @@ import optuna
 import warnings
 
 from utils.logging_config import get_logger
+from utils.metrics import compute_cagr, compute_max_drawdown, compute_calmar_ratio
 from config.defaults import (
-    DAYS_PER_YEAR,
+    get_dimension_categories,
     DEFAULT_SELECTION_TYPE,
     DEFAULT_CATEGORY_SCHEME,
     DEFAULT_CATEGORY_COUNTS,
@@ -109,6 +110,147 @@ def sample_parameter(trial: optuna.Trial, name: str, spec: dict) -> Any:
         raise ValueError(f"Unknown parameter type: {param_type}")
 
 
+def _sample_selection_params(
+    trial: optuna.Trial,
+    params: dict,
+    search_space: dict,
+    tuning_config: dict,
+    run_stock_selection: bool,
+) -> tuple:
+    """Sample stock-selection related parameters.
+    
+    Returns:
+        Tuple of (selection_type, cat_weighting_scheme) for downstream conditional logic
+    """
+    selection_type = None
+    cat_weighting_scheme = None
+
+    if not run_stock_selection:
+        return selection_type, cat_weighting_scheme
+
+    params['selection_type'] = sample_parameter(trial, 'selection_type', search_space['selection_type'])
+    selection_type = params['selection_type']
+
+    # Sample weighting scheme early (needed for conditional sampling of category_weights)
+    if selection_type == 'category_based' and 'category_based_selection_weighting_scheme' in search_space:
+        params['category_based_selection_weighting_scheme'] = sample_parameter(
+            trial, 'category_based_selection_weighting_scheme',
+            search_space['category_based_selection_weighting_scheme'],
+        )
+        cat_weighting_scheme = params['category_based_selection_weighting_scheme']
+
+    # top_k parameters
+    if selection_type == 'top_k' and 'top_k' in tuning_config:
+        for name, spec in tuning_config['top_k'].items():
+            params[f'top_k_{name}'] = sample_parameter(trial, f'top_k_{name}', spec)
+
+    return selection_type, cat_weighting_scheme
+
+
+def _sample_tpsl_params(
+    trial: optuna.Trial,
+    params: dict,
+    search_space: dict,
+    tuning_config: dict,
+) -> tuple:
+    """Sample TP/SL mode and mode-specific parameters.
+    
+    Returns:
+        Tuple of (tp_mode, sl_mode, tp_enabled, sl_enabled)
+    """
+    params['tp_enabled'] = sample_parameter(trial, 'tp_enabled', search_space['tp_enabled'])
+    tp_enabled = params['tp_enabled']
+    params['sl_enabled'] = sample_parameter(trial, 'sl_enabled', search_space['sl_enabled'])
+    sl_enabled = params['sl_enabled']
+
+    independent_tpsl_modes = tuning_config.get('independent_tpsl_modes', DEFAULT_INDEPENDENT_TPSL_MODES)
+    tp_mode = None
+    sl_mode = None
+
+    if independent_tpsl_modes:
+        if tp_enabled and 'tpsl_mode' in search_space:
+            params['tp_mode'] = sample_parameter(trial, 'tp_mode', search_space['tpsl_mode'])
+            tp_mode = params['tp_mode']
+        if sl_enabled and 'tpsl_mode' in search_space:
+            params['sl_mode'] = sample_parameter(trial, 'sl_mode', search_space['tpsl_mode'])
+            sl_mode = params['sl_mode']
+    else:
+        if (tp_enabled or sl_enabled) and 'tpsl_mode' in search_space:
+            shared_mode = sample_parameter(trial, 'tpsl_mode', search_space['tpsl_mode'])
+            tp_mode = shared_mode
+            sl_mode = shared_mode
+            params['tp_mode'] = shared_mode
+            params['sl_mode'] = shared_mode
+
+    # Sample mode-specific parameters
+    active_modes = set(filter(None, [tp_mode, sl_mode]))
+
+    if 'tiered' in active_modes and 'tiered_tpsl' in tuning_config:
+        tiered_cfg = tuning_config['tiered_tpsl']
+        if tp_enabled and tp_mode == 'tiered':
+            params['tiered_tp_thresholds'] = sample_parameter(
+                trial, 'tiered_tp_thresholds', tiered_cfg['tp_thresholds'],
+            )
+        if sl_enabled and sl_mode == 'tiered':
+            params['tiered_sl_thresholds'] = sample_parameter(
+                trial, 'tiered_sl_thresholds', tiered_cfg['sl_thresholds'],
+            )
+
+    if 'atr' in active_modes and 'atr_tpsl' in tuning_config:
+        atr_cfg = tuning_config['atr_tpsl']
+        params['atr_period'] = sample_parameter(trial, 'atr_period', atr_cfg['period'])
+        if tp_enabled and tp_mode == 'atr':
+            params['atr_tp_multiplier'] = sample_parameter(trial, 'atr_tp_multiplier', atr_cfg['tp_multiplier'])
+        if sl_enabled and sl_mode == 'atr':
+            params['atr_sl_multiplier'] = sample_parameter(trial, 'atr_sl_multiplier', atr_cfg['sl_multiplier'])
+
+    if 'pivot' in active_modes and 'pivot_tpsl' in tuning_config:
+        pivot_cfg = tuning_config['pivot_tpsl']
+        params['pivot_lookback_days'] = sample_parameter(trial, 'pivot_lookback_days', pivot_cfg['lookback_days'])
+        if tp_enabled and tp_mode == 'pivot':
+            params['pivot_tp_level'] = sample_parameter(trial, 'pivot_tp_level', pivot_cfg['tp_level'])
+        if sl_enabled and sl_mode == 'pivot':
+            params['pivot_sl_level'] = sample_parameter(trial, 'pivot_sl_level', pivot_cfg['sl_level'])
+
+    if 'flat' in active_modes and 'flat_tpsl' in tuning_config:
+        flat_cfg = tuning_config['flat_tpsl']
+        if tp_enabled and tp_mode == 'flat':
+            params['flat_tp'] = sample_parameter(trial, 'flat_tp', flat_cfg['tp'])
+        if sl_enabled and sl_mode == 'flat':
+            params['flat_sl'] = sample_parameter(trial, 'flat_sl', flat_cfg['sl'])
+
+    return tp_mode, sl_mode, tp_enabled, sl_enabled
+
+
+def _sample_index_exit_params(
+    trial: optuna.Trial,
+    params: dict,
+    tuning_config: dict,
+) -> None:
+    """Sample index-exit (regime filter + vol adjustment) parameters in-place."""
+    if 'index_exit' not in tuning_config:
+        return
+
+    index_config = tuning_config['index_exit']
+
+    if 'regime_filter_enabled' in index_config:
+        regime_filter_enabled = sample_parameter(trial, 'regime_filter_enabled', index_config['regime_filter_enabled'])
+        params['regime_filter_enabled'] = regime_filter_enabled
+        if regime_filter_enabled:
+            params['regime_ma_period'] = sample_parameter(trial, 'regime_ma_period', index_config['regime_ma_period'])
+            params['regime_exit_threshold'] = sample_parameter(trial, 'regime_exit_threshold', index_config['regime_exit_threshold'])
+
+    if 'vol_adjustment_enabled' in index_config:
+        vol_adjustment_enabled = sample_parameter(trial, 'vol_adjustment_enabled', index_config['vol_adjustment_enabled'])
+        params['vol_adjustment_enabled'] = vol_adjustment_enabled
+        if vol_adjustment_enabled:
+            for sub_param in [
+                'vol_lookback', 'high_vol_threshold', 'low_vol_threshold',
+                'high_vol_multiplier', 'low_vol_multiplier',
+            ]:
+                params[sub_param] = sample_parameter(trial, sub_param, index_config[sub_param])
+
+
 def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
     """
     Sample all parameters from the search space for a single trial.
@@ -123,196 +265,61 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
     params = {}
     search_space = tuning_config['search_space']
     fixed_config = tuning_config['fixed']
-    
-    # Check if the trials require stock selection
     run_stock_selection = fixed_config['run_stock_selection']
-    
-    # Create set of params that should not be sampled when run_stock_selection is False
-    selection_params = {
-        'selection_type',
-        'selection_method',
-        'min_prob_threshold',
-        'category_counts',
-        'category_weights',
-        'category_based_selection_weighting_scheme',
-        'selection_dimension',
-        'weighting_dimension',
-    }
-    
-    # Create set of params that need to be sampled only when selection_type is 'category_based'
-    category_based_only_params = {
-        'category_counts', 'category_weights', 'category_based_selection_weighting_scheme',
-        'selection_dimension', 'weighting_dimension',
-    }
-    
-    # ----- Sample key parameters first to enable conditional sampling -----
-    
-    # Initialise selection_type to None
-    selection_type = None
-    # Sample it only if run_stock_selection is True
-    if run_stock_selection is True:
-        params['selection_type'] = sample_parameter(trial, 'selection_type', search_space['selection_type'])
-        selection_type = params['selection_type']
-    
-    # Sample category_based_selection_weighting_scheme early (needed for conditional sampling of category_weights)
-    cat_weighting_scheme = None
-    if run_stock_selection is True and selection_type == 'category_based':
-        if 'category_based_selection_weighting_scheme' in search_space:
-            params['category_based_selection_weighting_scheme'] = sample_parameter(
-                trial, 'category_based_selection_weighting_scheme', 
-                search_space['category_based_selection_weighting_scheme']
-            )
-            cat_weighting_scheme = params['category_based_selection_weighting_scheme']
-    
-    # Sample tp_enabled and sl_enabled
-    params['tp_enabled'] = sample_parameter(trial, 'tp_enabled', search_space['tp_enabled'])
-    tp_enabled = params['tp_enabled']
-    params['sl_enabled'] = sample_parameter(trial, 'sl_enabled', search_space['sl_enabled'])
-    sl_enabled = params['sl_enabled']
 
-    # Sample TP/SL modes
-    # independent_tpsl_modes: when False (default), one mode is sampled and used for both
-    # when True, tp_mode and sl_mode are sampled independently from the same choices
-    independent_tpsl_modes = tuning_config.get('independent_tpsl_modes', DEFAULT_INDEPENDENT_TPSL_MODES)
-    tp_mode = None
-    sl_mode = None
-    
-    if independent_tpsl_modes:
-        # Independent mode: sample tp_mode and sl_mode separately
-        if tp_enabled and 'tpsl_mode' in search_space:
-            params['tp_mode'] = sample_parameter(trial, 'tp_mode', search_space['tpsl_mode'])
-            tp_mode = params['tp_mode']
-        if sl_enabled and 'tpsl_mode' in search_space:
-            params['sl_mode'] = sample_parameter(trial, 'sl_mode', search_space['tpsl_mode'])
-            sl_mode = params['sl_mode']
-    else:
-        # Linked mode (default): sample one mode and assign to both sides
-        if (tp_enabled or sl_enabled) and 'tpsl_mode' in search_space:
-            shared_mode = sample_parameter(trial, 'tpsl_mode', search_space['tpsl_mode'])
-            tp_mode = shared_mode
-            sl_mode = shared_mode
-            params['tp_mode'] = shared_mode
-            params['sl_mode'] = shared_mode
-    
-    # category_scheme needs to be sampled if
-    # either tp_mode or sl_mode is 'tiered'
-    # or if run stock selection is True and selection type is category based
-    # AND neither selection_dimension nor weighting_dimension is in the search space
-    # (when the new dimension keys are present, category_scheme is no longer needed)
-    has_new_dimensions = 'selection_dimension' in search_space or 'weighting_dimension' in search_space
-    needs_category_scheme = (
-        (run_stock_selection and selection_type == 'category_based' and not has_new_dimensions) or
-        (tp_mode == 'tiered') or (sl_mode == 'tiered')
+    # ----- Selection params -----
+    selection_type, cat_weighting_scheme = _sample_selection_params(
+        trial, params, search_space, tuning_config, run_stock_selection,
+    )
+
+    # ----- TP/SL params -----
+    tp_mode, sl_mode, tp_enabled, sl_enabled = _sample_tpsl_params(
+        trial, params, search_space, tuning_config,
     )
     
-    # ----- Sample base parameters (excluding conditional ones) -----
+    # ----- Determine if category_scheme needs sampling -----
+    selection_params = {
+        'selection_type', 'selection_method', 'min_prob_threshold',
+        'category_counts', 'category_weights',
+        'category_based_selection_weighting_scheme',
+        'selection_dimension', 'weighting_dimension',
+    }
+    category_based_only_params = {
+        'category_counts', 'category_weights',
+        'category_based_selection_weighting_scheme',
+        'selection_dimension', 'weighting_dimension',
+    }
+    already_sampled = {
+        'selection_type', 'tp_enabled', 'sl_enabled', 'tpsl_mode',
+        'tp_mode', 'sl_mode', 'category_based_selection_weighting_scheme',
+    }
+
+    has_new_dimensions = 'selection_dimension' in search_space or 'weighting_dimension' in search_space
+    needs_category_scheme = (
+        (run_stock_selection and selection_type == 'category_based' and not has_new_dimensions)
+        or (tp_mode == 'tiered') or (sl_mode == 'tiered')
+    )
+    
+    # ----- Sample remaining base parameters -----
     for name, spec in search_space.items():
-        # Skip already sampled parameters
-        if name in ('selection_type', 'tp_enabled', 'sl_enabled', 'tpsl_mode', 'tp_mode', 'sl_mode', 'category_based_selection_weighting_scheme'):
+        if name in already_sampled:
             continue
-        # Skip all selection related params if run_stock_selection is False
         if not run_stock_selection and name in selection_params:
             continue
-        # Skip category_scheme if not needed
         if name == 'category_scheme' and not needs_category_scheme:
             continue
-        # Skip category-based-only params if not category_based selection
         if name in category_based_only_params and selection_type != 'category_based':
             continue
-        # Skip category_weights when weighting scheme is 'equal' (weights are irrelevant)
         if name == 'category_weights' and cat_weighting_scheme == 'equal':
             continue
-        # Skip tpsl_category_dimension when both TP/SL modes are not 'tiered'
         if name == 'tpsl_category_dimension' and tp_mode != 'tiered' and sl_mode != 'tiered':
             continue
         params[name] = sample_parameter(trial, name, spec)
     
-    # ----- Sample selection type-specific parameters (conditional) -----
-    # Only sample top_k params if stock selection is enabled and type is top_k
-    if run_stock_selection is True and selection_type == 'top_k':
-        top_k_space = tuning_config['top_k']
-        for name, spec in top_k_space.items():
-            params[f'top_k_{name}'] = sample_parameter(trial, f'top_k_{name}', spec)
-    
-    # ----- Sample TP/SL mode-specific parameters (conditional per-side) -----
-    # Collect which modes are active across both sides
-    active_modes = set()
-    if tp_mode:
-        active_modes.add(tp_mode)
-    if sl_mode:
-        active_modes.add(sl_mode)
-    
-    # Tiered mode: sample thresholds per side
-    if 'tiered' in active_modes and 'tiered_tpsl' in tuning_config:
-        tiered_tpsl_config = tuning_config['tiered_tpsl']
-        if tp_enabled and tp_mode == 'tiered':
-            params['tiered_tp_thresholds'] = sample_parameter(trial, 'tiered_tp_thresholds', tiered_tpsl_config['tp_thresholds'])
-        if sl_enabled and sl_mode == 'tiered':
-            params['tiered_sl_thresholds'] = sample_parameter(trial, 'tiered_sl_thresholds', tiered_tpsl_config['sl_thresholds'])
-    
-    # ATR mode: shared period, per-side multipliers
-    if 'atr' in active_modes and 'atr_tpsl' in tuning_config:
-        atr_config = tuning_config['atr_tpsl']
-        params['atr_period'] = sample_parameter(trial, 'atr_period', atr_config['period'])
-        if tp_enabled and tp_mode == 'atr':
-            params['atr_tp_multiplier'] = sample_parameter(trial, 'atr_tp_multiplier', atr_config['tp_multiplier'])
-        if sl_enabled and sl_mode == 'atr':
-            params['atr_sl_multiplier'] = sample_parameter(trial, 'atr_sl_multiplier', atr_config['sl_multiplier'])
-    
-    # Pivot mode: shared lookback, per-side levels
-    if 'pivot' in active_modes and 'pivot_tpsl' in tuning_config:
-        pivot_config = tuning_config['pivot_tpsl']
-        params['pivot_lookback_days'] = sample_parameter(trial, 'pivot_lookback_days', pivot_config['lookback_days'])
-        if tp_enabled and tp_mode == 'pivot':
-            params['pivot_tp_level'] = sample_parameter(trial, 'pivot_tp_level', pivot_config['tp_level'])
-        if sl_enabled and sl_mode == 'pivot':
-            params['pivot_sl_level'] = sample_parameter(trial, 'pivot_sl_level', pivot_config['sl_level'])
-    
-    # Flat mode: per-side percentages
-    if 'flat' in active_modes and 'flat_tpsl' in tuning_config:
-        flat_config = tuning_config['flat_tpsl']
-        if tp_enabled and tp_mode == 'flat':
-            params['flat_tp'] = sample_parameter(trial, 'flat_tp', flat_config['tp'])
-        if sl_enabled and sl_mode == 'flat':
-            params['flat_sl'] = sample_parameter(trial, 'flat_sl', flat_config['sl'])
-    
-    # ----- Sample index exit parameters (conditional) -----
-    if 'index_exit' in tuning_config:
-        index_config = tuning_config['index_exit']
-        
-        # If regime filter is enabled, sample its params
-        if 'regime_filter_enabled' in index_config:
-            regime_filter_enabled = sample_parameter(trial, 'regime_filter_enabled', index_config['regime_filter_enabled'])
-            params['regime_filter_enabled'] = regime_filter_enabled
-            
-            if regime_filter_enabled:
-                params['regime_ma_period'] = sample_parameter(trial, 'regime_ma_period', index_config['regime_ma_period'])
-                params['regime_exit_threshold'] = sample_parameter(trial, 'regime_exit_threshold', index_config['regime_exit_threshold'])
-        
-        # If volatility adjustment is enabled, sample its params
-        if 'vol_adjustment_enabled' in index_config:
-            vol_adjustment_enabled = sample_parameter(trial, 'vol_adjustment_enabled', index_config['vol_adjustment_enabled'])
-            params['vol_adjustment_enabled'] = vol_adjustment_enabled
-            
-            if vol_adjustment_enabled:
-                for sub_param in [
-                    'vol_lookback', 
-                    'high_vol_threshold', 
-                    'low_vol_threshold',
-                    'high_vol_multiplier', 
-                    'low_vol_multiplier'
-                    ]:
-                    params[sub_param] = sample_parameter(trial, sub_param, index_config[sub_param])
+    # ----- Index exit params -----
+    _sample_index_exit_params(trial, params, tuning_config)
     
     return params
-
-
-def _get_categories(category_scheme: str) -> list:
-    """Return category names for a given scheme."""
-    if category_scheme == 'volatility':
-        return ['high_volatility', 'medium_volatility', 'low_volatility']
-    else:  # mcap
-        return ['largecap', 'midcap', 'smallcap']
 
 
 def _build_tiered_config(category_scheme: str, tp_thresholds: list, sl_thresholds: list) -> dict:
@@ -326,7 +333,7 @@ def _build_tiered_config(category_scheme: str, tp_thresholds: list, sl_threshold
             'default_sl_pct': 0.05,
         }
     """
-    categories = _get_categories(category_scheme)
+    categories = get_dimension_categories(category_scheme)
     tiered_config = {
         'tp_pct': dict(zip(categories, tp_thresholds)),
         'sl_pct': dict(zip(categories, sl_thresholds)),
@@ -431,124 +438,6 @@ def build_config(fixed_config: dict, sampled_params: dict) -> dict:
         config['tiered_config'] = _build_tiered_config(tpsl_scheme, tp_thresholds, sl_thresholds)
     
     return config
-
-
-def compute_cagr(daily_pf_values: pd.DataFrame) -> float:
-    """
-    Compute Compound Annual Growth Rate (CAGR) from daily portfolio values.
-    
-    CAGR = (Final Value / Initial Value) ^ (1 / Years) - 1
-    
-    Parameters:
-        daily_pf_values: DataFrame with columns ['date', 'portfolio_value', 'quarter']
-        
-    Returns:
-        Annualized CAGR as a float, or None if computation fails
-    """
-    if daily_pf_values is None or daily_pf_values.empty:
-        return None
-    
-    df = daily_pf_values.copy()
-    df['date'] = pd.to_datetime(df['date'])
-    df = df.sort_values('date', ignore_index=True)
-    
-    if len(df) < 2:
-        return None
-    
-    # Store initial value and final_value
-    initial_value = df['portfolio_value'].iloc[0]
-    final_value = df['portfolio_value'].iloc[-1]
-    
-    if initial_value <= 0 or final_value <= 0:
-        return None
-    
-    # Compute years
-    start_date = df['date'].iloc[0]
-    end_date = df['date'].iloc[-1]
-    years = (end_date - start_date).days / DAYS_PER_YEAR
-    
-    if years <= 0:
-        return None
-    
-    # Compute CAGR
-    cagr = (final_value / initial_value) ** (1 / years) - 1
-    
-    return cagr
-
-
-def compute_max_drawdown(daily_pf_values: pd.DataFrame) -> float:
-    """
-    Compute Maximum Drawdown (MDD) from daily portfolio values.
-    
-    MDD = min((Portfolio Value - Cumulative Max) / Cumulative Max)
-    
-    Returns the magnitude (positive value) of the maximum drawdown.
-    
-    Parameters:
-        daily_pf_values: DataFrame with columns ['date', 'portfolio_value', 'quarter']
-        
-    Returns:
-        Maximum drawdown as a positive float, or None if computation fails
-    """
-    if daily_pf_values is None or daily_pf_values.empty:
-        return None
-    
-    df = daily_pf_values.copy()
-    df['date'] = pd.to_datetime(df['date'])
-    df = df.sort_values('date', ignore_index=True)
-    
-    if len(df) < 2:
-        return None
-    
-    # Compute Maximum Drawdown
-    df['cummax'] = df['portfolio_value'].cummax()
-    df['drawdown'] = (df['portfolio_value'] - df['cummax']) / df['cummax']
-    max_drawdown = df['drawdown'].min()
-    
-    # Return magnitude (positive value)
-    return abs(max_drawdown)
-
-
-def compute_calmar_ratio(daily_pf_values: pd.DataFrame, cap: float = DEFAULT_CALMAR_CAP) -> float:
-    """
-    Compute Calmar ratio from daily portfolio values.
-    
-    Calmar Ratio = CAGR / |Max Drawdown|
-    
-    Parameters:
-        daily_pf_values: DataFrame with columns ['date', 'portfolio_value', 'quarter']
-        cap: Maximum Calmar ratio value to return (avoids inflated values)
-        
-    Returns:
-        Calmar ratio (capped)
-    """
-    if daily_pf_values is None or daily_pf_values.empty:
-        return None
-    
-    if len(daily_pf_values) < 2:
-        return None
-    
-    # Compute CAGR using dedicated function
-    cagr = compute_cagr(daily_pf_values)
-    if cagr is None:
-        return None
-    
-    # Compute Maximum Drawdown using dedicated function
-    max_drawdown = compute_max_drawdown(daily_pf_values)
-    if max_drawdown is None:
-        return None
-    
-    # Compute Calmar Ratio
-    if max_drawdown == 0:
-        # cap at maximum
-        calmar = cap
-    else:
-        calmar = cagr / max_drawdown
-    
-    # Clip
-    calmar = min(calmar, cap)
-    
-    return calmar
 
 
 # Supported objective names for validation

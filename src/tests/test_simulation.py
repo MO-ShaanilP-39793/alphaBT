@@ -2,7 +2,7 @@
 Phase 4: Tests for backtest/simulation.py.
 
 Covers calculate_position_sizes, generate_quarter_equity_curve,
-_generate_quarter_sequence, compute_pf_value_over_quarter.
+_generate_quarter_sequence, compute_portfolio_value_over_quarter.
 """
 
 import pytest
@@ -36,20 +36,6 @@ def _make_trades(quarter, stocks, weight_mode="cat_weight"):
         else:
             row["stock_weight"] = 1.0 / len(stocks)
         rows.append(row)
-    return pd.DataFrame(rows)
-
-
-def _make_price_data(stocks, start="2023-02-01", end="2023-08-31"):
-    dates = pd.bdate_range(start=start, end=end)
-    rows = []
-    for name in stocks:
-        for i, d in enumerate(dates):
-            close = 100.0 * (1 + 0.001) ** i
-            rows.append({
-                "date": d, "co_name": name,
-                "open": close * 0.999, "high": close * 1.005,
-                "low": close * 0.995, "close": round(close, 2),
-            })
     return pd.DataFrame(rows)
 
 
@@ -147,15 +133,15 @@ class TestGenerateQuarterEquityCurve:
 
 
 # =============================================================================
-# compute_pf_value_over_quarter
+# compute_portfolio_value_over_quarter
 # =============================================================================
 
 class TestComputePfValueOverQuarter:
 
     def test_single_quarter_computation(self, sample_price_data):
-        from backtest.simulation import compute_pf_value_over_quarter
+        from backtest.simulation import compute_portfolio_value_over_quarter
         trades = _make_trades(Q1, STOCK_NAMES[:3], weight_mode="stock_weight")
-        result = compute_pf_value_over_quarter(
+        result = compute_portfolio_value_over_quarter(
             trades, sample_price_data, Q1, initial_capital=1_000_000_000
         )
         assert result is not None
@@ -163,8 +149,8 @@ class TestComputePfValueOverQuarter:
         assert len(result) > 0
 
     def test_empty_trades_returns_none(self, sample_price_data):
-        from backtest.simulation import compute_pf_value_over_quarter
+        from backtest.simulation import compute_portfolio_value_over_quarter
         trades = pd.DataFrame(columns=["quarter", "co_name", "cat", "stock_weight",
                                         "entry_price", "exit_price", "exit_date"])
-        result = compute_pf_value_over_quarter(trades, sample_price_data, Q1)
+        result = compute_portfolio_value_over_quarter(trades, sample_price_data, Q1)
         assert result is None

@@ -9,6 +9,7 @@ from config.defaults import (
     DAYS_PER_YEAR,
     VAR_CONFIDENCE_LEVEL,
 )
+from utils.metrics import compute_cagr, compute_max_drawdown, compute_calmar_ratio
 
 
 def compute_portfolio_metrics(daily_pf: pd.DataFrame, risk_free_rate: float = RISK_FREE_RATE) -> dict:
@@ -39,8 +40,8 @@ def compute_portfolio_metrics(daily_pf: pd.DataFrame, risk_free_rate: float = RI
     end_date = df['date'].iloc[-1]
     years = (end_date - start_date).days / DAYS_PER_YEAR
 
-    # CAGR
-    cagr = (final_value / initial_value) ** (1 / years) - 1 if years > 0 else total_return
+    # CAGR (shared implementation)
+    cagr = compute_cagr(daily_pf) or (total_return if years <= 0 else 0)
 
     # Volatility (annualized)
     daily_vol = df['daily_return'].std()
@@ -57,13 +58,13 @@ def compute_portfolio_metrics(daily_pf: pd.DataFrame, risk_free_rate: float = RI
     downside_dev = np.sqrt(np.mean(downside_diff**2)) * np.sqrt(TRADING_DAYS_PER_YEAR)
     sortino = excess_return / downside_dev if downside_dev > 0 else 0
 
-    # Maximum Drawdown
-    df['cummax'] = df['portfolio_value'].cummax()
-    df['drawdown'] = (df['portfolio_value'] - df['cummax']) / df['cummax']
-    max_drawdown = df['drawdown'].min()
+    # Maximum Drawdown (shared implementation)
+    mdd = compute_max_drawdown(daily_pf)
+    max_drawdown = -(mdd if mdd is not None else 0)  # negative for display
 
-    # Calmar Ratio
-    calmar = cagr / abs(max_drawdown) if max_drawdown != 0 else 0
+    # Calmar Ratio (shared implementation)
+    calmar_val = compute_calmar_ratio(daily_pf)
+    calmar = calmar_val if calmar_val is not None else 0
 
     # Value at Risk (95%)
     var_95 = df['daily_return'].quantile(VAR_CONFIDENCE_LEVEL)

@@ -1,5 +1,7 @@
 """Main report orchestrator — generates the consolidated backtest Excel workbook."""
 
+from typing import Optional
+
 import pandas as pd
 import warnings
 
@@ -27,7 +29,7 @@ from .analytics import (
     get_comprehensive_quarter_analysis,
 )
 from .charts import (
-    create_pf_vs_index_chart,
+    create_portfolio_vs_index_chart,
     create_growth_of_wealth_chart,
     create_daily_drawdown_chart,
     create_monthly_returns_heatmap,
@@ -39,17 +41,17 @@ from .charts import (
 
 
 def generate_backtest_report(
-    daily_pf,
-    trade_results,
-    comparison_df=None,
-    output_path=None,
-    sub_periods=None,
-    input_frequency="daily",
-    report_title="Backtest Report",
-    data_issues=None,
-    first_quarter=None,
-    last_quarter=None,
-):
+    daily_pf: pd.DataFrame,
+    trade_results: pd.DataFrame,
+    comparison_df: Optional[pd.DataFrame] = None,
+    output_path: Optional[str] = None,
+    sub_periods: Optional[list[list[int]]] = None,
+    input_frequency: str = "daily",
+    report_title: str = "Backtest Report",
+    data_issues: Optional[pd.DataFrame] = None,
+    first_quarter: Optional[int] = None,
+    last_quarter: Optional[int] = None,
+) -> str:
     """
     Generate the single consolidated backtest report Excel workbook.
 
@@ -198,7 +200,7 @@ def generate_backtest_report(
 
     pf_vs_index_chart = None
     if comparison_df is not None:
-        pf_vs_index_chart = create_pf_vs_index_chart(
+        pf_vs_index_chart = create_portfolio_vs_index_chart(
             comparison_df, first_quarter, last_quarter, INITIAL_CAPITAL
         )
 

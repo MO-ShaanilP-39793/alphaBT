@@ -26,8 +26,8 @@ from selection import (
 )
 from backtest import (
     simulate_trades,
-    compute_pf_value_over_quarters,
-    compute_pf_vs_index,
+    compute_portfolio_value_over_quarters,
+    compute_portfolio_vs_index,
 )
 from reporting import generate_backtest_report
 from config.defaults import (
@@ -52,6 +52,8 @@ from config.defaults import (
     DEFAULT_GENERATE_REPORT,
     DEFAULT_TPSL_CATEGORY_DIMENSION,
 )
+from typing import Optional, Union
+
 from config.schema import BacktestConfig
 from utils.logging_config import setup_logging, get_logger
 import matplotlib
@@ -60,7 +62,7 @@ matplotlib.use('Agg')  # Use non-interactive backend for saving plots
 logger = get_logger(__name__)
 
 
-def load_config(config_path=DEFAULT_CONFIG_PATH) -> BacktestConfig:
+def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> BacktestConfig:
     """Load and validate configuration from YAML file.
 
     Returns a validated :class:`BacktestConfig` instance.  Any typos or type
@@ -71,7 +73,7 @@ def load_config(config_path=DEFAULT_CONFIG_PATH) -> BacktestConfig:
     return BacktestConfig(**raw)
 
 
-def load_data(file_path):
+def load_data(file_path: str) -> pd.DataFrame:
     """
     Load data from CSV or Parquet file.
     
@@ -97,7 +99,7 @@ def load_data(file_path):
         raise ValueError(f"Unsupported file format: {file_ext}. Use .csv or .parquet")
 
 
-def filter_data_by_quarters(df, first_quarter, last_quarter):
+def filter_data_by_quarters(df: pd.DataFrame, first_quarter: int, last_quarter: int) -> pd.DataFrame:
     """
     Filter dataframe to include only rows within the specified quarter range.
     
@@ -112,7 +114,7 @@ def filter_data_by_quarters(df, first_quarter, last_quarter):
     return df[(df['quarter'] >= first_quarter) & (df['quarter'] <= last_quarter)].copy()
 
 
-def create_output_directory(base_dir=DEFAULT_OUTPUT_BASE_DIR):
+def create_output_directory(base_dir: str = DEFAULT_OUTPUT_BASE_DIR) -> str:
     """
     Create a timestamped output directory for results.
     
@@ -134,7 +136,7 @@ def create_output_directory(base_dir=DEFAULT_OUTPUT_BASE_DIR):
     return output_dir
 
 
-def save_config_copy(config, output_dir):
+def save_config_copy(config: 'BacktestConfig', output_dir: str) -> None:
     """
     Save a copy of the configuration to the output directory for traceability.
     
@@ -150,11 +152,11 @@ def save_config_copy(config, output_dir):
     logger.info("Configuration saved to: %s", config_output_path)
 
 
-def run_stock_selection(input_data, category_scheme, category_counts, category_weights,
-                        selection_method=DEFAULT_SELECTION_METHOD, min_prob_threshold=DEFAULT_MIN_PROB_THRESHOLD,
-                        selection_type=DEFAULT_SELECTION_TYPE, top_k_config=None,
-                        category_based_weighting_scheme=DEFAULT_WEIGHTING_SCHEME,
-                        selection_dimension=None, weighting_dimension=None):
+def run_stock_selection(input_data: pd.DataFrame, category_scheme: str, category_counts: list[int], category_weights: list[float],
+                        selection_method: str = DEFAULT_SELECTION_METHOD, min_prob_threshold: Optional[float] = DEFAULT_MIN_PROB_THRESHOLD,
+                        selection_type: str = DEFAULT_SELECTION_TYPE, top_k_config: Optional[dict] = None,
+                        category_based_weighting_scheme: str = DEFAULT_WEIGHTING_SCHEME,
+                        selection_dimension: Optional[str] = None, weighting_dimension: Optional[str] = None) -> pd.DataFrame:
     """
     Run stock selection based on the specified selection type and category scheme.
     
@@ -210,7 +212,7 @@ def run_stock_selection(input_data, category_scheme, category_counts, category_w
         raise ValueError(f"Unknown selection_type: {selection_type}. Use 'category_based' or 'top_k'.")
 
 
-def validate_preselected_input(df, category_scheme, tp_mode, sl_mode, tp_enabled, sl_enabled, has_tiered_config):
+def validate_preselected_input(df: pd.DataFrame, category_scheme: str, tp_mode: str, sl_mode: str, tp_enabled: bool, sl_enabled: bool, has_tiered_config: bool) -> tuple[pd.DataFrame, bool]:
     """
     Validate and prepare preselected portfolio input.
     
@@ -288,7 +290,7 @@ def backtest_core(
         input_data: pd.DataFrame, 
         price_data: pd.DataFrame, 
         index_data: pd.DataFrame = None,
-        skip_price_data_validation: bool = True) -> dict:
+        skip_price_data_validation: bool = True) -> Optional[dict]:
     """
     Core backtesting logic.
     
@@ -321,6 +323,213 @@ def backtest_core(
         return None
 
 
+def _resolve_tpsl_scheme(config: 'BacktestConfig') -> str:
+    """Resolve which dimension scheme (volatility/mcap) drives TP/SL thresholds.
+    
+    Parameters:
+        config: Validated backtest configuration
+        
+    Returns:
+        Dimension name ('volatility' or 'mcap')
+        
+    Raises:
+        ValueError: If tpsl_category_dimension is invalid or unresolvable
+    """
+    selection_dimension = config.selection_dimension
+    weighting_dimension = config.weighting_dimension
+    tpsl_category_dimension = config.tpsl_category_dimension
+
+    if tpsl_category_dimension == 'selection':
+        tpsl_scheme = selection_dimension
+    elif tpsl_category_dimension == 'weighting':
+        tpsl_scheme = weighting_dimension
+    elif tpsl_category_dimension in ('volatility', 'mcap'):
+        tpsl_scheme = tpsl_category_dimension
+    else:
+        raise ValueError(
+            f"tpsl_category_dimension must be 'selection', 'weighting', "
+            f"'volatility', or 'mcap', got '{tpsl_category_dimension}'"
+        )
+
+    if tpsl_scheme not in (selection_dimension, weighting_dimension):
+        raise ValueError(
+            f"tpsl_category_dimension resolves to '{tpsl_scheme}', but neither "
+            f"selection_dimension ('{selection_dimension}') nor weighting_dimension "
+            f"('{weighting_dimension}') uses this dimension. Cannot produce "
+            f"correct TP/SL category labels."
+        )
+
+    return tpsl_scheme
+
+
+def _select_stocks(
+        config: 'BacktestConfig',
+        input_data_filtered: pd.DataFrame,
+        price_data: pd.DataFrame,
+        first_quarter: int,
+        last_quarter: int,
+        skip_price_data_validation: bool,
+) -> tuple:
+    """Run stock selection or validate preselected portfolio.
+    
+    Returns:
+        Tuple of (selected_stocks DataFrame, data_issues DataFrame or None)
+    """
+    entry_price_window = config.entry_price_window
+    run_stock_selection_flag = config.run_stock_selection
+    data_issues = None
+
+    if run_stock_selection_flag:
+        logger.info("[2/4] Running stock selection...")
+
+        if not skip_price_data_validation:
+            input_data_filtered, data_issues = filter_tradeable_stocks(
+                input_data_filtered, price_data,
+                first_quarter, last_quarter,
+                min_prices_required=entry_price_window,
+            )
+            if data_issues is not None and not data_issues.empty:
+                logger.debug(
+                    "Filtered %d stock-quarter combinations with price data issues",
+                    len(data_issues),
+                )
+
+        selected_stocks = run_stock_selection(
+            input_data_filtered,
+            config.category_scheme,
+            config.category_counts,
+            config.category_weights,
+            selection_method=config.selection_method,
+            min_prob_threshold=config.min_prob_threshold,
+            selection_type=config.selection_type,
+            top_k_config=(
+                config.top_k_config.model_dump() if config.top_k_config else None
+            ),
+            category_based_weighting_scheme=config.category_based_selection_weighting_scheme,
+            selection_dimension=config.selection_dimension,
+            weighting_dimension=config.weighting_dimension,
+        )
+        logger.debug(
+            "Selected stocks: %d positions across all quarters",
+            len(selected_stocks),
+        )
+    else:
+        logger.info("[2/4] Using preselected portfolio...")
+
+        if not skip_price_data_validation:
+            data_issues = validate_price_data_coverage(
+                input_data_filtered, price_data,
+                first_quarter, last_quarter,
+                min_prices_required=entry_price_window,
+            )
+            if data_issues is not None and not data_issues.empty:
+                logger.warning(
+                    "Found %d stock-quarter combinations with price data issues",
+                    len(data_issues),
+                )
+                logger.warning(
+                    "Issues logged but stocks not filtered since using preselected portfolio"
+                )
+
+        selected_stocks, has_category = validate_preselected_input(
+            input_data_filtered,
+            config.category_scheme,
+            config.tp_mode,
+            config.sl_mode,
+            config.tp_enabled,
+            config.sl_enabled,
+            config.tiered_config is not None,
+        )
+        logger.debug(
+            "Preselected stocks: %d positions across all quarters",
+            len(selected_stocks),
+        )
+        if has_category:
+            logger.debug(
+                "Categories found: %s",
+                sorted(selected_stocks['cat'].unique().tolist()),
+            )
+        else:
+            logger.debug("No category column in input (using default TP/SL thresholds)")
+
+    return selected_stocks, data_issues
+
+
+def _simulate_and_compute(
+        config: 'BacktestConfig',
+        selected_stocks: pd.DataFrame,
+        price_data: pd.DataFrame,
+        index_data: pd.DataFrame,
+        tpsl_scheme: str,
+        first_quarter: int,
+        last_quarter: int,
+) -> tuple:
+    """Run trade simulation and compute daily portfolio values.
+    
+    Returns:
+        Tuple of (trade_results DataFrame, daily_pf_values DataFrame)
+        Either may be None on failure.
+    """
+    tpsl_category_dimension = config.tpsl_category_dimension
+    selection_dimension = config.selection_dimension
+    entry_price_window = config.entry_price_window
+
+    # Set up tpsl_cat column for TP/SL category lookup
+    if 'selection_cat' in selected_stocks.columns:
+        if tpsl_category_dimension in ('selection', selection_dimension):
+            selected_stocks['tpsl_cat'] = selected_stocks['selection_cat']
+        else:
+            selected_stocks['tpsl_cat'] = selected_stocks['cat']
+
+    logger.info("[3/4] Simulating trades with TP/SL thresholds...")
+
+    trade_results = simulate_trades(
+        selected_stocks,
+        price_data,
+        tpsl_scheme,
+        index_data=index_data,
+        tp_mode=config.tp_mode,
+        sl_mode=config.sl_mode,
+        tp_enabled=config.tp_enabled,
+        sl_enabled=config.sl_enabled,
+        tiered_config=(
+            config.tiered_config.model_dump() if config.tiered_config else None
+        ),
+        atr_config=config.atr_config.model_dump() if config.atr_config else None,
+        pivot_config=(
+            config.pivot_config.model_dump() if config.pivot_config else None
+        ),
+        flat_config=config.flat_config.model_dump() if config.flat_config else None,
+        index_exit_config=(
+            config.index_exit.model_dump() if config.index_exit else None
+        ),
+        entry_price_window=entry_price_window,
+    )
+
+    if trade_results is None or trade_results.empty:
+        return None, None
+
+    logger.debug("Trade simulation complete: %d trades", len(trade_results))
+
+    logger.info("[4/4] Generating daily portfolio values...")
+
+    daily_pf_values = compute_portfolio_value_over_quarters(
+        trade_results,
+        price_data,
+        first_quarter,
+        last_quarter,
+        INITIAL_CAPITAL,
+        entry_price_window=entry_price_window,
+    )
+
+    if daily_pf_values is not None and not daily_pf_values.empty:
+        logger.debug(
+            "Daily portfolio values generated: %d days", len(daily_pf_values)
+        )
+
+    return trade_results, daily_pf_values
+
+
 def _backtest_core_impl(
         config: 'BacktestConfig',
         input_data: pd.DataFrame,
@@ -329,61 +538,11 @@ def _backtest_core_impl(
         skip_price_data_validation: bool = True) -> dict:
     """Inner implementation of backtest_core (unwrapped from try/except)."""
 
-    # Extract config values via attribute access
     first_quarter = config.first_quarter
     last_quarter = config.last_quarter
-    category_scheme = config.category_scheme
     
-    # Cross-dimensional selection/weighting (defaults applied by model validator)
-    selection_dimension = config.selection_dimension
-    weighting_dimension = config.weighting_dimension
-    tpsl_category_dimension = config.tpsl_category_dimension
-    
-    # Resolve the actual TP/SL category scheme and column name
-    if tpsl_category_dimension == 'selection':
-        tpsl_scheme = selection_dimension
-    elif tpsl_category_dimension == 'weighting':
-        tpsl_scheme = weighting_dimension
-    elif tpsl_category_dimension in ('volatility', 'mcap'):
-        tpsl_scheme = tpsl_category_dimension
-    else:
-        raise ValueError(f"tpsl_category_dimension must be 'selection', 'weighting', 'volatility', or 'mcap', got '{tpsl_category_dimension}'")
-    
-    # Validate that tpsl_scheme is covered by at least one dimension
-    if tpsl_scheme not in (selection_dimension, weighting_dimension):
-        raise ValueError(
-            f"tpsl_category_dimension resolves to '{tpsl_scheme}', but neither "
-            f"selection_dimension ('{selection_dimension}') nor weighting_dimension "
-            f"('{weighting_dimension}') uses this dimension. Cannot produce "
-            f"correct TP/SL category labels."
-        )
-    
-    # Stock selection mode
-    run_stock_selection_flag = config.run_stock_selection
-    
-    # Selection type: 'category_based' or 'top_k'
-    selection_type = config.selection_type
-    
-    # Selection-specific config
-    category_counts = config.category_counts
-    category_weights = config.category_weights
-    selection_method = config.selection_method
-    min_prob_threshold = config.min_prob_threshold
-    top_k_config = config.top_k_config.model_dump() if config.top_k_config else None
-    category_based_weighting_scheme = config.category_based_selection_weighting_scheme
-    
-    # Tiered TP/SL config
-    tiered_config = config.tiered_config
-    has_tiered_config = tiered_config is not None
-    
-    # TP/SL mode configuration
-    tp_mode = config.tp_mode
-    sl_mode = config.sl_mode
-    tp_enabled = config.tp_enabled
-    sl_enabled = config.sl_enabled
-    
-    # Entry price window configuration
-    entry_price_window = config.entry_price_window
+    # Resolve TP/SL dimension scheme
+    tpsl_scheme = _resolve_tpsl_scheme(config)
     
     # ---------------------------------------------------------------------
     # Filter Input Data by Quarter Range
@@ -407,139 +566,157 @@ def _backtest_core_impl(
     # ---------------------------------------------------------------------
     # Run Stock Selection OR Use Preselected Portfolio
     # ---------------------------------------------------------------------
-    data_issues = None  # Will store validation issues for return
-    
-    if run_stock_selection_flag:
-        logger.info("[2/4] Running stock selection...")
-        
-        # Validate and filter price data before selection (unless pre-validated)
-        if not skip_price_data_validation:
-            input_data_filtered, data_issues = filter_tradeable_stocks(
-                input_data_filtered,
-                price_data,
-                first_quarter,
-                last_quarter,
-                min_prices_required=entry_price_window
-            )
-            
-            if data_issues is not None and not data_issues.empty:
-                logger.debug("Filtered %d stock-quarter combinations with price data issues", len(data_issues))
-        
-        selected_stocks = run_stock_selection(
-            input_data_filtered,
-            category_scheme,
-            category_counts,
-            category_weights,
-            selection_method=selection_method,
-            min_prob_threshold=min_prob_threshold,
-            selection_type=selection_type,
-            top_k_config=top_k_config,
-            category_based_weighting_scheme=category_based_weighting_scheme,
-            selection_dimension=selection_dimension,
-            weighting_dimension=weighting_dimension
-        )
-        logger.debug("Selected stocks: %d positions across all quarters", len(selected_stocks))
-    else:
-        logger.info("[2/4] Using preselected portfolio...")
-        
-        # Validate price data coverage (but don't filter, since it's preselected)
-        if not skip_price_data_validation:
-            data_issues = validate_price_data_coverage(
-                input_data_filtered,
-                price_data,
-                first_quarter,
-                last_quarter,
-                min_prices_required=entry_price_window
-            )
-            
-            if data_issues is not None and not data_issues.empty:
-                logger.warning("Found %d stock-quarter combinations with price data issues", len(data_issues))
-                logger.warning("Issues logged but stocks not filtered since using preselected portfolio")
-        
-        selected_stocks, has_category = validate_preselected_input(
-            input_data_filtered,
-            category_scheme,
-            tp_mode,
-            sl_mode,
-            tp_enabled,
-            sl_enabled,
-            has_tiered_config
-        )
-        logger.debug("Preselected stocks: %d positions across all quarters", len(selected_stocks))
-        if has_category:
-            logger.debug("Categories found: %s", sorted(selected_stocks['cat'].unique().tolist()))
-        else:
-            logger.debug("No category column in input (using default TP/SL thresholds)")
+    selected_stocks, data_issues = _select_stocks(
+        config, input_data_filtered, price_data,
+        first_quarter, last_quarter, skip_price_data_validation,
+    )
     
     if selected_stocks is None or selected_stocks.empty:
         return None
     
     # ---------------------------------------------------------------------
-    # Simulate Trades with TP/SL
+    # Simulate Trades and Compute Portfolio Values
     # ---------------------------------------------------------------------
-    logger.info("[3/4] Simulating trades with TP/SL thresholds...")
-    
-    # Set up tpsl_cat column for TP/SL category lookup
-    # When selection and weighting dimensions differ, the TP/SL lookup dimension
-    # is controlled by tpsl_category_dimension
-    if 'selection_cat' in selected_stocks.columns:
-        if tpsl_category_dimension in ('selection', selection_dimension):
-            selected_stocks['tpsl_cat'] = selected_stocks['selection_cat']
-        else:
-            # tpsl uses weighting dimension or an explicitly specified one matching it
-            selected_stocks['tpsl_cat'] = selected_stocks['cat']
-    # else: top_k or preselected mode — no tpsl_cat needed, process_trade falls back to 'cat'
-    
-    # Get configs from strategy config
-    trade_results = simulate_trades(
-        selected_stocks,
-        price_data,
-        tpsl_scheme,
-        index_data=index_data,
-        tp_mode=tp_mode,
-        sl_mode=sl_mode,
-        tp_enabled=tp_enabled,
-        sl_enabled=sl_enabled,
-        tiered_config=config.tiered_config.model_dump() if config.tiered_config else None,
-        atr_config=config.atr_config.model_dump() if config.atr_config else None,
-        pivot_config=config.pivot_config.model_dump() if config.pivot_config else None,
-        flat_config=config.flat_config.model_dump() if config.flat_config else None,
-        index_exit_config=config.index_exit.model_dump() if config.index_exit else None,
-        entry_price_window=entry_price_window
+    trade_results, daily_pf_values = _simulate_and_compute(
+        config, selected_stocks, price_data, index_data,
+        tpsl_scheme, first_quarter, last_quarter,
     )
     
-    if trade_results is None or trade_results.empty:
+    if trade_results is None:
         return None
-    
-    logger.debug("Trade simulation complete: %d trades", len(trade_results))
-    
-    # ---------------------------------------------------------------------
-    # Generate Daily Portfolio Values
-    # ---------------------------------------------------------------------
-    logger.info("[4/4] Generating daily portfolio values...")
-    
-    daily_pf_values = compute_pf_value_over_quarters(
-        trade_results, 
-        price_data, 
-        first_quarter, 
-        last_quarter, 
-        INITIAL_CAPITAL,
-        entry_price_window=entry_price_window
-    )
-    
-    if daily_pf_values is not None and not daily_pf_values.empty:
-        logger.debug("Daily portfolio values generated: %d days", len(daily_pf_values))
     
     return {
         'daily_pf_values': daily_pf_values,
         'trade_results': trade_results,
         'first_quarter': first_quarter,
         'last_quarter': last_quarter,
-        'data_issues': data_issues,  # Price data validation issues (None if no issues)
+        'data_issues': data_issues,
     }
 
 
-def run_backtest(config_path=DEFAULT_CONFIG_PATH):
+def _log_config_summary(config: 'BacktestConfig') -> None:
+    """Log a human-readable summary of the loaded configuration."""
+    logger.debug("Input data: %s", config.input_data_path)
+    logger.debug("Price data: %s", config.price_data_path)
+    logger.debug("Index data: %s", config.index_data_path)
+    logger.info("Quarter range: %s to %s", config.first_quarter, config.last_quarter)
+    logger.debug("Category scheme: %s", config.category_scheme)
+
+    if (config.selection_dimension != config.category_scheme
+            or config.weighting_dimension != config.category_scheme):
+        logger.debug("Selection dimension: %s", config.selection_dimension)
+        logger.debug("Weighting dimension: %s", config.weighting_dimension)
+        logger.debug("TP/SL category dimension: %s", config.tpsl_category_dimension)
+
+    logger.debug("Run stock selection: %s", config.run_stock_selection)
+
+    if config.run_stock_selection:
+        logger.debug("Selection type: %s", config.selection_type)
+        if config.selection_type == 'category_based':
+            logger.debug("Category counts: %s", config.category_counts)
+            logger.debug("Category weights: %s", config.category_weights)
+            logger.debug("Weighting scheme: %s", config.category_based_selection_weighting_scheme)
+        elif config.selection_type == 'top_k':
+            k = config.top_k_config.k if config.top_k_config else DEFAULT_TOP_K
+            weighting = (
+                config.top_k_config.weighting_scheme
+                if config.top_k_config else DEFAULT_TOP_K_WEIGHTING
+            )
+            logger.debug("Top k: %s", k)
+            logger.debug("Weighting scheme: %s", weighting)
+        logger.debug("Selection method: %s", config.selection_method)
+        if config.min_prob_threshold is not None:
+            logger.debug("Min probability threshold: %s", config.min_prob_threshold)
+    else:
+        logger.debug("Using preselected portfolio (selection config options ignored)")
+        if config.tiered_config is not None:
+            logger.debug("Tiered TP/SL config provided")
+
+    logger.debug(
+        "TP mode: %s%s", config.tp_mode,
+        " (take profit exits disabled)" if not config.tp_enabled else "",
+    )
+    logger.debug(
+        "SL mode: %s%s", config.sl_mode,
+        " (stop loss exits disabled)" if not config.sl_enabled else "",
+    )
+    logger.debug("TP enabled: %s", config.tp_enabled)
+    logger.debug("SL enabled: %s", config.sl_enabled)
+    logger.debug("Entry price window: %d trading day(s)", config.entry_price_window)
+
+
+def _save_results_and_report(
+        config: 'BacktestConfig',
+        results: dict,
+        price_data: pd.DataFrame,
+        index_data: pd.DataFrame,
+) -> str:
+    """Create output directory, save artefacts, and optionally generate report.
+    
+    Returns:
+        Path to the output directory.
+    """
+    trade_results = results['trade_results']
+    equity_curve = results['daily_pf_values']
+    first_quarter = results['first_quarter']
+    last_quarter = results['last_quarter']
+    data_issues = results.get('data_issues')
+
+    # Create output directory
+    output_dir = create_output_directory()
+    logger.info("Output directory: %s", output_dir)
+
+    # Add file handler now that output dir exists
+    log_path = os.path.join(output_dir, 'backtest_log.txt')
+    fh = logging.FileHandler(log_path, encoding='utf-8')
+    fh.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+    )
+    fh.setFormatter(formatter)
+    logging.getLogger('alphaBT').addHandler(fh)
+    logger.debug("File logging initialized: %s", log_path)
+
+    # Save config for traceability
+    save_config_copy(config, output_dir)
+
+    # Compute comparison data (if index data available)
+    comparison_df = None
+    if config.index_data_path:
+        comparison_df = compute_portfolio_vs_index(
+            trade_results, price_data, index_data,
+            first_quarter, last_quarter, INITIAL_CAPITAL,
+            daily_pf_values=equity_curve,
+        )
+    else:
+        logger.info("Skipping index comparison (no index data path specified)")
+
+    # Generate report
+    if config.generate_report and equity_curve is not None and not equity_curve.empty:
+        daily_pf = equity_curve.reset_index()
+        daily_pf.columns = ['date', 'portfolio_value', 'quarter']
+
+        report_path = os.path.join(output_dir, 'backtest_report.xlsx')
+        generate_backtest_report(
+            daily_pf=daily_pf,
+            trade_results=trade_results,
+            comparison_df=comparison_df,
+            output_path=report_path,
+            sub_periods=config.report_sub_periods,
+            input_frequency="daily",
+            report_title="Backtest Report",
+            data_issues=data_issues,
+            first_quarter=first_quarter,
+            last_quarter=last_quarter,
+        )
+    elif config.generate_report:
+        logger.info("Skipping report (no equity curve data available)")
+
+    return output_dir
+
+
+def run_backtest(config_path: str = DEFAULT_CONFIG_PATH) -> Optional[tuple[str, pd.DataFrame, pd.DataFrame]]:
     """
     Main function to run the full backtesting workflow.
     
@@ -562,98 +739,20 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
     # -------------------------------------------------------------------------
     logger.info("[1/2] Loading configuration...")
     config = load_config(config_path)
-    
-    # Extract config values via attribute access
-    input_data_path = config.input_data_path
-    price_data_path = config.price_data_path
-    index_data_path = config.index_data_path
-    first_quarter = config.first_quarter
-    last_quarter = config.last_quarter
-    category_scheme = config.category_scheme
-    
-    # Cross-dimensional selection/weighting
-    selection_dimension = config.selection_dimension
-    weighting_dimension = config.weighting_dimension
-    tpsl_category_dimension = config.tpsl_category_dimension
-    
-    # Stock selection mode (new: can skip selection for preselected portfolios)
-    run_stock_selection_flag = config.run_stock_selection
-    
-    # Selection type: 'category_based' or 'top_k'
-    selection_type = config.selection_type
-    
-    # Selection-specific config (only used when run_stock_selection is True)
-    category_counts = config.category_counts
-    category_weights = config.category_weights
-    selection_method = config.selection_method
-    min_prob_threshold = config.min_prob_threshold
-    top_k_config = config.top_k_config
-    category_based_weighting_scheme = config.category_based_selection_weighting_scheme
-    
-    # Default TP/SL config (used when no category in preselected mode)
-    tiered_config = config.tiered_config
-    has_tiered_config = tiered_config is not None
-    
-    # Analysis report options
-    generate_report = config.generate_report
-    report_sub_periods = config.report_sub_periods
-    
-    logger.debug("Input data: %s", input_data_path)
-    logger.debug("Price data: %s", price_data_path)
-    logger.debug("Index data: %s", index_data_path)
-    logger.info("Quarter range: %s to %s", first_quarter, last_quarter)
-    logger.debug("Category scheme: %s", category_scheme)
-    if selection_dimension != category_scheme or weighting_dimension != category_scheme:
-        logger.debug("Selection dimension: %s", selection_dimension)
-        logger.debug("Weighting dimension: %s", weighting_dimension)
-        logger.debug("TP/SL category dimension: %s", tpsl_category_dimension)
-    logger.debug("Run stock selection: %s", run_stock_selection_flag)
-    
-    if run_stock_selection_flag:
-        logger.debug("Selection type: %s", selection_type)
-        if selection_type == 'category_based':
-            logger.debug("Category counts: %s", category_counts)
-            logger.debug("Category weights: %s", category_weights)
-            logger.debug("Weighting scheme: %s", category_based_weighting_scheme)
-        elif selection_type == 'top_k':
-            k = top_k_config.k if top_k_config else DEFAULT_TOP_K
-            weighting = top_k_config.weighting_scheme if top_k_config else DEFAULT_TOP_K_WEIGHTING
-            logger.debug("Top k: %s", k)
-            logger.debug("Weighting scheme: %s", weighting)
-        logger.debug("Selection method: %s", selection_method)
-        if min_prob_threshold is not None:
-            logger.debug("Min probability threshold: %s", min_prob_threshold)
-    else:
-        logger.debug("Using preselected portfolio (selection config options ignored)")
-        if has_tiered_config:
-            logger.debug("Tiered TP/SL config provided")
-    
-    # TP/SL mode configuration
-    tp_mode = config.tp_mode
-    sl_mode = config.sl_mode
-    tp_enabled = config.tp_enabled
-    sl_enabled = config.sl_enabled
-    logger.debug("TP mode: %s%s", tp_mode, " (take profit exits disabled)" if not tp_enabled else "")
-    logger.debug("SL mode: %s%s", sl_mode, " (stop loss exits disabled)" if not sl_enabled else "")
-    logger.debug("TP enabled: %s", tp_enabled)
-    logger.debug("SL enabled: %s", sl_enabled)
-    
-    # Entry price window
-    entry_price_window = config.entry_price_window
-    logger.debug("Entry price window: %d trading day(s)", entry_price_window)
+    _log_config_summary(config)
     
     # -------------------------------------------------------------------------
     # 2. Load Data
     # -------------------------------------------------------------------------
     logger.info("[2/2] Loading data...")
     
-    input_data = load_data(input_data_path)
+    input_data = load_data(config.input_data_path)
     logger.debug("Input data loaded: %d rows", len(input_data))
     
-    price_data = load_data(price_data_path)
+    price_data = load_data(config.price_data_path)
     logger.debug("Price data loaded: %d rows", len(price_data))
     
-    index_data = load_data(index_data_path)
+    index_data = load_data(config.index_data_path)
     logger.debug("Index data loaded: %d rows", len(index_data))
     
     # -------------------------------------------------------------------------
@@ -674,90 +773,27 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
         logger.error("Backtest core returned no results.")
         return None, None, None
     
-    # Extract results
-    trade_results = results['trade_results']
-    equity_curve = results['daily_pf_values']
-    first_quarter = results['first_quarter']
-    last_quarter = results['last_quarter']
-    data_issues = results.get('data_issues')
-    
     logger.info("-" * 60)
     
     # -------------------------------------------------------------------------
-    # 4. Create Output Directory and Save Results
+    # 4. Save Results and Generate Report
     # -------------------------------------------------------------------------
     logger.info("Saving results...")
-    
-    # Create output directory
-    output_dir = create_output_directory()
-    logger.info("Output directory: %s", output_dir)
-    
-    # Phase 2: Add file handler now that output dir exists
-    log_path = os.path.join(output_dir, 'backtest_log.txt')
-    fh = logging.FileHandler(log_path, encoding='utf-8')
-    fh.setLevel(logging.DEBUG)
-    formatter = logging.Formatter(
-        '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    fh.setFormatter(formatter)
-    logging.getLogger('alphaBT').addHandler(fh)
-    logger.debug("File logging initialized: %s", log_path)
-    
-    # Save config for traceability
-    save_config_copy(config, output_dir)
-    
-    # -------------------------------------------------------------------------
-    # 5. Compute comparison data (if index data available)
-    # -------------------------------------------------------------------------
-    comparison_df = None
-    if index_data_path:
-        comparison_df = compute_pf_vs_index(
-            trade_results,
-            price_data,
-            index_data,
-            first_quarter,
-            last_quarter,
-            INITIAL_CAPITAL,
-            daily_pf_values=equity_curve  # Reuse pre-computed equity curve for consistency
-        )
-    else:
-        logger.info("Skipping index comparison (no index data path specified)")
-    
-    # -------------------------------------------------------------------------
-    # 6. Generate Consolidated Report
-    # -------------------------------------------------------------------------
-    if generate_report and equity_curve is not None and not equity_curve.empty:
-        # Prepare daily_pf in the expected format
-        daily_pf = equity_curve.reset_index()
-        daily_pf.columns = ['date', 'portfolio_value', 'quarter']
-        
-        report_path = os.path.join(output_dir, f'backtest_report.xlsx')
-        generate_backtest_report(
-            daily_pf=daily_pf,
-            trade_results=trade_results,
-            comparison_df=comparison_df,
-            output_path=report_path,
-            sub_periods=report_sub_periods,
-            input_frequency="daily",
-            report_title="Backtest Report",
-            data_issues=data_issues,
-            first_quarter=first_quarter,
-            last_quarter=last_quarter,
-        )
-    elif generate_report:
-        logger.info("Skipping report (no equity curve data available)")
+    output_dir = _save_results_and_report(config, results, price_data, index_data)
     
     # -------------------------------------------------------------------------
     # Summary
     # -------------------------------------------------------------------------
+    equity_curve = results['daily_pf_values']
+    trade_results = results['trade_results']
+
     logger.info("=" * 60)
     logger.info("BACKTESTING COMPLETE")
     logger.info("=" * 60)
     logger.info("All outputs saved to: %s", output_dir)
     logger.info("Files generated:")
     logger.info("  - config_used.yaml (configuration traceability)")
-    if generate_report and equity_curve is not None and not equity_curve.empty:
+    if config.generate_report and equity_curve is not None and not equity_curve.empty:
         logger.info("  - backtest_report.xlsx (metrics, charts, trade data — all in one)")
     logger.info("  - backtest_log.txt (full execution log)")
     

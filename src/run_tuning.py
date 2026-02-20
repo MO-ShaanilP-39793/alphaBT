@@ -86,18 +86,17 @@ logger = get_logger(__name__)
 
 class DataCache:
     """
-    Singleton cache for data to avoid repeated I/O during optimization.
-    """
-    _instance = None
+    Cache for data loaded once and reused across all Optuna trials.
     
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance.input_data = None
-            cls._instance.price_data = None
-            cls._instance.index_data = None
-            cls._instance.loaded = False
-        return cls._instance
+    Instantiate once, call :meth:`load` with the fixed config, then pass
+    the instance to :func:`create_objective`.
+    """
+    
+    def __init__(self) -> None:
+        self.input_data: pd.DataFrame | None = None
+        self.price_data: pd.DataFrame | None = None
+        self.index_data: pd.DataFrame | None = None
+        self.loaded: bool = False
     
     def load(self, config: dict) -> None:
         """Load all data files once."""

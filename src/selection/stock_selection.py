@@ -9,26 +9,14 @@ from config.defaults import (
     RISK_ADJUSTED_EPSILON,
     DEFAULT_MIN_PRICES_REQUIRED,
     DEFAULT_ENTRY_WINDOW_LENGTH,
+    VOLATILITY_CATEGORIES,
+    MCAP_CATEGORIES,
+    get_dimension_categories,
 )
 from utils.quarter import get_entry_start_date
 
 
-# =============================================================================
-# CATEGORY NAME CONSTANTS
-# =============================================================================
-
-VOLATILITY_CATEGORIES = ['high_volatility', 'medium_volatility', 'low_volatility']
-MCAP_CATEGORIES = ['largecap', 'midcap', 'smallcap']
-
-
-def _get_dimension_categories(dimension):
-    """Return the ordered list of category names for a given dimension."""
-    if dimension == 'volatility':
-        return VOLATILITY_CATEGORIES
-    elif dimension == 'mcap':
-        return MCAP_CATEGORIES
-    else:
-        raise ValueError(f"Unknown dimension: '{dimension}'. Use 'volatility' or 'mcap'.")
+# _get_dimension_categories is now get_dimension_categories in config.defaults
 
 
 def _assign_volatility_categories(series):
@@ -245,8 +233,8 @@ def select_and_weight_stocks(
     if weighting_scheme not in valid_weighting:
         raise ValueError(f"weighting_scheme must be one of {valid_weighting}, got '{weighting_scheme}'")
     
-    selection_cats = _get_dimension_categories(selection_dimension)
-    weighting_cats = _get_dimension_categories(weighting_dimension)
+    selection_cats = get_dimension_categories(selection_dimension)
+    weighting_cats = get_dimension_categories(weighting_dimension)
     
     # Map selection categories to counts
     selection_specs = {cat: cnt for cat, cnt in zip(selection_cats, selection_counts)}

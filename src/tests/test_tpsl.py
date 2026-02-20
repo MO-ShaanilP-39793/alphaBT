@@ -9,7 +9,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from tests.conftest import Q1, Q2, STOCK_NAMES, MCAP_CATEGORIES
+from tests.conftest import Q1, Q2, STOCK_NAMES, MCAP_CATEGORIES, _make_price_data
 
 
 # =============================================================================
@@ -31,22 +31,6 @@ def _make_selected_stocks(quarter, stocks, mode="cat_weight"):
         else:
             row["stock_weight"] = 1.0 / len(stocks)
         rows.append(row)
-    return pd.DataFrame(rows)
-
-
-def _make_price_data(stocks, start="2023-02-01", end="2023-08-31", base=100.0, daily_ret=0.001):
-    dates = pd.bdate_range(start=start, end=end)
-    rows = []
-    for name in stocks:
-        for i, d in enumerate(dates):
-            close = base * (1 + daily_ret) ** i
-            rows.append({
-                "date": d, "co_name": name,
-                "open": round(close * 0.999, 2),
-                "high": round(close * 1.005, 2),
-                "low": round(close * 0.995, 2),
-                "close": round(close, 2),
-            })
     return pd.DataFrame(rows)
 
 
@@ -76,7 +60,7 @@ class TestSimulateTradesValidation:
     def test_missing_index_exit_config_raises(self):
         from backtest.tpsl import simulate_trades
         stocks = _make_selected_stocks(Q1, STOCK_NAMES[:3])
-        prices = _make_price_data(STOCK_NAMES[:3])
+        prices = _make_price_data(STOCK_NAMES[:3], "2023-02-01", "2023-08-31")
         with pytest.raises(ValueError, match="index_exit_config"):
             simulate_trades(
                 stocks, prices, category_scheme="volatility",
@@ -88,7 +72,7 @@ class TestSimulateTradesValidation:
     def test_missing_atr_config_raises(self):
         from backtest.tpsl import simulate_trades
         stocks = _make_selected_stocks(Q1, STOCK_NAMES[:3])
-        prices = _make_price_data(STOCK_NAMES[:3])
+        prices = _make_price_data(STOCK_NAMES[:3], "2023-02-01", "2023-08-31")
         with pytest.raises(ValueError):
             simulate_trades(
                 stocks, prices, category_scheme="volatility",
@@ -101,7 +85,7 @@ class TestSimulateTradesValidation:
     def test_missing_pivot_config_raises(self):
         from backtest.tpsl import simulate_trades
         stocks = _make_selected_stocks(Q1, STOCK_NAMES[:3])
-        prices = _make_price_data(STOCK_NAMES[:3])
+        prices = _make_price_data(STOCK_NAMES[:3], "2023-02-01", "2023-08-31")
         with pytest.raises(ValueError):
             simulate_trades(
                 stocks, prices, category_scheme="volatility",
@@ -121,7 +105,7 @@ class TestFlatModeTrades:
     def test_flat_mode_produces_results(self):
         from backtest.tpsl import simulate_trades
         stocks = _make_selected_stocks(Q1, STOCK_NAMES[:3])
-        prices = _make_price_data(STOCK_NAMES[:3])
+        prices = _make_price_data(STOCK_NAMES[:3], "2023-02-01", "2023-08-31")
         result = simulate_trades(
             stocks, prices, category_scheme="volatility",
             tp_mode="flat", sl_mode="flat",
@@ -137,7 +121,7 @@ class TestFlatModeTrades:
     def test_entry_prices_populated(self):
         from backtest.tpsl import simulate_trades
         stocks = _make_selected_stocks(Q1, STOCK_NAMES[:3])
-        prices = _make_price_data(STOCK_NAMES[:3])
+        prices = _make_price_data(STOCK_NAMES[:3], "2023-02-01", "2023-08-31")
         result = simulate_trades(
             stocks, prices, category_scheme="volatility",
             tp_mode="flat", sl_mode="flat",
@@ -149,7 +133,7 @@ class TestFlatModeTrades:
     def test_holding_period_positive(self):
         from backtest.tpsl import simulate_trades
         stocks = _make_selected_stocks(Q1, STOCK_NAMES[:3])
-        prices = _make_price_data(STOCK_NAMES[:3])
+        prices = _make_price_data(STOCK_NAMES[:3], "2023-02-01", "2023-08-31")
         result = simulate_trades(
             stocks, prices, category_scheme="volatility",
             tp_mode="flat", sl_mode="flat",
@@ -169,7 +153,7 @@ class TestTPSLDisabled:
     def test_no_tp_triggered_when_disabled(self):
         from backtest.tpsl import simulate_trades
         stocks = _make_selected_stocks(Q1, STOCK_NAMES[:3])
-        prices = _make_price_data(STOCK_NAMES[:3])
+        prices = _make_price_data(STOCK_NAMES[:3], "2023-02-01", "2023-08-31")
         result = simulate_trades(
             stocks, prices, category_scheme="volatility",
             tp_mode="flat", sl_mode="flat",
@@ -190,7 +174,7 @@ class TestStockWeightMode:
     def test_stock_weight_mode_works(self):
         from backtest.tpsl import simulate_trades
         stocks = _make_selected_stocks(Q1, STOCK_NAMES[:3], mode="stock_weight")
-        prices = _make_price_data(STOCK_NAMES[:3])
+        prices = _make_price_data(STOCK_NAMES[:3], "2023-02-01", "2023-08-31")
         result = simulate_trades(
             stocks, prices, category_scheme="volatility",
             tp_mode="flat", sl_mode="flat",
@@ -212,7 +196,7 @@ class TestStockReturn:
         from backtest.tpsl import simulate_trades
         stocks = _make_selected_stocks(Q1, STOCK_NAMES[:3])
         # Uptrending prices (0.1% daily)
-        prices = _make_price_data(STOCK_NAMES[:3], daily_ret=0.001)
+        prices = _make_price_data(STOCK_NAMES[:3], "2023-02-01", "2023-08-31", daily_return=0.001)
         result = simulate_trades(
             stocks, prices, category_scheme="volatility",
             tp_mode="flat", sl_mode="flat",

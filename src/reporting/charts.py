@@ -17,7 +17,7 @@ from utils.formatting import crores_formatter
 from .metrics import compute_drawdown_series
 
 
-def create_pf_vs_index_chart(comparison_df, first_quarter, last_quarter, initial_capital=INITIAL_CAPITAL):
+def create_portfolio_vs_index_chart(comparison_df, first_quarter, last_quarter, initial_capital=INITIAL_CAPITAL):
     """
     Create Portfolio vs Index chart (2-panel: value comparison + alpha).
     Extracted from simulation.py plot_pf_vs_index.
