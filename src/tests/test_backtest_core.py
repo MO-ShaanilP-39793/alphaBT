@@ -11,6 +11,7 @@ import warnings
 import pandas as pd
 import numpy as np
 from unittest.mock import patch, MagicMock
+from pydantic import ValidationError
 from tests.conftest import Q1, Q2, STOCK_NAMES
 
 from backtest_strategy import backtest_core, validate_preselected_input
@@ -259,26 +260,35 @@ class TestConfigValidation:
     def test_entry_price_window_zero(self, base_config, sample_input_data_volatility,
                                       sample_price_data, sample_index_data):
         base_config["entry_price_window"] = 0
-        self._assert_returns_none_with_warning(
-            base_config, sample_input_data_volatility, sample_price_data,
-            sample_index_data, "entry_price_window"
-        )
+        with pytest.raises(ValidationError, match="entry_price_window"):
+            backtest_core(
+                config=base_config,
+                input_data=sample_input_data_volatility,
+                price_data=sample_price_data,
+                index_data=sample_index_data,
+            )
 
     def test_entry_price_window_negative(self, base_config, sample_input_data_volatility,
                                            sample_price_data, sample_index_data):
         base_config["entry_price_window"] = -1
-        self._assert_returns_none_with_warning(
-            base_config, sample_input_data_volatility, sample_price_data,
-            sample_index_data, "entry_price_window"
-        )
+        with pytest.raises(ValidationError, match="entry_price_window"):
+            backtest_core(
+                config=base_config,
+                input_data=sample_input_data_volatility,
+                price_data=sample_price_data,
+                index_data=sample_index_data,
+            )
 
     def test_entry_price_window_string(self, base_config, sample_input_data_volatility,
                                          sample_price_data, sample_index_data):
         base_config["entry_price_window"] = "abc"
-        self._assert_returns_none_with_warning(
-            base_config, sample_input_data_volatility, sample_price_data,
-            sample_index_data, "entry_price_window"
-        )
+        with pytest.raises(ValidationError, match="entry_price_window"):
+            backtest_core(
+                config=base_config,
+                input_data=sample_input_data_volatility,
+                price_data=sample_price_data,
+                index_data=sample_index_data,
+            )
 
     def test_tpsl_category_dimension_invalid(self, base_config,
                                                sample_input_data_volatility,
@@ -381,22 +391,18 @@ class TestSelectionPaths:
     def test_preselected_tiered_no_category_no_config(self, base_config,
                                                         sample_preselected_no_category,
                                                         sample_price_data, sample_index_data):
-        """Tiered mode + no category + no tiered_config → returns None + warning."""
+        """Tiered mode + no category + no tiered_config → ValidationError."""
         base_config["run_stock_selection"] = False
         base_config["tp_mode"] = "tiered"
         base_config["tp_enabled"] = True
         base_config.pop("tiered_config", None)
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            result = backtest_core(
+        with pytest.raises(ValidationError, match="tiered_config"):
+            backtest_core(
                 config=base_config,
                 input_data=sample_preselected_no_category,
                 price_data=sample_price_data,
                 index_data=sample_index_data,
             )
-        assert result is None
-        warning_messages = [str(x.message) for x in w]
-        assert any("Backtest core failed" in msg for msg in warning_messages)
 
 
 # =============================================================================

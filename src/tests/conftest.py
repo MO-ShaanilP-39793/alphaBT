@@ -226,6 +226,10 @@ def base_config(minimal_index_exit_config):
     Uses flat TP/SL, category_based selection, volatility scheme.
     """
     return {
+        # Required paths (unused by backtest_core — data passed directly)
+        "input_data_path": "dummy_input.csv",
+        "price_data_path": "dummy_prices.csv",
+        "index_data_path": "dummy_index.csv",
         "first_quarter": Q1,
         "last_quarter": Q2,
         "category_scheme": "volatility",

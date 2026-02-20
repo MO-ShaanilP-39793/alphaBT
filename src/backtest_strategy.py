@@ -53,6 +53,7 @@ from config.defaults import (
     DEFAULT_GENERATE_REPORT,
     DEFAULT_TPSL_CATEGORY_DIMENSION,
 )
+from config.schema import BacktestConfig
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for saving plots
 
@@ -82,11 +83,15 @@ class TeeOutput:
             f.write(self.buffer.getvalue())
 
 
-def load_config(config_path=DEFAULT_CONFIG_PATH):
-    """Load configuration from YAML file."""
+def load_config(config_path=DEFAULT_CONFIG_PATH) -> BacktestConfig:
+    """Load and validate configuration from YAML file.
+
+    Returns a validated :class:`BacktestConfig` instance.  Any typos or type
+    errors in the YAML will surface as ``pydantic.ValidationError`` here.
+    """
     with open(config_path, 'r') as file:
-        config = yaml.safe_load(file)
-    return config
+        raw = yaml.safe_load(file)
+    return BacktestConfig(**raw)
 
 
 def load_data(file_path):
@@ -157,13 +162,13 @@ def save_config_copy(config, output_dir):
     Save a copy of the configuration to the output directory for traceability.
     
     Parameters:
-    - config: Configuration dictionary
+    - config: BacktestConfig or dict
     - output_dir: Output directory path
     """
-    # Save as YAML
+    config_data = config.model_dump() if isinstance(config, BacktestConfig) else config
     config_output_path = os.path.join(output_dir, 'config_used.yaml')
     with open(config_output_path, 'w') as file:
-        yaml.dump(config, file, default_flow_style=False)
+        yaml.dump(config_data, file, default_flow_style=False)
     
     print(f"Configuration saved to: {config_output_path}")
 
@@ -302,7 +307,7 @@ def validate_preselected_input(df, category_scheme, tp_mode, sl_mode, tp_enabled
 
 
 def backtest_core(
-        config: dict, 
+        config, 
         input_data: pd.DataFrame, 
         price_data: pd.DataFrame, 
         index_data: pd.DataFrame = None,
@@ -312,7 +317,7 @@ def backtest_core(
     Core backtesting logic.
     
     Parameters:
-    - config: Configuration dictionary (same structure as YAML config)
+    - config: BacktestConfig or plain dict (backward compatible with tuning pipeline)
     - input_data: DataFrame with stock data 
     - price_data: DataFrame with OHLCV price data
     - index_data: DataFrame with index data (optional)
@@ -329,16 +334,20 @@ def backtest_core(
         - 'data_issues': Price data validation issues (None if no issues)
       Returns None if backtest fails
     """
+    # Adapter: accept both BacktestConfig and plain dict
+    if isinstance(config, dict):
+        config = BacktestConfig(**config)
+
     try:
-        # Extract config values
-        first_quarter = config.get('first_quarter')
-        last_quarter = config.get('last_quarter')
-        category_scheme = config.get('category_scheme', DEFAULT_CATEGORY_SCHEME)
+        # Extract config values via attribute access
+        first_quarter = config.first_quarter
+        last_quarter = config.last_quarter
+        category_scheme = config.category_scheme
         
-        # Cross-dimensional selection/weighting (backward compatible: fall back to category_scheme)
-        selection_dimension = config.get('selection_dimension', category_scheme)
-        weighting_dimension = config.get('weighting_dimension', category_scheme)
-        tpsl_category_dimension = config.get('tpsl_category_dimension', DEFAULT_TPSL_CATEGORY_DIMENSION)
+        # Cross-dimensional selection/weighting (defaults applied by model validator)
+        selection_dimension = config.selection_dimension
+        weighting_dimension = config.weighting_dimension
+        tpsl_category_dimension = config.tpsl_category_dimension
         
         # Resolve the actual TP/SL category scheme and column name
         if tpsl_category_dimension == 'selection':
@@ -360,33 +369,31 @@ def backtest_core(
             )
         
         # Stock selection mode
-        run_stock_selection_flag = config.get('run_stock_selection', DEFAULT_RUN_STOCK_SELECTION)
+        run_stock_selection_flag = config.run_stock_selection
         
         # Selection type: 'category_based' or 'top_k'
-        selection_type = config.get('selection_type', DEFAULT_SELECTION_TYPE)
+        selection_type = config.selection_type
         
         # Selection-specific config
-        category_counts = config.get('category_counts', DEFAULT_CATEGORY_COUNTS)
-        category_weights = config.get('category_weights', DEFAULT_CATEGORY_WEIGHTS)
-        selection_method = config.get('selection_method', DEFAULT_SELECTION_METHOD)
-        min_prob_threshold = config.get('min_prob_threshold', DEFAULT_MIN_PROB_THRESHOLD)
-        top_k_config = config.get('top_k_config', None)
-        category_based_weighting_scheme = config.get('category_based_selection_weighting_scheme', DEFAULT_WEIGHTING_SCHEME)
+        category_counts = config.category_counts
+        category_weights = config.category_weights
+        selection_method = config.selection_method
+        min_prob_threshold = config.min_prob_threshold
+        top_k_config = config.top_k_config.model_dump() if config.top_k_config else None
+        category_based_weighting_scheme = config.category_based_selection_weighting_scheme
         
         # Tiered TP/SL config
-        tiered_config = config.get('tiered_config', None)
+        tiered_config = config.tiered_config
         has_tiered_config = tiered_config is not None
         
         # TP/SL mode configuration
-        tp_mode = config.get('tp_mode', DEFAULT_TP_MODE)
-        sl_mode = config.get('sl_mode', DEFAULT_SL_MODE)
-        tp_enabled = config.get('tp_enabled', DEFAULT_TP_ENABLED)
-        sl_enabled = config.get('sl_enabled', DEFAULT_SL_ENABLED)
+        tp_mode = config.tp_mode
+        sl_mode = config.sl_mode
+        tp_enabled = config.tp_enabled
+        sl_enabled = config.sl_enabled
         
         # Entry price window configuration
-        entry_price_window = config.get('entry_price_window', DEFAULT_ENTRY_PRICE_WINDOW)
-        if not isinstance(entry_price_window, int) or entry_price_window < 1:
-            raise ValueError(f"entry_price_window must be an integer >= 1, got: {entry_price_window}")
+        entry_price_window = config.entry_price_window
         
         # ---------------------------------------------------------------------
         # Filter Input Data by Quarter Range
@@ -513,11 +520,11 @@ def backtest_core(
             sl_mode=sl_mode,
             tp_enabled=tp_enabled,
             sl_enabled=sl_enabled,
-            tiered_config=config.get('tiered_config'),
-            atr_config=config.get('atr_config'),
-            pivot_config=config.get('pivot_config'),
-            flat_config=config.get('flat_config'),
-            index_exit_config=config.get('index_exit'),
+            tiered_config=config.tiered_config.model_dump() if config.tiered_config else None,
+            atr_config=config.atr_config.model_dump() if config.atr_config else None,
+            pivot_config=config.pivot_config.model_dump() if config.pivot_config else None,
+            flat_config=config.flat_config.model_dump() if config.flat_config else None,
+            index_exit_config=config.index_exit.model_dump() if config.index_exit else None,
             entry_price_window=entry_price_window
         )
         
@@ -583,40 +590,40 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
     print("\n[1/2] Loading configuration...")
     config = load_config(config_path)
     
-    # Extract config values
-    input_data_path = config['input_data_path']
-    price_data_path = config['price_data_path']
-    index_data_path = config['index_data_path']
-    first_quarter = config['first_quarter']
-    last_quarter = config['last_quarter']
-    category_scheme = config.get('category_scheme', DEFAULT_CATEGORY_SCHEME)
+    # Extract config values via attribute access
+    input_data_path = config.input_data_path
+    price_data_path = config.price_data_path
+    index_data_path = config.index_data_path
+    first_quarter = config.first_quarter
+    last_quarter = config.last_quarter
+    category_scheme = config.category_scheme
     
     # Cross-dimensional selection/weighting
-    selection_dimension = config.get('selection_dimension', category_scheme)
-    weighting_dimension = config.get('weighting_dimension', category_scheme)
-    tpsl_category_dimension = config.get('tpsl_category_dimension', DEFAULT_TPSL_CATEGORY_DIMENSION)
+    selection_dimension = config.selection_dimension
+    weighting_dimension = config.weighting_dimension
+    tpsl_category_dimension = config.tpsl_category_dimension
     
     # Stock selection mode (new: can skip selection for preselected portfolios)
-    run_stock_selection_flag = config.get('run_stock_selection', DEFAULT_RUN_STOCK_SELECTION)
+    run_stock_selection_flag = config.run_stock_selection
     
     # Selection type: 'category_based' or 'top_k'
-    selection_type = config.get('selection_type', DEFAULT_SELECTION_TYPE)
+    selection_type = config.selection_type
     
     # Selection-specific config (only used when run_stock_selection is True)
-    category_counts = config.get('category_counts', DEFAULT_CATEGORY_COUNTS)
-    category_weights = config.get('category_weights', DEFAULT_CATEGORY_WEIGHTS)
-    selection_method = config.get('selection_method', DEFAULT_SELECTION_METHOD)
-    min_prob_threshold = config.get('min_prob_threshold', DEFAULT_MIN_PROB_THRESHOLD)
-    top_k_config = config.get('top_k_config', None)
-    category_based_weighting_scheme = config.get('category_based_selection_weighting_scheme', DEFAULT_WEIGHTING_SCHEME)
+    category_counts = config.category_counts
+    category_weights = config.category_weights
+    selection_method = config.selection_method
+    min_prob_threshold = config.min_prob_threshold
+    top_k_config = config.top_k_config
+    category_based_weighting_scheme = config.category_based_selection_weighting_scheme
     
     # Default TP/SL config (used when no category in preselected mode)
-    tiered_config = config.get('tiered_config', None)
+    tiered_config = config.tiered_config
     has_tiered_config = tiered_config is not None
     
     # Analysis report options
-    generate_report = config.get('generate_report', DEFAULT_GENERATE_REPORT)
-    report_sub_periods = config.get('report_sub_periods', None)
+    generate_report = config.generate_report
+    report_sub_periods = config.report_sub_periods
     
     print(f"  - Input data: {input_data_path}")
     print(f"  - Price data: {price_data_path}")
@@ -636,8 +643,8 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
             print(f"  - Category weights: {category_weights}")
             print(f"  - Weighting scheme: {category_based_weighting_scheme}")
         elif selection_type == 'top_k':
-            k = top_k_config.get('k', DEFAULT_TOP_K) if top_k_config else DEFAULT_TOP_K
-            weighting = top_k_config.get('weighting_scheme', DEFAULT_TOP_K_WEIGHTING) if top_k_config else DEFAULT_TOP_K_WEIGHTING
+            k = top_k_config.k if top_k_config else DEFAULT_TOP_K
+            weighting = top_k_config.weighting_scheme if top_k_config else DEFAULT_TOP_K_WEIGHTING
             print(f"  - Top k: {k}")
             print(f"  - Weighting scheme: {weighting}")
         print(f"  - Selection method: {selection_method}")
@@ -649,17 +656,17 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
             print(f"  - Tiered TP/SL config provided")
     
     # TP/SL mode configuration
-    tp_mode = config.get('tp_mode', DEFAULT_TP_MODE)
-    sl_mode = config.get('sl_mode', DEFAULT_SL_MODE)
-    tp_enabled = config.get('tp_enabled', DEFAULT_TP_ENABLED)
-    sl_enabled = config.get('sl_enabled', DEFAULT_SL_ENABLED)
+    tp_mode = config.tp_mode
+    sl_mode = config.sl_mode
+    tp_enabled = config.tp_enabled
+    sl_enabled = config.sl_enabled
     print(f"  - TP mode: {tp_mode}" + (" (take profit exits disabled)" if not tp_enabled else ""))
     print(f"  - SL mode: {sl_mode}" + (" (stop loss exits disabled)" if not sl_enabled else ""))
     print(f"  - TP enabled: {tp_enabled}")
     print(f"  - SL enabled: {sl_enabled}")
     
     # Entry price window
-    entry_price_window = config.get('entry_price_window', DEFAULT_ENTRY_PRICE_WINDOW)
+    entry_price_window = config.entry_price_window
     print(f"  - Entry price window: {entry_price_window} trading day(s)")
     
     # -------------------------------------------------------------------------

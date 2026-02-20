@@ -4,3 +4,10 @@ pythonpath = ["src"]
 filterwarnings = [
     "ignore::UserWarning",
 ]
+
+[project]
+name = "alphaBT"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0.0",
+]
