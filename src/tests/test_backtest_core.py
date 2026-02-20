@@ -431,43 +431,28 @@ class TestExceptionHandling:
 
 
 # =============================================================================
-# TESTS — Verbose flag
+# TESTS — Log output (replaces verbose flag tests)
 # =============================================================================
 
-class TestVerboseFlag:
+class TestLogOutput:
 
     @patch(PATCH_COMPUTE_PF, return_value=_mock_equity_curve())
     @patch(PATCH_SIMULATE, return_value=_mock_trade_results())
     @patch(PATCH_SELECT_AND_WEIGHT, return_value=_mock_selected_stocks_category_based())
-    def test_verbose_false_no_prints(self, mock_sel, mock_sim, mock_pf,
+    def test_backtest_core_emits_log_messages(self, mock_sel, mock_sim, mock_pf,
                                       base_config, sample_input_data_volatility,
-                                      sample_price_data, sample_index_data, capsys):
-        backtest_core(
-            config=base_config,
-            input_data=sample_input_data_volatility,
-            price_data=sample_price_data,
-            index_data=sample_index_data,
-            verbose=False,
-        )
-        captured = capsys.readouterr()
-        # verbose=False should not produce step markers like "[1/4]"
-        assert "[1/4]" not in captured.out
-
-    @patch(PATCH_COMPUTE_PF, return_value=_mock_equity_curve())
-    @patch(PATCH_SIMULATE, return_value=_mock_trade_results())
-    @patch(PATCH_SELECT_AND_WEIGHT, return_value=_mock_selected_stocks_category_based())
-    def test_verbose_true_has_prints(self, mock_sel, mock_sim, mock_pf,
-                                      base_config, sample_input_data_volatility,
-                                      sample_price_data, sample_index_data, capsys):
-        backtest_core(
-            config=base_config,
-            input_data=sample_input_data_volatility,
-            price_data=sample_price_data,
-            index_data=sample_index_data,
-            verbose=True,
-        )
-        captured = capsys.readouterr()
-        assert "[1/4]" in captured.out
+                                      sample_price_data, sample_index_data, caplog):
+        """backtest_core should emit step markers via logging."""
+        import logging
+        with caplog.at_level(logging.INFO, logger="alphaBT"):
+            backtest_core(
+                config=base_config,
+                input_data=sample_input_data_volatility,
+                price_data=sample_price_data,
+                index_data=sample_index_data,
+            )
+        # Should see step markers like "[1/4]" in log output
+        assert any("[1/4]" in msg for msg in caplog.messages)
 
 
 # =============================================================================

@@ -2,6 +2,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 def analyze_labels_category_distribution(
         data: pd.DataFrame, first_quarter: int, last_quarter: int, plot: bool = True
     ) -> dict:
@@ -25,7 +29,7 @@ def analyze_labels_category_distribution(
     num_datapoints = len(data)
     
     if num_datapoints == 0:
-        print(f"No data found for quarter range {first_quarter} to {last_quarter}")
+        logger.warning("No data found for quarter range %d to %d", first_quarter, last_quarter)
         return {}
     
     # 1. Compute Label distribution (raw numbers and percentages)
@@ -40,14 +44,13 @@ def analyze_labels_category_distribution(
     # Percentage of data points labeled 0
     label_0_pct = (label_0_count / num_datapoints) * 100
     
-    print(f"=== Label Distribution (Quarter {first_quarter} to {last_quarter}) ===")
-    print(f"Number of Datapoints: {num_datapoints}")
-    print(f"Label 1: {label_1_count} ({label_1_pct:.2f}%)")
-    print(f"Label 0: {label_0_count} ({label_0_pct:.2f}%)")
-    print()
+    logger.info("=== Label Distribution (Quarter %d to %d) ===", first_quarter, last_quarter)
+    logger.info("Number of Datapoints: %d", num_datapoints)
+    logger.info("Label 1: %d (%.2f%%)", label_1_count, label_1_pct)
+    logger.info("Label 0: %d (%.2f%%)", label_0_count, label_0_pct)
     
     # 2. Compute Overall market cap category distribution
-    print(f"=== Overall Market Cap Distribution ===")
+    logger.info("=== Overall Market Cap Distribution ===")
     cap_counts = data['cap_cat'].value_counts()
     cap_pcts = (cap_counts / num_datapoints) * 100
     overall_cap_dist = {}
@@ -55,14 +58,13 @@ def analyze_labels_category_distribution(
         count = cap_counts.get(cap, 0)
         pct = cap_pcts.get(cap, 0)
         overall_cap_dist[cap] = {'count': count, 'pct': pct}
-        print(f"{cap.capitalize()} cap: {count} ({pct:.2f}%)")
-    print()
+        logger.info("%s cap: %d (%.2f%%)", cap.capitalize(), count, pct)
     
     # 3. What is the Market Cap category distribution within label=1 stocks?
     label_1_stocks = data[data['label'] == 1]  # filter for rows labeled 1
     label_1_total = len(label_1_stocks)  # compute total number of positive data points
     
-    print(f"=== Market Cap Category Distribution within Label=1 Stocks ===")
+    logger.info("=== Market Cap Category Distribution within Label=1 Stocks ===")
     if label_1_total > 0:
         cap_in_label1 = label_1_stocks['cap_cat'].value_counts()
         cap_in_label1_pct = (cap_in_label1 / label_1_total) * 100
@@ -70,13 +72,12 @@ def analyze_labels_category_distribution(
         for cap in ['large', 'mid', 'small']:
             count = cap_in_label1.get(cap, 0)
             pct = cap_in_label1_pct.get(cap, 0)
-            print(f"{cap.capitalize()} cap: {count} ({pct:.2f}%)")
+            logger.info("%s cap: %d (%.2f%%)", cap.capitalize(), count, pct)
     else:
-        print("No stocks with label=1")
-    print()
+        logger.info("No stocks with label=1")
     
     # 4. What is the percentage of positive data points in each market cap category? (Label=1 rate within each cap category)
-    print(f"=== Label=1 Rate by Cap Category ===")
+    logger.info("=== Label=1 Rate by Cap Category ===")
     cap_label1_rates = {}
     for cap in ['large', 'mid', 'small']:
         cap_stocks = data[data['cap_cat'] == cap]  # filter for the category
@@ -89,10 +90,10 @@ def analyze_labels_category_distribution(
                 'label_1': cap_label1,
                 'label_1_pct': cap_label1_rate
             }
-            print(f"{cap.capitalize()} cap: {cap_label1}/{cap_total} labeled 1 ({cap_label1_rate:.2f}%)")
+            logger.info("%s cap: %d/%d labeled 1 (%.2f%%)", cap.capitalize(), cap_label1, cap_total, cap_label1_rate)
         else:
             cap_label1_rates[cap] = {'total': 0, 'label_1': 0, 'label_1_pct': 0}
-            print(f"{cap.capitalize()} cap: No data points for this category found")
+            logger.info("%s cap: No data points for this category found", cap.capitalize())
     
     # Return results as dictionary for further use
     results = {
@@ -211,7 +212,7 @@ def analyze_labels_stock_level(
     data = data[(data['quarter'] >= first_quarter) & (data['quarter'] <= last_quarter)].copy()
     
     if len(data) == 0:
-        print(f"No data found for quarter range {first_quarter} to {last_quarter}")
+        logger.warning("No data found for quarter range %d to %d", first_quarter, last_quarter)
         return {}
     
     # 1. Unique stock counts
@@ -219,18 +220,17 @@ def analyze_labels_stock_level(
     num_unique_stocks_with_label1 = data[data['label'] == 1]['co_name'].nunique()
     stocks_with_label1_pct = (num_unique_stocks_with_label1 / num_unique_stocks) * 100 if num_unique_stocks > 0 else 0
     
-    print(f"=== Unique Stock Analysis (Quarter {first_quarter} to {last_quarter}) ===")
-    print(f"Total unique stocks: {num_unique_stocks}")
-    print(f"Stocks with label=1 at least once: {num_unique_stocks_with_label1} ({stocks_with_label1_pct:.2f}%)")
-    print()
+    logger.info("=== Unique Stock Analysis (Quarter %d to %d) ===", first_quarter, last_quarter)
+    logger.info("Total unique stocks: %d", num_unique_stocks)
+    logger.info("Stocks with label=1 at least once: %d (%.2f%%)", num_unique_stocks_with_label1, stocks_with_label1_pct)
     
     # 2. Concentration analysis - how often do stocks get label=1?
     num_quarters = data['quarter'].nunique()
     stock_label1_counts = data[data['label'] == 1].groupby('co_name').size()
     # stock_label1_counts: index: co_name, values: num of quarters the stock was labeled 1
     
-    print(f"=== Concentration Analysis (Label=1 Frequency) ===")
-    print(f"Number of quarters in range: {num_quarters}")
+    logger.info("=== Concentration Analysis (Label=1 Frequency) ===")
+    logger.info("Number of quarters in range: %d", num_quarters)
     
     # Distribution of label=1 counts
     if len(stock_label1_counts) > 0:
@@ -243,23 +243,22 @@ def analyze_labels_stock_level(
         
         for bin_name, count in concentration_bins.items():
             pct = (count / num_unique_stocks_with_label1) * 100 if num_unique_stocks_with_label1 > 0 else 0
-            print(f"Label=1 {bin_name.replace('_', ' ')}: {count} stocks ({pct:.2f}%)")
+            logger.info("Label=1 %s: %d stocks (%.2f%%)", bin_name.replace('_', ' '), count, pct)
         
         # Top repeat winners
         top_n = min(10, len(stock_label1_counts))
         top_winners = stock_label1_counts.nlargest(top_n)
-        print(f"\nTop {top_n} most frequent label=1 stocks:")
+        logger.info("Top %d most frequent label=1 stocks:", top_n)
         for stock, count in top_winners.items():
-            print(f"  {stock}: {count} times ({count/num_quarters*100:.1f}% of quarters)")
+            logger.info("  %s: %d times (%.1f%% of quarters)", stock, count, count/num_quarters*100)
     else:
         concentration_bins = {}
         top_winners = pd.Series(dtype=int)
-        print("No stocks with label=1")
-    print()
+        logger.info("No stocks with label=1")
     
     # 3. Label persistence analysis
     # For each stock, if label=1 in quarter Q, what's the probability of label=1 in Q+1?
-    print(f"=== Label Persistence Analysis ===")
+    logger.info("=== Label Persistence Analysis ===")
     
     # Get sorted quarters
     quarters = sorted(data['quarter'].unique())
@@ -297,17 +296,17 @@ def analyze_labels_stock_level(
             persistence_0_to_1 = 0
             persistence_0_to_0 = 0
         
-        print(f"Transitions analyzed: {len(persistence_df)}")
-        print(f"P(label=1 next | label=1 current): {persistence_1_to_1:.2f}%")
-        print(f"P(label=0 next | label=1 current): {persistence_1_to_0:.2f}%")
-        print(f"P(label=1 next | label=0 current): {persistence_0_to_1:.2f}%")
-        print(f"P(label=0 next | label=0 current): {persistence_0_to_0:.2f}%")
+        logger.info("Transitions analyzed: %d", len(persistence_df))
+        logger.info("P(label=1 next | label=1 current): %.2f%%", persistence_1_to_1)
+        logger.info("P(label=0 next | label=1 current): %.2f%%", persistence_1_to_0)
+        logger.info("P(label=1 next | label=0 current): %.2f%%", persistence_0_to_1)
+        logger.info("P(label=0 next | label=0 current): %.2f%%", persistence_0_to_0)
         
         # Persistence ratio - how much more likely is label=1 if previously label=1?
         if persistence_0_to_1 > 0:
             persistence_ratio = persistence_1_to_1 / persistence_0_to_1
-            print(f"\nPersistence ratio: {persistence_ratio:.2f}x")
-            print("(How much more likely to get label=1 if previous quarter was label=1)")
+            logger.info("Persistence ratio: %.2fx", persistence_ratio)
+            logger.info("(How much more likely to get label=1 if previous quarter was label=1)")
         
         persistence_results = {
             'num_transitions': len(persistence_df),
@@ -318,7 +317,7 @@ def analyze_labels_stock_level(
             'persistence_ratio': persistence_ratio if persistence_0_to_1 > 0 else None
         }
     else:
-        print("Not enough data for persistence analysis")
+        logger.info("Not enough data for persistence analysis")
         persistence_results = {}
     
     # Plotting: Concentration bins bar chart
@@ -385,7 +384,7 @@ def analyze_labels_temporal(data: pd.DataFrame, first_quarter: int, last_quarter
     data = data[(data['quarter'] >= first_quarter) & (data['quarter'] <= last_quarter)].copy()
     
     if len(data) == 0:
-        print(f"No data found for quarter range {first_quarter} to {last_quarter}")
+        logger.warning("No data found for quarter range %d to %d", first_quarter, last_quarter)
         return {}
     
     # Get sorted list of quarters

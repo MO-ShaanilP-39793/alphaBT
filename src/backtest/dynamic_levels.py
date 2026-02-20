@@ -7,7 +7,7 @@ used to set adaptive TP/SL thresholds based on each stock's price behavior.
 
 import pandas as pd
 import numpy as np
-import logging
+from utils.logging_config import get_logger
 from config.defaults import (
     DEFAULT_ATR_PERIOD,
     DEFAULT_ATR_TP_MULTIPLIER,
@@ -29,39 +29,7 @@ from config.defaults import (
 )
 
 # Configure module-level logger
-logger = logging.getLogger(__name__)
-
-
-def setup_dynamic_levels_logging(log_file: str = None, level: int = logging.INFO):
-    """
-    Configure logging for the dynamic_levels module.
-    
-    Parameters:
-    - log_file: Path to log file. If None, logs only to console.
-    - level: Logging level (e.g., logging.DEBUG, logging.INFO)
-    
-    Example:
-        setup_dynamic_levels_logging('logs/dynamic_levels.log', logging.DEBUG)
-    """
-    logger.setLevel(level)
-    
-    # Formatter with timestamp, level, and context
-    formatter = logging.Formatter(
-        '%(asctime)s | %(levelname)s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    
-    # Console handler
-    if not logger.handlers:
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
-    
-    # File handler (if specified)
-    if log_file:
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
+logger = get_logger(__name__)
 
 
 def calculate_atr(price_df: pd.DataFrame, co_name: str, end_date: pd.Timestamp, period: int = DEFAULT_ATR_PERIOD) -> float:

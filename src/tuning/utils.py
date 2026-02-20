@@ -14,6 +14,7 @@ from typing import Any
 import optuna
 import warnings
 
+from utils.logging_config import get_logger
 from config.defaults import (
     DAYS_PER_YEAR,
     DEFAULT_SELECTION_TYPE,
@@ -52,6 +53,8 @@ from config.defaults import (
     DEFAULT_TPSL_CATEGORY_DIMENSION,
     DEFAULT_TPSL_FALLBACK_PCT,
 )
+
+logger = get_logger(__name__)
 
 
 def load_tuning_config(config_path: str = 'tuning_config.yaml') -> dict:
@@ -640,7 +643,7 @@ def export_best_config(
     with open(output_path, 'w') as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
     
-    print(f"Best configuration exported to: {output_path}")
+    logger.info("Best configuration exported to: %s", output_path)
 
 
 def is_multi_objective(study: optuna.Study) -> bool:

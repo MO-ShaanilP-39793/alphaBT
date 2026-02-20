@@ -53,7 +53,6 @@ class TestFlatModeEndToEnd:
             input_data=sample_input_data_volatility,
             price_data=sample_price_data,
             index_data=sample_index_data,
-            verbose=True,
         )
         _assert_valid_result(result)
 

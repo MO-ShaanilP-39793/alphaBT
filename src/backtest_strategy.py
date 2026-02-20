@@ -10,13 +10,12 @@ This script orchestrates the full backtesting workflow:
 6. Save all outputs with traceability
 """
 
+import logging
 import pandas as pd
 import yaml
 import os
-import sys
 import warnings
 from datetime import datetime
-from io import StringIO
 
 # Import from local packages
 from selection import (
@@ -54,33 +53,11 @@ from config.defaults import (
     DEFAULT_TPSL_CATEGORY_DIMENSION,
 )
 from config.schema import BacktestConfig
+from utils.logging_config import setup_logging, get_logger
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for saving plots
 
-
-class TeeOutput:
-    """
-    A class that duplicates stdout to both console and a StringIO buffer.
-    This allows capturing all print statements while still displaying them.
-    """
-    def __init__(self):
-        self.terminal = sys.stdout
-        self.buffer = StringIO()
-        
-    def write(self, message):
-        self.terminal.write(message)
-        self.buffer.write(message)
-        
-    def flush(self):
-        self.terminal.flush()
-        
-    def get_log_content(self):
-        return self.buffer.getvalue()
-    
-    def save_to_file(self, filepath):
-        """Save captured output to a file."""
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(self.buffer.getvalue())
+logger = get_logger(__name__)
 
 
 def load_config(config_path=DEFAULT_CONFIG_PATH) -> BacktestConfig:
@@ -170,7 +147,7 @@ def save_config_copy(config, output_dir):
     with open(config_output_path, 'w') as file:
         yaml.dump(config_data, file, default_flow_style=False)
     
-    print(f"Configuration saved to: {config_output_path}")
+    logger.info("Configuration saved to: %s", config_output_path)
 
 
 def run_stock_selection(input_data, category_scheme, category_counts, category_weights,
@@ -311,7 +288,6 @@ def backtest_core(
         input_data: pd.DataFrame, 
         price_data: pd.DataFrame, 
         index_data: pd.DataFrame = None,
-        verbose: bool = False,
         skip_price_data_validation: bool = True) -> dict:
     """
     Core backtesting logic.
@@ -321,7 +297,6 @@ def backtest_core(
     - input_data: DataFrame with stock data 
     - price_data: DataFrame with OHLCV price data
     - index_data: DataFrame with index data (optional)
-    - verbose: If True, print progress messages (default: False)
     - skip_price_data_validation: If True, skip price data validation (use when data is pre-validated)
     
     Returns:
@@ -337,6 +312,22 @@ def backtest_core(
     # Adapter: accept both BacktestConfig and plain dict
     if isinstance(config, dict):
         config = BacktestConfig(**config)
+
+    try:
+        return _backtest_core_impl(config, input_data, price_data, index_data, skip_price_data_validation)
+    except Exception as e:
+        logger.error("Backtest core failed: %s", e)
+        warnings.warn(f"Backtest core failed: {e}", UserWarning)
+        return None
+
+
+def _backtest_core_impl(
+        config: 'BacktestConfig',
+        input_data: pd.DataFrame,
+        price_data: pd.DataFrame,
+        index_data: pd.DataFrame = None,
+        skip_price_data_validation: bool = True) -> dict:
+    """Inner implementation of backtest_core (unwrapped from try/except)."""
 
     # Extract config values via attribute access
     first_quarter = config.first_quarter
@@ -397,21 +388,18 @@ def backtest_core(
     # ---------------------------------------------------------------------
     # Filter Input Data by Quarter Range
     # ---------------------------------------------------------------------
-    if verbose:
-        print("\n[1/4] Filtering data by quarter range...")
+    logger.info("[1/4] Filtering data by quarter range...")
     
     if first_quarter is None and last_quarter is None:
         input_data_filtered = input_data.copy()
         first_quarter = int(input_data_filtered['quarter'].min())
         last_quarter = int(input_data_filtered['quarter'].max())
-        if verbose:
-            print(f"  - Using full input data: {len(input_data_filtered)} rows")
-            print(f"  - Quarters in data: {sorted(input_data_filtered['quarter'].unique().tolist())}")
+        logger.debug("Using full input data: %d rows", len(input_data_filtered))
+        logger.debug("Quarters in data: %s", sorted(input_data_filtered['quarter'].unique().tolist()))
     else:
         input_data_filtered = filter_data_by_quarters(input_data, first_quarter, last_quarter)
-        if verbose:
-            print(f"  - Filtered input data: {len(input_data_filtered)} rows")
-            print(f"  - Quarters in data: {sorted(input_data_filtered['quarter'].unique().tolist())}")
+        logger.debug("Filtered input data: %d rows", len(input_data_filtered))
+        logger.debug("Quarters in data: %s", sorted(input_data_filtered['quarter'].unique().tolist()))
     
     if input_data_filtered.empty:
         return None
@@ -422,8 +410,7 @@ def backtest_core(
     data_issues = None  # Will store validation issues for return
     
     if run_stock_selection_flag:
-        if verbose:
-            print("\n[2/4] Running stock selection...")
+        logger.info("[2/4] Running stock selection...")
         
         # Validate and filter price data before selection (unless pre-validated)
         if not skip_price_data_validation:
@@ -436,8 +423,7 @@ def backtest_core(
             )
             
             if data_issues is not None and not data_issues.empty:
-                if verbose:
-                    print(f"  - Filtered {len(data_issues)} stock-quarter combinations with price data issues")
+                logger.debug("Filtered %d stock-quarter combinations with price data issues", len(data_issues))
         
         selected_stocks = run_stock_selection(
             input_data_filtered,
@@ -452,11 +438,9 @@ def backtest_core(
             selection_dimension=selection_dimension,
             weighting_dimension=weighting_dimension
         )
-        if verbose:
-            print(f"  - Selected stocks: {len(selected_stocks)} positions across all quarters")
+        logger.debug("Selected stocks: %d positions across all quarters", len(selected_stocks))
     else:
-        if verbose:
-            print("\n[2/4] Using preselected portfolio...")
+        logger.info("[2/4] Using preselected portfolio...")
         
         # Validate price data coverage (but don't filter, since it's preselected)
         if not skip_price_data_validation:
@@ -469,9 +453,8 @@ def backtest_core(
             )
             
             if data_issues is not None and not data_issues.empty:
-                if verbose:
-                    print(f"  - Warning: Found {len(data_issues)} stock-quarter combinations with price data issues")
-                    print(f"            (Issues logged but stocks not filtered since using preselected portfolio)")
+                logger.warning("Found %d stock-quarter combinations with price data issues", len(data_issues))
+                logger.warning("Issues logged but stocks not filtered since using preselected portfolio")
         
         selected_stocks, has_category = validate_preselected_input(
             input_data_filtered,
@@ -482,12 +465,11 @@ def backtest_core(
             sl_enabled,
             has_tiered_config
         )
-        if verbose:
-            print(f"  - Preselected stocks: {len(selected_stocks)} positions across all quarters")
-            if has_category:
-                print(f"  - Categories found: {sorted(selected_stocks['cat'].unique().tolist())}")
-            else:
-                print("  - No category column in input (using default TP/SL thresholds)")
+        logger.debug("Preselected stocks: %d positions across all quarters", len(selected_stocks))
+        if has_category:
+            logger.debug("Categories found: %s", sorted(selected_stocks['cat'].unique().tolist()))
+        else:
+            logger.debug("No category column in input (using default TP/SL thresholds)")
     
     if selected_stocks is None or selected_stocks.empty:
         return None
@@ -495,8 +477,7 @@ def backtest_core(
     # ---------------------------------------------------------------------
     # Simulate Trades with TP/SL
     # ---------------------------------------------------------------------
-    if verbose:
-        print("\n[3/4] Simulating trades with TP/SL thresholds...")
+    logger.info("[3/4] Simulating trades with TP/SL thresholds...")
     
     # Set up tpsl_cat column for TP/SL category lookup
     # When selection and weighting dimensions differ, the TP/SL lookup dimension
@@ -530,14 +511,12 @@ def backtest_core(
     if trade_results is None or trade_results.empty:
         return None
     
-    if verbose:
-        print(f"  - Trade simulation complete: {len(trade_results)} trades")
+    logger.debug("Trade simulation complete: %d trades", len(trade_results))
     
     # ---------------------------------------------------------------------
     # Generate Daily Portfolio Values
     # ---------------------------------------------------------------------
-    if verbose:
-        print("\n[4/4] Generating daily portfolio values...")
+    logger.info("[4/4] Generating daily portfolio values...")
     
     daily_pf_values = compute_pf_value_over_quarters(
         trade_results, 
@@ -548,8 +527,8 @@ def backtest_core(
         entry_price_window=entry_price_window
     )
     
-    if verbose and daily_pf_values is not None and not daily_pf_values.empty:
-        print(f"  - Daily portfolio values generated: {len(daily_pf_values)} days")
+    if daily_pf_values is not None and not daily_pf_values.empty:
+        logger.debug("Daily portfolio values generated: %d days", len(daily_pf_values))
     
     return {
         'daily_pf_values': daily_pf_values,
@@ -567,22 +546,21 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
     Parameters:
     - config_path: Path to the configuration YAML file
     """
-    # Start capturing output for log file
-    tee = TeeOutput()
-    sys.stdout = tee
+    # Phase 1: Console-only logging
+    setup_logging(console_level=logging.INFO)
     
     # Record start time
     start_time = datetime.now()
     
-    print("=" * 60)
-    print("BACKTESTING STRATEGY - STARTING")
-    print("=" * 60)
-    print(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("=" * 60)
+    logger.info("BACKTESTING STRATEGY - STARTING")
+    logger.info("=" * 60)
+    logger.info("Start time: %s", start_time.strftime('%Y-%m-%d %H:%M:%S'))
     
     # -------------------------------------------------------------------------
     # 1. Load Configuration
     # -------------------------------------------------------------------------
-    print("\n[1/2] Loading configuration...")
+    logger.info("[1/2] Loading configuration...")
     config = load_config(config_path)
     
     # Extract config values via attribute access
@@ -620,82 +598,80 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
     generate_report = config.generate_report
     report_sub_periods = config.report_sub_periods
     
-    print(f"  - Input data: {input_data_path}")
-    print(f"  - Price data: {price_data_path}")
-    print(f"  - Index data: {index_data_path}")
-    print(f"  - Quarter range: {first_quarter} to {last_quarter}")
-    print(f"  - Category scheme: {category_scheme}")
+    logger.debug("Input data: %s", input_data_path)
+    logger.debug("Price data: %s", price_data_path)
+    logger.debug("Index data: %s", index_data_path)
+    logger.info("Quarter range: %s to %s", first_quarter, last_quarter)
+    logger.debug("Category scheme: %s", category_scheme)
     if selection_dimension != category_scheme or weighting_dimension != category_scheme:
-        print(f"  - Selection dimension: {selection_dimension}")
-        print(f"  - Weighting dimension: {weighting_dimension}")
-        print(f"  - TP/SL category dimension: {tpsl_category_dimension}")
-    print(f"  - Run stock selection: {run_stock_selection_flag}")
+        logger.debug("Selection dimension: %s", selection_dimension)
+        logger.debug("Weighting dimension: %s", weighting_dimension)
+        logger.debug("TP/SL category dimension: %s", tpsl_category_dimension)
+    logger.debug("Run stock selection: %s", run_stock_selection_flag)
     
     if run_stock_selection_flag:
-        print(f"  - Selection type: {selection_type}")
+        logger.debug("Selection type: %s", selection_type)
         if selection_type == 'category_based':
-            print(f"  - Category counts: {category_counts}")
-            print(f"  - Category weights: {category_weights}")
-            print(f"  - Weighting scheme: {category_based_weighting_scheme}")
+            logger.debug("Category counts: %s", category_counts)
+            logger.debug("Category weights: %s", category_weights)
+            logger.debug("Weighting scheme: %s", category_based_weighting_scheme)
         elif selection_type == 'top_k':
             k = top_k_config.k if top_k_config else DEFAULT_TOP_K
             weighting = top_k_config.weighting_scheme if top_k_config else DEFAULT_TOP_K_WEIGHTING
-            print(f"  - Top k: {k}")
-            print(f"  - Weighting scheme: {weighting}")
-        print(f"  - Selection method: {selection_method}")
+            logger.debug("Top k: %s", k)
+            logger.debug("Weighting scheme: %s", weighting)
+        logger.debug("Selection method: %s", selection_method)
         if min_prob_threshold is not None:
-            print(f"  - Min probability threshold: {min_prob_threshold}")
+            logger.debug("Min probability threshold: %s", min_prob_threshold)
     else:
-        print("  - Using preselected portfolio (selection config options ignored)")
+        logger.debug("Using preselected portfolio (selection config options ignored)")
         if has_tiered_config:
-            print(f"  - Tiered TP/SL config provided")
+            logger.debug("Tiered TP/SL config provided")
     
     # TP/SL mode configuration
     tp_mode = config.tp_mode
     sl_mode = config.sl_mode
     tp_enabled = config.tp_enabled
     sl_enabled = config.sl_enabled
-    print(f"  - TP mode: {tp_mode}" + (" (take profit exits disabled)" if not tp_enabled else ""))
-    print(f"  - SL mode: {sl_mode}" + (" (stop loss exits disabled)" if not sl_enabled else ""))
-    print(f"  - TP enabled: {tp_enabled}")
-    print(f"  - SL enabled: {sl_enabled}")
+    logger.debug("TP mode: %s%s", tp_mode, " (take profit exits disabled)" if not tp_enabled else "")
+    logger.debug("SL mode: %s%s", sl_mode, " (stop loss exits disabled)" if not sl_enabled else "")
+    logger.debug("TP enabled: %s", tp_enabled)
+    logger.debug("SL enabled: %s", sl_enabled)
     
     # Entry price window
     entry_price_window = config.entry_price_window
-    print(f"  - Entry price window: {entry_price_window} trading day(s)")
+    logger.debug("Entry price window: %d trading day(s)", entry_price_window)
     
     # -------------------------------------------------------------------------
     # 2. Load Data
     # -------------------------------------------------------------------------
-    print("\n[2/2] Loading data...")
+    logger.info("[2/2] Loading data...")
     
     input_data = load_data(input_data_path)
-    print(f"  - Input data loaded: {len(input_data)} rows")
+    logger.debug("Input data loaded: %d rows", len(input_data))
     
     price_data = load_data(price_data_path)
-    print(f"  - Price data loaded: {len(price_data)} rows")
+    logger.debug("Price data loaded: %d rows", len(price_data))
     
     index_data = load_data(index_data_path)
-    print(f"  - Index data loaded: {len(index_data)} rows")
+    logger.debug("Index data loaded: %d rows", len(index_data))
     
     # -------------------------------------------------------------------------
     # 3. Run Backtest Core
     # -------------------------------------------------------------------------
-    print("\n" + "-" * 60)
-    print("RUNNING BACKTEST CORE")
-    print("-" * 60)
+    logger.info("-" * 60)
+    logger.info("RUNNING BACKTEST CORE")
+    logger.info("-" * 60)
     
     results = backtest_core(
         config=config,
         input_data=input_data,
         price_data=price_data,
         index_data=index_data,
-        verbose=True
     )
     
     if results is None:
-        print("\nERROR: Backtest core returned no results.")
-        sys.stdout = tee.terminal
+        logger.error("Backtest core returned no results.")
         return None, None, None
     
     # Extract results
@@ -705,16 +681,28 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
     last_quarter = results['last_quarter']
     data_issues = results.get('data_issues')
     
-    print("-" * 60)
+    logger.info("-" * 60)
     
     # -------------------------------------------------------------------------
     # 4. Create Output Directory and Save Results
     # -------------------------------------------------------------------------
-    print("\nSaving results...")
+    logger.info("Saving results...")
     
     # Create output directory
     output_dir = create_output_directory()
-    print(f"  - Output directory: {output_dir}")
+    logger.info("Output directory: %s", output_dir)
+    
+    # Phase 2: Add file handler now that output dir exists
+    log_path = os.path.join(output_dir, 'backtest_log.txt')
+    fh = logging.FileHandler(log_path, encoding='utf-8')
+    fh.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    fh.setFormatter(formatter)
+    logging.getLogger('alphaBT').addHandler(fh)
+    logger.debug("File logging initialized: %s", log_path)
     
     # Save config for traceability
     save_config_copy(config, output_dir)
@@ -734,7 +722,7 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
             daily_pf_values=equity_curve  # Reuse pre-computed equity curve for consistency
         )
     else:
-        print("  - Skipping index comparison (no index data path specified)")
+        logger.info("Skipping index comparison (no index data path specified)")
     
     # -------------------------------------------------------------------------
     # 6. Generate Consolidated Report
@@ -758,40 +746,35 @@ def run_backtest(config_path=DEFAULT_CONFIG_PATH):
             last_quarter=last_quarter,
         )
     elif generate_report:
-        print("\nSkipping report (no equity curve data available)")
+        logger.info("Skipping report (no equity curve data available)")
     
     # -------------------------------------------------------------------------
     # Summary
     # -------------------------------------------------------------------------
-    print("\n" + "=" * 60)
-    print("BACKTESTING COMPLETE")
-    print("=" * 60)
-    print(f"\nAll outputs saved to: {output_dir}")
-    print("\nFiles generated:")
-    print(f"  - config_used.yaml (configuration traceability)")
+    logger.info("=" * 60)
+    logger.info("BACKTESTING COMPLETE")
+    logger.info("=" * 60)
+    logger.info("All outputs saved to: %s", output_dir)
+    logger.info("Files generated:")
+    logger.info("  - config_used.yaml (configuration traceability)")
     if generate_report and equity_curve is not None and not equity_curve.empty:
-        print(f"  - backtest_report.xlsx (metrics, charts, trade data — all in one)")
-    print(f"  - backtest_log.txt (full execution log)")
+        logger.info("  - backtest_report.xlsx (metrics, charts, trade data — all in one)")
+    logger.info("  - backtest_log.txt (full execution log)")
     
-    # Calculate and print execution time
+    # Calculate and log execution time
     end_time = datetime.now()
     elapsed_time = end_time - start_time
     total_seconds = elapsed_time.total_seconds()
     minutes, seconds = divmod(total_seconds, 60)
     hours, minutes = divmod(minutes, 60)
     
-    print(f"\nEnd time: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("End time: %s", end_time.strftime('%Y-%m-%d %H:%M:%S'))
     if hours > 0:
-        print(f"Total execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
+        logger.info("Total execution time: %dh %dm %.2fs", int(hours), int(minutes), seconds)
     elif minutes > 0:
-        print(f"Total execution time: {int(minutes)}m {seconds:.2f}s")
+        logger.info("Total execution time: %dm %.2fs", int(minutes), seconds)
     else:
-        print(f"Total execution time: {seconds:.2f}s")
-    
-    # Save log file and restore stdout
-    log_path = os.path.join(output_dir, 'backtest_log.txt')
-    tee.save_to_file(log_path)
-    sys.stdout = tee.terminal
+        logger.info("Total execution time: %.2fs", seconds)
     
     return output_dir, trade_results, equity_curve
 

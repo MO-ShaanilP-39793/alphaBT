@@ -27,6 +27,7 @@ After optimization:
 """
 
 import argparse
+import logging
 import shutil
 import warnings
 from datetime import datetime
@@ -78,6 +79,10 @@ from selection import (
 
 from reporting.analytics import compute_trailing_returns
 
+from utils.logging_config import setup_logging, get_logger
+
+logger = get_logger(__name__)
+
 
 class DataCache:
     """
@@ -99,18 +104,18 @@ class DataCache:
         if self.loaded:
             return
         
-        print("Loading data files...")
+        logger.info("Loading data files...")
         self.input_data = load_data(config['input_data_path'])
-        print(f"  - Input data: {len(self.input_data)} rows")
+        logger.debug("Input data: %d rows", len(self.input_data))
         
         self.price_data = load_data(config['price_data_path'])
-        print(f"  - Price data: {len(self.price_data)} rows")
+        logger.debug("Price data: %d rows", len(self.price_data))
         
         self.index_data = load_data(config['index_data_path'])
-        print(f"  - Index data: {len(self.index_data)} rows")
+        logger.debug("Index data: %d rows", len(self.index_data))
         
         self.loaded = True
-        print("Data loading complete.\n")
+        logger.info("Data loading complete.")
 
 
 def set_trial_user_attributes(
@@ -538,14 +543,14 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     Returns:
         Completed Optuna study
     """
-    print("=" * 70)
-    print("OPTUNA HYPERPARAMETER TUNING")
-    print("=" * 70)
-    print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Config file: {config_path}\n")
+    logger.info("=" * 70)
+    logger.info("OPTUNA HYPERPARAMETER TUNING")
+    logger.info("=" * 70)
+    logger.info("Start time: %s", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    logger.info("Config file: %s", config_path)
     
     # Load tuning configuration
-    print("Loading tuning configuration...")
+    logger.info("Loading tuning configuration...")
     tuning_config = load_tuning_config(config_path)
     
     fixed_config = tuning_config['fixed']
@@ -575,16 +580,15 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     )
     mode_label = "Multi-objective" if is_multi_obj else "Single-objective"
     
-    print(f"  Study name: {study_name}")
-    print(f"  Study folder: {study_folder}")
-    print(f"  Storage: {storage}")
-    print(f"  Mode: {mode_label}")
-    print(f"  Objective(s): {objective_display}")
-    print(f"  Trials: {n_trials}")
-    print(f"  Sampler: {sampler_name}")
-    print(f"  Load existing: {load_if_exists}")
-    print(f"  Quarter range: {fixed_config['first_quarter']} - {fixed_config['last_quarter']}")
-    print()
+    logger.info("Study name: %s", study_name)
+    logger.info("Study folder: %s", study_folder)
+    logger.debug("Storage: %s", storage)
+    logger.info("Mode: %s", mode_label)
+    logger.info("Objective(s): %s", objective_display)
+    logger.info("Trials: %d", n_trials)
+    logger.info("Sampler: %s", sampler_name)
+    logger.debug("Load existing: %s", load_if_exists)
+    logger.info("Quarter range: %s - %s", fixed_config['first_quarter'], fixed_config['last_quarter'])
     
     # Initialize data cache and load data
     data_cache = DataCache()
@@ -602,7 +606,7 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
         
         if run_stock_selection_flag:
             # Filter out stocks with price data issues before selection
-            print("Validating price data coverage...")
+            logger.info("Validating price data coverage...")
             filtered_input, data_issues = filter_tradeable_stocks(
                 data_cache.input_data,
                 data_cache.price_data,
@@ -619,20 +623,19 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
                 filtered_count = len(filtered_input)
                 removed_count = original_count - filtered_count
                 
-                print(f"  Data Quality Check Results:")
-                print(f"    - Found {len(data_issues)} stock-quarter issues")
-                print(f"    - Affecting {data_issues['co_name'].nunique()} unique stocks")
-                print(f"    - Filtered {removed_count} rows from input data ({original_count} → {filtered_count})")
-                print(f"    - Report saved to: {issues_path}")
+                logger.info("Data Quality Check Results:")
+                logger.info("Found %d stock-quarter issues", len(data_issues))
+                logger.info("Affecting %d unique stocks", data_issues['co_name'].nunique())
+                logger.info("Filtered %d rows from input data (%d -> %d)", removed_count, original_count, filtered_count)
+                logger.info("Report saved to: %s", issues_path)
             else:
-                print("  No price data issues found. All stocks are tradeable.")
+                logger.info("No price data issues found. All stocks are tradeable.")
             
             # Replace cached input_data with filtered version
             data_cache.input_data = filtered_input
-            print()
         else:
             # Save and Report issues but don't filter (user's preselected portfolio)
-            print("Validating price data coverage for preselected portfolio...")
+            logger.info("Validating price data coverage for preselected portfolio...")
             data_issues = validate_price_data_coverage(
                 data_cache.input_data,
                 data_cache.price_data,
@@ -645,25 +648,24 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
                 issues_path = study_folder / 'data_quality_issues.csv'
                 data_issues.to_csv(issues_path, index=False)
                 
-                print(f"  WARNING: Found {len(data_issues)} stock-quarter issues in preselected portfolio")
-                print(f"    - Affecting {data_issues['co_name'].nunique()} unique stocks")
-                print(f"    - These positions will be held as cash during simulation")
-                print(f"    - Report saved: {issues_path}")
+                logger.warning("Found %d stock-quarter issues in preselected portfolio", len(data_issues))
+                logger.warning("Affecting %d unique stocks", data_issues['co_name'].nunique())
+                logger.warning("These positions will be held as cash during simulation")
+                logger.warning("Report saved: %s", issues_path)
             else:
-                print("  No price data issues found. All stocks are tradeable.")
-            print()
+                logger.info("No price data issues found. All stocks are tradeable.")
     else:
-        print("Skipping input data validation (already validated).\n")
+        logger.info("Skipping input data validation (already validated).")
     
     # Copy tuning config to study folder
     shutil.copy2(config_path, tuning_config_copy_path)
-    print(f"Tuning config saved to: {tuning_config_copy_path}\n")
+    logger.info("Tuning config saved to: %s", tuning_config_copy_path)
     
     # Delete existing study if fresh start requested
     if fresh_study is True:
         try:
             optuna.delete_study(study_name=study_name, storage=storage)
-            print(f"Deleted existing study: {study_name}")
+            logger.info("Deleted existing study: %s", study_name)
         except KeyError:
             pass  # Study doesn't exist
     
@@ -689,34 +691,34 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     
     existing_trials = len(study.trials)
     if existing_trials > 0:
-        print(f"Resuming study with {existing_trials} existing trials")
-        print(f"Running {n_trials} additional trials...\n")
+        logger.info("Resuming study with %d existing trials", existing_trials)
+        logger.info("Running %d additional trials...", n_trials)
     else:
-        print(f"Starting new study with {n_trials} trials...\n")
+        logger.info("Starting new study with %d trials...", n_trials)
     
     # Create objective function
     objective = create_objective(tuning_config, data_cache, obj_config)
     
     # Run optimization
-    print("-" * 70)
+    logger.info("-" * 70)
     study.optimize(
         objective,
         n_trials=n_trials,
         show_progress_bar=True,
         gc_after_trial=True,  # memory management
     )
-    print("-" * 70)
+    logger.info("-" * 70)
     
-    # Print results
-    print("\n" + "=" * 70)
-    print("OPTIMIZATION COMPLETE")
-    print("=" * 70)
+    # Log results
+    logger.info("=" * 70)
+    logger.info("OPTIMIZATION COMPLETE")
+    logger.info("=" * 70)
     
     summary = get_study_summary(study)
-    print(f"\nStudy Summary:")
-    print(f"  Total trials: {summary['n_trials']}")
-    print(f"  Completed: {summary['n_completed']}")
-    print(f"  Failed: {summary['n_failed']}")
+    logger.info("Study Summary:")
+    logger.info("Total trials: %d", summary['n_trials'])
+    logger.info("Completed: %d", summary['n_completed'])
+    logger.info("Failed: %d", summary['n_failed'])
     
     # Map objective names to display labels
     objective_labels = {
@@ -729,7 +731,7 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
         # ----- Multi-objective results -----
         n_pareto = summary.get('n_pareto_optimal', 0)
         if n_pareto > 0:
-            print(f"\nPareto Front: {n_pareto} non-dominated solutions")
+            logger.info("Pareto Front: %d non-dominated solutions", n_pareto)
             
             # Per-objective ranges across Pareto front
             for i, (name, direction) in enumerate(zip(obj_config['objective_names'], obj_config['directions'])):
@@ -737,9 +739,9 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
                 obj_min = summary.get(f'objective_{i}_min')
                 obj_max = summary.get(f'objective_{i}_max')
                 if obj_min is not None and obj_max is not None:
-                    print(f"  {label} ({direction}): {obj_min:.4f} — {obj_max:.4f}")
+                    logger.info("  %s (%s): %.4f — %.4f", label, direction, obj_min, obj_max)
             
-            # Print top Pareto trials (sorted by first objective, respecting direction)
+            # Log top Pareto trials (sorted by first objective, respecting direction)
             pareto_trials = study.best_trials
             first_dir = obj_config['directions'][0]
             pareto_sorted = sorted(
@@ -749,13 +751,13 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
             )
             
             n_display = min(10, len(pareto_sorted))
-            print(f"\n  Top {n_display} Pareto-optimal trials (sorted by {obj_config['objective_names'][0]}):")
+            logger.info("Top %d Pareto-optimal trials (sorted by %s):", n_display, obj_config['objective_names'][0])
             header_parts = ["  Trial"]
             for name in obj_config['objective_names']:
                 header_parts.append(f"{objective_labels.get(name, name):>14s}")
             for extra in ['CAGR%', 'MDD%', 'Win Rate%', 'Trades']:
                 header_parts.append(f"{extra:>10s}")
-            print("  " + " | ".join(header_parts))
+            logger.info("  %s", " | ".join(header_parts))
             
             for t in pareto_sorted[:n_display]:
                 parts = [f"  {t.number:>5d}"]
@@ -769,50 +771,50 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
                         parts.append(fmt.format(val))
                     else:
                         parts.append(f"{'N/A':>10s}")
-                print(" | ".join(parts))
+                logger.info(" | ".join(parts))
         else:
-            print("\nNo Pareto-optimal trials found.")
+            logger.info("No Pareto-optimal trials found.")
     else:
         # ----- Single-objective results -----
         if summary['best_value'] is not None:
             objective_name = obj_config['objective_names'][0]
             objective_label = objective_labels.get(objective_name, objective_name)
             
-            print(f"\nBest Trial:")
-            print(f"  Trial number: {summary['best_trial_number']}")
-            print(f"  {objective_label}: {summary['best_value']:.4f}")
+            logger.info("Best Trial:")
+            logger.info("  Trial number: %d", summary['best_trial_number'])
+            logger.info("  %s: %.4f", objective_label, summary['best_value'])
             
             best_trial = study.best_trial
             if 'total_return' in best_trial.user_attrs:
-                print(f"  Total return: {best_trial.user_attrs['total_return']:.2f}%")
+                logger.info("  Total return: %.2f%%", best_trial.user_attrs['total_return'])
             if 'cagr' in best_trial.user_attrs:
-                print(f"  CAGR: {best_trial.user_attrs['cagr']:.2f}%")
+                logger.info("  CAGR: %.2f%%", best_trial.user_attrs['cagr'])
             if 'mdd' in best_trial.user_attrs:
-                print(f"  Max Drawdown: {best_trial.user_attrs['mdd']:.2f}%")
+                logger.info("  Max Drawdown: %.2f%%", best_trial.user_attrs['mdd'])
             if 'win_rate' in best_trial.user_attrs:
-                print(f"  Win rate: {best_trial.user_attrs['win_rate']:.2f}%")
+                logger.info("  Win rate: %.2f%%", best_trial.user_attrs['win_rate'])
             if 'n_trades' in best_trial.user_attrs:
-                print(f"  Number of trades: {best_trial.user_attrs['n_trades']}")
+                logger.info("  Number of trades: %d", best_trial.user_attrs['n_trades'])
         else:
-            print("\nNo successful trials completed.")
+            logger.info("No successful trials completed.")
     
     # ----- Export guidance -----
-    print("\n" + "-" * 70)
-    print(f"End time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"\nStudy artifacts saved to: {study_folder}")
-    print(f"  - optuna_study.db (trial history)")
-    print(f"  - tuning_config_used.yaml (config used)")
+    logger.info("-" * 70)
+    logger.info("End time: %s", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    logger.info("Study artifacts saved to: %s", study_folder)
+    logger.info("  - optuna_study.db (trial history)")
+    logger.info("  - tuning_config_used.yaml (config used)")
     
-    print(f"\nTo export a config from this study:")
+    logger.info("To export a config from this study:")
     if is_multi_obj:
-        print(f"  python export_config.py --study-folder {study_folder} --pareto --top 5")
-        print(f"  python export_config.py --study-folder {study_folder} --trial <N>")
+        logger.info("  python export_config.py --study-folder %s --pareto --top 5", study_folder)
+        logger.info("  python export_config.py --study-folder %s --trial <N>", study_folder)
     else:
-        print(f"  python export_config.py --study-folder {study_folder} --best")
-        print(f"  python export_config.py --study-folder {study_folder} --trial <N>")
+        logger.info("  python export_config.py --study-folder %s --best", study_folder)
+        logger.info("  python export_config.py --study-folder %s --trial <N>", study_folder)
     
-    print(f"\nTo analyze the study visually, run:")
-    print(f"  optuna-dashboard {storage}")
+    logger.info("To analyze the study visually, run:")
+    logger.info("  optuna-dashboard %s", storage)
     
     return study
 

@@ -5,6 +5,9 @@ import numpy as np
 
 from backtest.regime_dates import CRISIS_REGIMES, MARKET_REGIMES
 from utils.quarter import get_quarter_dates
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 from ._helpers import (
     _annualization_factor,
@@ -335,7 +338,7 @@ def compute_quarterly_alpha(daily_returns_df, trade_results):
                 'Outperformance': outperformance
             })
         except (ValueError, KeyError) as e:
-            print(f"      Warning: Could not compute returns for quarter {quarter}: {e}")
+            logger.warning("Could not compute returns for quarter %s: %s", quarter, e)
             continue
 
     if len(results) == 0:

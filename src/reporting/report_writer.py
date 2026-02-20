@@ -4,6 +4,9 @@ import pandas as pd
 import warnings
 
 from config.defaults import INITIAL_CAPITAL
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 from .metrics import (
     compute_portfolio_metrics,
@@ -65,7 +68,7 @@ def generate_backtest_report(
     Returns:
     - Path to the generated Excel file
     """
-    print("\nGenerating consolidated backtest report...")
+    logger.info("Generating consolidated backtest report...")
 
     # =========================================================================
     # DATA PREPARATION
@@ -104,22 +107,22 @@ def generate_backtest_report(
     # COMPUTE ALL ANALYTICS
     # =========================================================================
 
-    print("  - Computing portfolio metrics...")
+    logger.info("Computing portfolio metrics...")
     portfolio_metrics = None
     try:
         portfolio_metrics = compute_portfolio_metrics(daily_pf)
     except (KeyError, ValueError, ZeroDivisionError, TypeError) as e:
-        print(f"    Warning: Could not compute portfolio metrics: {e}")
+        logger.warning("Could not compute portfolio metrics: %s", e)
 
-    print("  - Computing benchmark metrics...")
+    logger.info("Computing benchmark metrics...")
     benchmark_metrics = None
     if comparison_df is not None:
         try:
             benchmark_metrics = compute_benchmark_metrics(comparison_df)
         except (KeyError, ValueError, ZeroDivisionError, TypeError) as e:
-            print(f"    Warning: Could not compute benchmark metrics: {e}")
+            logger.warning("Could not compute benchmark metrics: %s", e)
 
-    print("  - Computing periodic performance...")
+    logger.info("Computing periodic performance...")
     periodic_inception = compute_portfolio_performance(combined_returns, input_frequency)
     periodic_inception.index.name = "Since_Inception"
 
@@ -131,7 +134,7 @@ def generate_backtest_report(
                 sp_df.index.name = f"{start_y}_{end_y}"
                 sub_period_dfs.append(sp_df)
 
-    print("  - Computing rolling performance...")
+    logger.info("Computing rolling performance...")
     rolling_1y = compute_rolling_performance(combined_returns, input_frequency, 1, "yearly")
     rolling_1y.index.name = "Rolling_1Y" if not rolling_1y.empty else None
     rolling_3y = compute_rolling_performance(combined_returns, input_frequency, 3, "yearly")
@@ -139,37 +142,37 @@ def generate_backtest_report(
     rolling_5y = compute_rolling_performance(combined_returns, input_frequency, 5, "yearly")
     rolling_5y.index.name = "Rolling_5Y_ann" if not rolling_5y.empty else None
 
-    print("  - Computing calendar year performance...")
+    logger.info("Computing calendar year performance...")
     calendar_df = compute_calendar_year_performance(combined_returns, input_frequency)
     calendar_df.index.name = "Calendar_Year" if not calendar_df.empty else None
 
-    print("  - Computing trailing returns...")
+    logger.info("Computing trailing returns...")
     trailing_df = compute_trailing_returns(combined_returns, input_frequency)
     last_date = pd.to_datetime(data_end).strftime("%Y-%m-%d")
     trailing_df.index.name = f"Trailing_Returns_{last_date}"
 
-    print("  - Computing up/down months...")
+    logger.info("Computing up/down months...")
     up_down_df = compute_up_down_months(monthly_df)
 
-    print("  - Computing quarter analysis...")
+    logger.info("Computing quarter analysis...")
     quarter_analysis = None
     try:
         quarter_analysis = get_comprehensive_quarter_analysis(trade_results)
     except (KeyError, ValueError, ZeroDivisionError, TypeError) as e:
-        print(f"    Warning: Could not compute quarter analysis: {e}")
+        logger.warning("Could not compute quarter analysis: %s", e)
 
-    print("  - Computing regime returns...")
+    logger.info("Computing regime returns...")
     crisis_df = compute_crisis_regime_returns(combined_returns, data_start, data_end)
     market_df = compute_market_regime_returns(combined_returns, data_start, data_end)
 
     # Quarterly alpha (needs benchmark)
     quarterly_alpha_df = None
     if comparison_df is not None and trade_results is not None:
-        print("  - Computing quarterly alpha...")
+        logger.info("Computing quarterly alpha...")
         try:
             quarterly_alpha_df = compute_quarterly_alpha(combined_returns, trade_results)
         except (KeyError, ValueError, ZeroDivisionError, TypeError) as e:
-            print(f"    Warning: Could not compute quarterly alpha: {e}")
+            logger.warning("Could not compute quarterly alpha: %s", e)
 
     # Stock counts by mcap (conditional)
     mcap_counts_df = None
@@ -181,17 +184,17 @@ def generate_backtest_report(
             mcap_values = {'largecap', 'midcap', 'smallcap'}
             has_cat_with_mcap = bool(mcap_values.intersection(cat_values))
         if has_mcap_category or has_cat_with_mcap:
-            print("  - Computing stock counts by market cap...")
+            logger.info("Computing stock counts by market cap...")
             try:
                 mcap_counts_df = get_stock_counts_by_mcap(trade_results)
             except ValueError as e:
-                print(f"    Warning: Could not compute mcap counts: {e}")
+                logger.warning("Could not compute mcap counts: %s", e)
 
     # =========================================================================
     # CREATE CHARTS
     # =========================================================================
 
-    print("  - Creating charts...")
+    logger.info("Creating charts...")
 
     pf_vs_index_chart = None
     if comparison_df is not None:
@@ -210,7 +213,7 @@ def generate_backtest_report(
     # WRITE EXCEL WORKBOOK
     # =========================================================================
 
-    print("  - Writing Excel workbook...")
+    logger.info("Writing Excel workbook...")
 
     with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
         workbook = writer.book
@@ -381,5 +384,5 @@ def generate_backtest_report(
                 worksheet.set_column('A:A', 20)
                 worksheet.set_column('B:Z', 12, format_decimal)
 
-    print(f"  - Report saved to: {output_path}")
+    logger.info("Report saved to: %s", output_path)
     return output_path

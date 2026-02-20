@@ -19,10 +19,12 @@ Usage:
 """
 
 import argparse
+import logging
 import yaml
 import optuna
 from pathlib import Path
 
+from utils.logging_config import setup_logging, get_logger
 from tuning import (
     load_tuning_config,
     build_config,
@@ -30,6 +32,8 @@ from tuning import (
 )
 
 from config.defaults import DEFAULT_OBJECTIVE, DEFAULT_DIRECTION
+
+logger = get_logger(__name__)
 
 
 def _load_study(study_folder: Path) -> tuple:
@@ -180,7 +184,7 @@ def _write_config(config: dict, output_path: Path, trial: optuna.trial.FrozenTri
         f.write(header)
         f.write(yaml_content)
     
-    print(f"  Exported: {output_path}")
+    logger.info("  Exported: %s", output_path)
 
 
 def export_best(study_folder: Path) -> None:
@@ -193,14 +197,14 @@ def export_best(study_folder: Path) -> None:
     study, tuning_config = _load_study(study_folder)
     
     if is_multi_objective(study):
-        print("ERROR: --best is only valid for single-objective studies.")
-        print("For multi-objective studies, use --pareto or --trial <N>.")
+        logger.error("--best is only valid for single-objective studies.")
+        logger.error("For multi-objective studies, use --pareto or --trial <N>.")
         return
     
     try:
         best_trial = study.best_trial
     except ValueError:
-        print("No completed trials found in this study.")
+        logger.error("No completed trials found in this study.")
         return
     
     optuna_config = tuning_config.get('optuna', {})
@@ -209,7 +213,7 @@ def export_best(study_folder: Path) -> None:
     config = _build_config_from_trial(best_trial, tuning_config)
     output_path = study_folder / 'best_config.yaml'
     
-    print(f"\nBest trial: {best_trial.number} (value: {best_trial.value:.6f})")
+    logger.info("Best trial: %d (value: %.6f)", best_trial.number, best_trial.value)
     _write_config(config, output_path, best_trial, objective_names)
 
 
@@ -231,13 +235,13 @@ def export_trial(study_folder: Path, trial_number: int) -> None:
             break
     
     if target_trial is None:
-        print(f"ERROR: Trial {trial_number} not found in study.")
-        print(f"Available trials: 0-{len(study.trials) - 1}")
+        logger.error("Trial %d not found in study.", trial_number)
+        logger.error("Available trials: 0-%d", len(study.trials) - 1)
         return
     
     if target_trial.state != optuna.trial.TrialState.COMPLETE:
-        print(f"WARNING: Trial {trial_number} has state '{target_trial.state.name}' (not COMPLETE).")
-        print("Exporting anyway, but results may not be meaningful.")
+        logger.warning("Trial %d has state '%s' (not COMPLETE).", trial_number, target_trial.state.name)
+        logger.warning("Exporting anyway, but results may not be meaningful.")
     
     # Determine objective names
     optuna_config = tuning_config.get('optuna', {})
@@ -249,7 +253,7 @@ def export_trial(study_folder: Path, trial_number: int) -> None:
     config = _build_config_from_trial(target_trial, tuning_config)
     output_path = study_folder / f'trial_{trial_number}_config.yaml'
     
-    print(f"\nExporting trial {trial_number}:")
+    logger.info("Exporting trial %d:", trial_number)
     _write_config(config, output_path, target_trial, objective_names)
 
 
@@ -264,13 +268,13 @@ def export_pareto(study_folder: Path, top_n: int = None) -> None:
     study, tuning_config = _load_study(study_folder)
     
     if not is_multi_objective(study):
-        print("ERROR: --pareto is only valid for multi-objective studies.")
-        print("For single-objective studies, use --best or --trial <N>.")
+        logger.error("--pareto is only valid for multi-objective studies.")
+        logger.error("For single-objective studies, use --best or --trial <N>.")
         return
     
     pareto_trials = study.best_trials
     if not pareto_trials:
-        print("No Pareto-optimal trials found.")
+        logger.info("No Pareto-optimal trials found.")
         return
     
     # Determine objective names and directions from config
@@ -291,23 +295,21 @@ def export_pareto(study_folder: Path, top_n: int = None) -> None:
         pareto_sorted = pareto_sorted[:top_n]
     
     n_export = len(pareto_sorted)
-    print(f"\nPareto front: {len(pareto_trials)} non-dominated solutions")
-    print(f"Exporting {n_export} configs to: {study_folder / 'pareto_configs'}/\n")
+    logger.info("Pareto front: %d non-dominated solutions", len(pareto_trials))
+    logger.info("Exporting %d configs to: %s/", n_export, study_folder / 'pareto_configs')
     
-    # Print summary table
+    # Log summary table
     header_parts = [f"{'Trial':>6s}"]
     for name in objective_names:
         header_parts.append(f"{name:>14s}")
-    print(" | ".join(header_parts))
-    print("-" * (8 + 17 * len(objective_names)))
+    logger.info(" | ".join(header_parts))
+    logger.info("-" * (8 + 17 * len(objective_names)))
     
     for trial in pareto_sorted:
         parts = [f"{trial.number:>6d}"]
         for v in trial.values:
             parts.append(f"{v:>14.6f}")
-        print(" | ".join(parts))
-    
-    print()
+        logger.info(" | ".join(parts))
     
     # Export configs
     output_dir = study_folder / 'pareto_configs'
@@ -316,7 +318,7 @@ def export_pareto(study_folder: Path, top_n: int = None) -> None:
         output_path = output_dir / f'trial_{trial.number}.yaml'
         _write_config(config, output_path, trial, objective_names)
     
-    print(f"\nDone. {n_export} configs exported to {output_dir}")
+    logger.info("Done. %d configs exported to %s", n_export, output_dir)
 
 
 def main():
@@ -381,7 +383,7 @@ After exporting:
     study_folder = Path(args.study_folder)
     
     if not study_folder.exists():
-        print(f"ERROR: Study folder not found: {study_folder}")
+        logger.error("Study folder not found: %s", study_folder)
         return
     
     if args.best:
@@ -393,4 +395,5 @@ After exporting:
 
 
 if __name__ == '__main__':
+    setup_logging(console_level=logging.INFO)
     main()

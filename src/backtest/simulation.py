@@ -5,6 +5,9 @@ import warnings
 from config.defaults import INITIAL_CAPITAL, DEFAULT_ENTRY_PRICE_WINDOW
 from utils.quarter import get_quarter_dates
 from utils.formatting import crores_formatter
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # --------------------------------------------------------------------------------
 # 1. POSITION SIZING LOGIC
@@ -237,7 +240,7 @@ def compute_pf_value_over_quarter(trades, price_data, target_quarter, initial_ca
     # Filter for target quarter
     quarter_df = trades[trades['quarter'] == target_quarter].copy()
     if quarter_df.empty:
-        print("No data found.")
+        logger.warning("No data found for quarter %s.", target_quarter)
         return
 
     # Sizing
@@ -270,7 +273,7 @@ def compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quart
     quarters = _generate_quarter_sequence(first_quarter, last_quarter)
     
     if not quarters:
-        print("No valid quarters in the specified range.")
+        logger.warning("No valid quarters in the specified range.")
         return None
     
     all_equity_curves = []
@@ -295,7 +298,7 @@ def compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quart
         current_capital = equity_curve['Total_Portfolio_Value'].iloc[-1]
     
     if not all_equity_curves:
-        print("No equity curves generated for any quarter.")
+        logger.warning("No equity curves generated for any quarter.")
         return None
     
     # Concatenate all equity curves
@@ -388,7 +391,7 @@ def plot_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter,
     equity_curve = compute_pf_value_over_quarters(trades, price_data, first_quarter, last_quarter, initial_capital)
     
     if equity_curve is None or equity_curve.empty:
-        print("No data to plot.")
+        logger.warning("No data to plot.")
         return
     
     plt.figure(figsize=(14, 7))
@@ -493,7 +496,7 @@ def compute_pf_vs_index(trades, price_data, index_price_data, first_quarter, las
         )
     
     if daily_pf_values is None or daily_pf_values.empty:
-        print("No portfolio data found.")
+        logger.warning("No portfolio data found.")
         return None
     
     # Prepare index data
