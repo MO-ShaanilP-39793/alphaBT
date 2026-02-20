@@ -338,231 +338,226 @@ def backtest_core(
     if isinstance(config, dict):
         config = BacktestConfig(**config)
 
-    try:
-        # Extract config values via attribute access
-        first_quarter = config.first_quarter
-        last_quarter = config.last_quarter
-        category_scheme = config.category_scheme
-        
-        # Cross-dimensional selection/weighting (defaults applied by model validator)
-        selection_dimension = config.selection_dimension
-        weighting_dimension = config.weighting_dimension
-        tpsl_category_dimension = config.tpsl_category_dimension
-        
-        # Resolve the actual TP/SL category scheme and column name
-        if tpsl_category_dimension == 'selection':
-            tpsl_scheme = selection_dimension
-        elif tpsl_category_dimension == 'weighting':
-            tpsl_scheme = weighting_dimension
-        elif tpsl_category_dimension in ('volatility', 'mcap'):
-            tpsl_scheme = tpsl_category_dimension
-        else:
-            raise ValueError(f"tpsl_category_dimension must be 'selection', 'weighting', 'volatility', or 'mcap', got '{tpsl_category_dimension}'")
-        
-        # Validate that tpsl_scheme is covered by at least one dimension
-        if tpsl_scheme not in (selection_dimension, weighting_dimension):
-            raise ValueError(
-                f"tpsl_category_dimension resolves to '{tpsl_scheme}', but neither "
-                f"selection_dimension ('{selection_dimension}') nor weighting_dimension "
-                f"('{weighting_dimension}') uses this dimension. Cannot produce "
-                f"correct TP/SL category labels."
-            )
-        
-        # Stock selection mode
-        run_stock_selection_flag = config.run_stock_selection
-        
-        # Selection type: 'category_based' or 'top_k'
-        selection_type = config.selection_type
-        
-        # Selection-specific config
-        category_counts = config.category_counts
-        category_weights = config.category_weights
-        selection_method = config.selection_method
-        min_prob_threshold = config.min_prob_threshold
-        top_k_config = config.top_k_config.model_dump() if config.top_k_config else None
-        category_based_weighting_scheme = config.category_based_selection_weighting_scheme
-        
-        # Tiered TP/SL config
-        tiered_config = config.tiered_config
-        has_tiered_config = tiered_config is not None
-        
-        # TP/SL mode configuration
-        tp_mode = config.tp_mode
-        sl_mode = config.sl_mode
-        tp_enabled = config.tp_enabled
-        sl_enabled = config.sl_enabled
-        
-        # Entry price window configuration
-        entry_price_window = config.entry_price_window
-        
-        # ---------------------------------------------------------------------
-        # Filter Input Data by Quarter Range
-        # ---------------------------------------------------------------------
-        if verbose:
-            print("\n[1/4] Filtering data by quarter range...")
-        
-        if first_quarter is None and last_quarter is None:
-            input_data_filtered = input_data.copy()
-            first_quarter = int(input_data_filtered['quarter'].min())
-            last_quarter = int(input_data_filtered['quarter'].max())
-            if verbose:
-                print(f"  - Using full input data: {len(input_data_filtered)} rows")
-                print(f"  - Quarters in data: {sorted(input_data_filtered['quarter'].unique().tolist())}")
-        else:
-            input_data_filtered = filter_data_by_quarters(input_data, first_quarter, last_quarter)
-            if verbose:
-                print(f"  - Filtered input data: {len(input_data_filtered)} rows")
-                print(f"  - Quarters in data: {sorted(input_data_filtered['quarter'].unique().tolist())}")
-        
-        if input_data_filtered.empty:
-            return None
-        
-        # ---------------------------------------------------------------------
-        # Run Stock Selection OR Use Preselected Portfolio
-        # ---------------------------------------------------------------------
-        data_issues = None  # Will store validation issues for return
-        
-        if run_stock_selection_flag:
-            if verbose:
-                print("\n[2/4] Running stock selection...")
-            
-            # Validate and filter price data before selection (unless pre-validated)
-            if not skip_price_data_validation:
-                input_data_filtered, data_issues = filter_tradeable_stocks(
-                    input_data_filtered,
-                    price_data,
-                    first_quarter,
-                    last_quarter,
-                    min_prices_required=entry_price_window
-                )
-                
-                if data_issues is not None and not data_issues.empty:
-                    if verbose:
-                        print(f"  - Filtered {len(data_issues)} stock-quarter combinations with price data issues")
-            
-            selected_stocks = run_stock_selection(
-                input_data_filtered,
-                category_scheme,
-                category_counts,
-                category_weights,
-                selection_method=selection_method,
-                min_prob_threshold=min_prob_threshold,
-                selection_type=selection_type,
-                top_k_config=top_k_config,
-                category_based_weighting_scheme=category_based_weighting_scheme,
-                selection_dimension=selection_dimension,
-                weighting_dimension=weighting_dimension
-            )
-            if verbose:
-                print(f"  - Selected stocks: {len(selected_stocks)} positions across all quarters")
-        else:
-            if verbose:
-                print("\n[2/4] Using preselected portfolio...")
-            
-            # Validate price data coverage (but don't filter, since it's preselected)
-            if not skip_price_data_validation:
-                data_issues = validate_price_data_coverage(
-                    input_data_filtered,
-                    price_data,
-                    first_quarter,
-                    last_quarter,
-                    min_prices_required=entry_price_window
-                )
-                
-                if data_issues is not None and not data_issues.empty:
-                    if verbose:
-                        print(f"  - Warning: Found {len(data_issues)} stock-quarter combinations with price data issues")
-                        print(f"            (Issues logged but stocks not filtered since using preselected portfolio)")
-            
-            selected_stocks, has_category = validate_preselected_input(
-                input_data_filtered,
-                category_scheme,
-                tp_mode,
-                sl_mode,
-                tp_enabled,
-                sl_enabled,
-                has_tiered_config
-            )
-            if verbose:
-                print(f"  - Preselected stocks: {len(selected_stocks)} positions across all quarters")
-                if has_category:
-                    print(f"  - Categories found: {sorted(selected_stocks['cat'].unique().tolist())}")
-                else:
-                    print("  - No category column in input (using default TP/SL thresholds)")
-        
-        if selected_stocks is None or selected_stocks.empty:
-            return None
-        
-        # ---------------------------------------------------------------------
-        # Simulate Trades with TP/SL
-        # ---------------------------------------------------------------------
-        if verbose:
-            print("\n[3/4] Simulating trades with TP/SL thresholds...")
-        
-        # Set up tpsl_cat column for TP/SL category lookup
-        # When selection and weighting dimensions differ, the TP/SL lookup dimension
-        # is controlled by tpsl_category_dimension
-        if 'selection_cat' in selected_stocks.columns:
-            if tpsl_category_dimension in ('selection', selection_dimension):
-                selected_stocks['tpsl_cat'] = selected_stocks['selection_cat']
-            else:
-                # tpsl uses weighting dimension or an explicitly specified one matching it
-                selected_stocks['tpsl_cat'] = selected_stocks['cat']
-        # else: top_k or preselected mode — no tpsl_cat needed, process_trade falls back to 'cat'
-        
-        # Get configs from strategy config
-        trade_results = simulate_trades(
-            selected_stocks,
-            price_data,
-            tpsl_scheme,
-            index_data=index_data,
-            tp_mode=tp_mode,
-            sl_mode=sl_mode,
-            tp_enabled=tp_enabled,
-            sl_enabled=sl_enabled,
-            tiered_config=config.tiered_config.model_dump() if config.tiered_config else None,
-            atr_config=config.atr_config.model_dump() if config.atr_config else None,
-            pivot_config=config.pivot_config.model_dump() if config.pivot_config else None,
-            flat_config=config.flat_config.model_dump() if config.flat_config else None,
-            index_exit_config=config.index_exit.model_dump() if config.index_exit else None,
-            entry_price_window=entry_price_window
+    # Extract config values via attribute access
+    first_quarter = config.first_quarter
+    last_quarter = config.last_quarter
+    category_scheme = config.category_scheme
+    
+    # Cross-dimensional selection/weighting (defaults applied by model validator)
+    selection_dimension = config.selection_dimension
+    weighting_dimension = config.weighting_dimension
+    tpsl_category_dimension = config.tpsl_category_dimension
+    
+    # Resolve the actual TP/SL category scheme and column name
+    if tpsl_category_dimension == 'selection':
+        tpsl_scheme = selection_dimension
+    elif tpsl_category_dimension == 'weighting':
+        tpsl_scheme = weighting_dimension
+    elif tpsl_category_dimension in ('volatility', 'mcap'):
+        tpsl_scheme = tpsl_category_dimension
+    else:
+        raise ValueError(f"tpsl_category_dimension must be 'selection', 'weighting', 'volatility', or 'mcap', got '{tpsl_category_dimension}'")
+    
+    # Validate that tpsl_scheme is covered by at least one dimension
+    if tpsl_scheme not in (selection_dimension, weighting_dimension):
+        raise ValueError(
+            f"tpsl_category_dimension resolves to '{tpsl_scheme}', but neither "
+            f"selection_dimension ('{selection_dimension}') nor weighting_dimension "
+            f"('{weighting_dimension}') uses this dimension. Cannot produce "
+            f"correct TP/SL category labels."
         )
-        
-        if trade_results is None or trade_results.empty:
-            return None
-        
+    
+    # Stock selection mode
+    run_stock_selection_flag = config.run_stock_selection
+    
+    # Selection type: 'category_based' or 'top_k'
+    selection_type = config.selection_type
+    
+    # Selection-specific config
+    category_counts = config.category_counts
+    category_weights = config.category_weights
+    selection_method = config.selection_method
+    min_prob_threshold = config.min_prob_threshold
+    top_k_config = config.top_k_config.model_dump() if config.top_k_config else None
+    category_based_weighting_scheme = config.category_based_selection_weighting_scheme
+    
+    # Tiered TP/SL config
+    tiered_config = config.tiered_config
+    has_tiered_config = tiered_config is not None
+    
+    # TP/SL mode configuration
+    tp_mode = config.tp_mode
+    sl_mode = config.sl_mode
+    tp_enabled = config.tp_enabled
+    sl_enabled = config.sl_enabled
+    
+    # Entry price window configuration
+    entry_price_window = config.entry_price_window
+    
+    # ---------------------------------------------------------------------
+    # Filter Input Data by Quarter Range
+    # ---------------------------------------------------------------------
+    if verbose:
+        print("\n[1/4] Filtering data by quarter range...")
+    
+    if first_quarter is None and last_quarter is None:
+        input_data_filtered = input_data.copy()
+        first_quarter = int(input_data_filtered['quarter'].min())
+        last_quarter = int(input_data_filtered['quarter'].max())
         if verbose:
-            print(f"  - Trade simulation complete: {len(trade_results)} trades")
-        
-        # ---------------------------------------------------------------------
-        # Generate Daily Portfolio Values
-        # ---------------------------------------------------------------------
+            print(f"  - Using full input data: {len(input_data_filtered)} rows")
+            print(f"  - Quarters in data: {sorted(input_data_filtered['quarter'].unique().tolist())}")
+    else:
+        input_data_filtered = filter_data_by_quarters(input_data, first_quarter, last_quarter)
         if verbose:
-            print("\n[4/4] Generating daily portfolio values...")
-        
-        daily_pf_values = compute_pf_value_over_quarters(
-            trade_results, 
-            price_data, 
-            first_quarter, 
-            last_quarter, 
-            INITIAL_CAPITAL,
-            entry_price_window=entry_price_window
-        )
-        
-        if verbose and daily_pf_values is not None and not daily_pf_values.empty:
-            print(f"  - Daily portfolio values generated: {len(daily_pf_values)} days")
-        
-        return {
-            'daily_pf_values': daily_pf_values,
-            'trade_results': trade_results,
-            'first_quarter': first_quarter,
-            'last_quarter': last_quarter,
-            'data_issues': data_issues,  # Price data validation issues (None if no issues)
-        }
-        
-    except Exception as e:
-        warnings.warn(f"Backtest core failed: {str(e)}")
+            print(f"  - Filtered input data: {len(input_data_filtered)} rows")
+            print(f"  - Quarters in data: {sorted(input_data_filtered['quarter'].unique().tolist())}")
+    
+    if input_data_filtered.empty:
         return None
+    
+    # ---------------------------------------------------------------------
+    # Run Stock Selection OR Use Preselected Portfolio
+    # ---------------------------------------------------------------------
+    data_issues = None  # Will store validation issues for return
+    
+    if run_stock_selection_flag:
+        if verbose:
+            print("\n[2/4] Running stock selection...")
+        
+        # Validate and filter price data before selection (unless pre-validated)
+        if not skip_price_data_validation:
+            input_data_filtered, data_issues = filter_tradeable_stocks(
+                input_data_filtered,
+                price_data,
+                first_quarter,
+                last_quarter,
+                min_prices_required=entry_price_window
+            )
+            
+            if data_issues is not None and not data_issues.empty:
+                if verbose:
+                    print(f"  - Filtered {len(data_issues)} stock-quarter combinations with price data issues")
+        
+        selected_stocks = run_stock_selection(
+            input_data_filtered,
+            category_scheme,
+            category_counts,
+            category_weights,
+            selection_method=selection_method,
+            min_prob_threshold=min_prob_threshold,
+            selection_type=selection_type,
+            top_k_config=top_k_config,
+            category_based_weighting_scheme=category_based_weighting_scheme,
+            selection_dimension=selection_dimension,
+            weighting_dimension=weighting_dimension
+        )
+        if verbose:
+            print(f"  - Selected stocks: {len(selected_stocks)} positions across all quarters")
+    else:
+        if verbose:
+            print("\n[2/4] Using preselected portfolio...")
+        
+        # Validate price data coverage (but don't filter, since it's preselected)
+        if not skip_price_data_validation:
+            data_issues = validate_price_data_coverage(
+                input_data_filtered,
+                price_data,
+                first_quarter,
+                last_quarter,
+                min_prices_required=entry_price_window
+            )
+            
+            if data_issues is not None and not data_issues.empty:
+                if verbose:
+                    print(f"  - Warning: Found {len(data_issues)} stock-quarter combinations with price data issues")
+                    print(f"            (Issues logged but stocks not filtered since using preselected portfolio)")
+        
+        selected_stocks, has_category = validate_preselected_input(
+            input_data_filtered,
+            category_scheme,
+            tp_mode,
+            sl_mode,
+            tp_enabled,
+            sl_enabled,
+            has_tiered_config
+        )
+        if verbose:
+            print(f"  - Preselected stocks: {len(selected_stocks)} positions across all quarters")
+            if has_category:
+                print(f"  - Categories found: {sorted(selected_stocks['cat'].unique().tolist())}")
+            else:
+                print("  - No category column in input (using default TP/SL thresholds)")
+    
+    if selected_stocks is None or selected_stocks.empty:
+        return None
+    
+    # ---------------------------------------------------------------------
+    # Simulate Trades with TP/SL
+    # ---------------------------------------------------------------------
+    if verbose:
+        print("\n[3/4] Simulating trades with TP/SL thresholds...")
+    
+    # Set up tpsl_cat column for TP/SL category lookup
+    # When selection and weighting dimensions differ, the TP/SL lookup dimension
+    # is controlled by tpsl_category_dimension
+    if 'selection_cat' in selected_stocks.columns:
+        if tpsl_category_dimension in ('selection', selection_dimension):
+            selected_stocks['tpsl_cat'] = selected_stocks['selection_cat']
+        else:
+            # tpsl uses weighting dimension or an explicitly specified one matching it
+            selected_stocks['tpsl_cat'] = selected_stocks['cat']
+    # else: top_k or preselected mode — no tpsl_cat needed, process_trade falls back to 'cat'
+    
+    # Get configs from strategy config
+    trade_results = simulate_trades(
+        selected_stocks,
+        price_data,
+        tpsl_scheme,
+        index_data=index_data,
+        tp_mode=tp_mode,
+        sl_mode=sl_mode,
+        tp_enabled=tp_enabled,
+        sl_enabled=sl_enabled,
+        tiered_config=config.tiered_config.model_dump() if config.tiered_config else None,
+        atr_config=config.atr_config.model_dump() if config.atr_config else None,
+        pivot_config=config.pivot_config.model_dump() if config.pivot_config else None,
+        flat_config=config.flat_config.model_dump() if config.flat_config else None,
+        index_exit_config=config.index_exit.model_dump() if config.index_exit else None,
+        entry_price_window=entry_price_window
+    )
+    
+    if trade_results is None or trade_results.empty:
+        return None
+    
+    if verbose:
+        print(f"  - Trade simulation complete: {len(trade_results)} trades")
+    
+    # ---------------------------------------------------------------------
+    # Generate Daily Portfolio Values
+    # ---------------------------------------------------------------------
+    if verbose:
+        print("\n[4/4] Generating daily portfolio values...")
+    
+    daily_pf_values = compute_pf_value_over_quarters(
+        trade_results, 
+        price_data, 
+        first_quarter, 
+        last_quarter, 
+        INITIAL_CAPITAL,
+        entry_price_window=entry_price_window
+    )
+    
+    if verbose and daily_pf_values is not None and not daily_pf_values.empty:
+        print(f"  - Daily portfolio values generated: {len(daily_pf_values)} days")
+    
+    return {
+        'daily_pf_values': daily_pf_values,
+        'trade_results': trade_results,
+        'first_quarter': first_quarter,
+        'last_quarter': last_quarter,
+        'data_issues': data_issues,  # Price data validation issues (None if no issues)
+    }
 
 
 def run_backtest(config_path=DEFAULT_CONFIG_PATH):

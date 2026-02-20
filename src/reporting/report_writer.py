@@ -1,6 +1,7 @@
 """Main report orchestrator — generates the consolidated backtest Excel workbook."""
 
 import pandas as pd
+import warnings
 
 from config.defaults import INITIAL_CAPITAL
 
@@ -107,7 +108,7 @@ def generate_backtest_report(
     portfolio_metrics = None
     try:
         portfolio_metrics = compute_portfolio_metrics(daily_pf)
-    except Exception as e:
+    except (KeyError, ValueError, ZeroDivisionError, TypeError) as e:
         print(f"    Warning: Could not compute portfolio metrics: {e}")
 
     print("  - Computing benchmark metrics...")
@@ -115,7 +116,7 @@ def generate_backtest_report(
     if comparison_df is not None:
         try:
             benchmark_metrics = compute_benchmark_metrics(comparison_df)
-        except Exception as e:
+        except (KeyError, ValueError, ZeroDivisionError, TypeError) as e:
             print(f"    Warning: Could not compute benchmark metrics: {e}")
 
     print("  - Computing periodic performance...")
@@ -154,7 +155,7 @@ def generate_backtest_report(
     quarter_analysis = None
     try:
         quarter_analysis = get_comprehensive_quarter_analysis(trade_results)
-    except Exception as e:
+    except (KeyError, ValueError, ZeroDivisionError, TypeError) as e:
         print(f"    Warning: Could not compute quarter analysis: {e}")
 
     print("  - Computing regime returns...")
@@ -167,7 +168,7 @@ def generate_backtest_report(
         print("  - Computing quarterly alpha...")
         try:
             quarterly_alpha_df = compute_quarterly_alpha(combined_returns, trade_results)
-        except Exception as e:
+        except (KeyError, ValueError, ZeroDivisionError, TypeError) as e:
             print(f"    Warning: Could not compute quarterly alpha: {e}")
 
     # Stock counts by mcap (conditional)

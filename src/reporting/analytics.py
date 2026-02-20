@@ -334,7 +334,7 @@ def compute_quarterly_alpha(daily_returns_df, trade_results):
                 'Benchmark_Return': bench_return,
                 'Outperformance': outperformance
             })
-        except Exception as e:
+        except (ValueError, KeyError) as e:
             print(f"      Warning: Could not compute returns for quarter {quarter}: {e}")
             continue
 

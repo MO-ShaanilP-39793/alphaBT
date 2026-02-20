@@ -12,6 +12,7 @@ import yaml
 import pandas as pd
 from typing import Any
 import optuna
+import warnings
 
 from config.defaults import (
     DAYS_PER_YEAR,
@@ -693,7 +694,8 @@ def get_study_summary(study: optuna.Study) -> dict:
                     summary[f'objective_{i}_min'] = min(obj_vals)
                     summary[f'objective_{i}_max'] = max(obj_vals)
                     summary[f'objective_{i}_mean'] = sum(obj_vals) / len(obj_vals)
-        except Exception:
+        except (RuntimeError, ValueError, IndexError) as e:
+            warnings.warn(f"Could not compute Pareto statistics: {e}")
             summary['n_pareto_optimal'] = 0
         
         # No single best value/trial for multi-objective

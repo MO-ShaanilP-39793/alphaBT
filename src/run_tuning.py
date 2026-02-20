@@ -454,6 +454,10 @@ def create_objective(tuning_config: dict, data_cache: DataCache,
                     return objective_value
                 
             except Exception as e:
+                # Broad catch intentional: Optuna convention — failed trials return
+                # penalty value rather than crashing the study. With backtest_core()
+                # no longer swallowing errors, this is the single catch point for all
+                # failures in the backtest pipeline.
                 warnings.warn(f"Trial {trial.number} failed with error: {str(e)}")
                 return failure_return
     
