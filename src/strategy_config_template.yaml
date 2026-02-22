@@ -3,16 +3,16 @@
 # Input data format depends on run_stock_selection setting:
 # - If run_stock_selection: true  → csv/parquet with quarter, co_name, prob, and either volatility or category
 # - If run_stock_selection: false → csv/parquet with quarter, co_name, stock_weight, and optionally category
-input_data_path: "../data/dummy_data.csv"
+input_data_path: "../data/inference_data_validated/dummy_data.csv"
 # csv/parquet with date, co_name, open, high, low, close
-price_data_path: "../data/ohlcv2.parquet"
+price_data_path: "../data/price_data/ohlcv2.parquet"
 # csv/parquet with date, value
-index_data_path: "../data/index_data_validated.csv"
+index_data_path: "../data/index_data/index_data_validated.csv"
 
 # Specify the first and last quarters (both are inclusive):
 # set both to null if all available data is to be used
-first_quarter: 202402
-last_quarter: 202405
+first_quarter: null
+last_quarter: null
 
 # =============================================================================
 # STOCK SELECTION CONFIGURATION
