@@ -206,7 +206,7 @@ selection_type: 'top_k'
 top_k_config:
   k: 30
   weighting_scheme: 'equal'
-selection_method: 'probability'
+sort_by: 'probability'
 ```
 
 **How it works**:
@@ -237,7 +237,7 @@ selection_method: 'probability'
 #### Probability Ranking
 
 ```yaml
-selection_method: 'probability'
+sort_by: 'probability'
 ```
 
 **What**: Rank stocks directly by ML model probability (higher = better).
@@ -252,7 +252,7 @@ selection_method: 'probability'
 #### Risk-Adjusted Ranking
 
 ```yaml
-selection_method: 'risk_adjusted'
+sort_by: 'risk_adjusted_probability'
 ```
 
 **What**: Rank by `probability / volatility` ratio.
@@ -677,8 +677,8 @@ START: Do you have category labels?
 ├─ NO → Use Top-K selection
 │   │
 │   ├─ Trust model probabilities? 
-│   │   ├─ YES → selection_method: 'probability'
-│   │   └─ NO → selection_method: 'risk_adjusted' (needs volatility column)
+│   │   ├─ YES → sort_by: 'probability'
+│   │   └─ NO → sort_by: 'risk_adjusted_probability' (needs volatility column)
 │   │
 │   └─ Exit strategy?
 │       ├─ Simple → tp_mode/sl_mode: 'flat'

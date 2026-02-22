@@ -506,7 +506,7 @@ optuna-dashboard sqlite:///tuning_logs/<study_name>/optuna_study.db
 flat_tp:        ████████████ 45%  (very important)
 flat_sl:        ████████ 30%      (important)
 k:              ███ 15%           (moderate)
-selection_method: █ 5%            (doesn't matter much)
+sort_by: █ 5%            (doesn't matter much)
 ```
 
 → Focus tuning efforts on `flat_tp` and `flat_sl`.
@@ -534,7 +534,7 @@ top_k_config:
   k: 35
   weighting_scheme: 'equal'
 
-selection_method: 'probability'
+sort_by: 'probability'
 min_prob_threshold: 0.55
 
 tp_enabled: true
@@ -966,7 +966,7 @@ search_space:
 2. In dashboard, filter top-10 trials
 3. Look for commonalities:
    - "All have `k` between 30-40"
-   - "All use `selection_method: 'probability'`"
+   - "All use `sort_by: 'probability'`"
    - "TP ranges 0.08-0.12, SL ranges 0.04-0.07"
 
 4. Use **median** or **mode** of top-10 as final config (more robust than single best)

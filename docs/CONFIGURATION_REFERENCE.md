@@ -60,7 +60,7 @@ quarter,co_name,prob
 
 | Column | When Required | Valid Values |
 |--------|---------------|--------------|
-| `volatility` | `category_scheme: 'volatility'` OR `selection_method: 'risk_adjusted'` | Float (annualized std dev, e.g., 0.35 for 35%) |
+| `volatility` | `category_scheme: 'volatility'` OR `sort_by: 'risk_adjusted_probability'` | Float (annualized std dev, e.g., 0.35 for 35%) |
 | `category` | `category_scheme: 'mcap'` | Exact strings: `largecap`, `midcap`, `smallcap` |
 
 #### Preselected Portfolio Mode:
@@ -333,15 +333,15 @@ top_k_config:
 ### Selection Method (Ranking Criterion)
 
 ```yaml
-selection_method: 'probability'     # Rank by ML probability
+sort_by: 'probability'     # Rank by ML probability
 # OR
-selection_method: 'risk_adjusted'   # Rank by prob/volatility
+sort_by: 'risk_adjusted_probability'   # Rank by prob/volatility
 ```
 
 | Value | Ranking Formula | Required Input Column |
 |-------|----------------|------------------------|
 | `'probability'` | Sort by `prob` descending | `prob` |
-| `'risk_adjusted'` | Sort by `prob / volatility` descending | `prob`, `volatility` |
+| `'risk_adjusted_probability'` | Sort by `prob / volatility` descending | `prob`, `volatility` |
 
 **Applies to**: Both category-based (within-category ranking) and top-k (global ranking)
 
@@ -911,7 +911,7 @@ selection_type: 'top_k'
 top_k_config:
   k: 30
   weighting_scheme: 'equal'
-selection_method: 'probability'
+sort_by: 'probability'
 min_prob_threshold: 0.5
 
 tp_enabled: true
@@ -937,7 +937,7 @@ category_scheme: 'volatility'
 category_counts: [10, 10, 10]
 category_weights: [0.33, 0.33, 0.34]
 category_based_selection_weighting_scheme: 'use_category_weights'
-selection_method: 'probability'
+sort_by: 'probability'
 
 tp_enabled: true
 sl_enabled: true
@@ -963,7 +963,7 @@ category_scheme: 'mcap'
 category_counts: [5, 10, 15]       # Favor small-caps
 category_weights: [0.2, 0.3, 0.5]  # More capital to small
 category_based_selection_weighting_scheme: 'use_category_weights'
-selection_method: 'probability'
+sort_by: 'probability'
 
 tp_enabled: true
 sl_enabled: true
@@ -1010,9 +1010,9 @@ fixed:
   sl_enabled: true
 
 search_space:
-  selection_method:
+  sort_by:
     type: categorical
-    choices: ['probability', 'risk_adjusted']
+    choices: ['probability', 'risk_adjusted_probability']
   
   min_prob_threshold:
     type: float
@@ -1105,7 +1105,7 @@ Before running backtest:
    - Always: `quarter`, `co_name`, `prob`
    - If `category_scheme: 'volatility'`: `volatility`
    - If `category_scheme: 'mcap'`: `category` with `largecap`/`midcap`/`smallcap`
-   - If `selection_method: 'risk_adjusted'`: `volatility`
+   - If `sort_by: 'risk_adjusted_probability'`: `volatility`
    - If `run_stock_selection: false`: `stock_weight`
 ✅ **Price data coverage** spans quarter range with minimal gaps
 ✅ **Stock names** match exactly between inference and price data
@@ -1125,9 +1125,9 @@ Before running backtest:
 
 **Needed when**:
 - `category_scheme: 'volatility'`
-- `selection_method: 'risk_adjusted'`
+- `sort_by: 'risk_adjusted_probability'`
 
-**Fix**: Add `volatility` column to input data OR change to `category_scheme: 'mcap'` / `selection_method: 'probability'`.
+**Fix**: Add `volatility` column to input data OR change to `category_scheme: 'mcap'` / `sort_by: 'probability'`.
 
 ---
 

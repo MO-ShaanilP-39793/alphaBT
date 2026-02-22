@@ -104,7 +104,7 @@ top_k_config:
   k: 30                           # Select 30 stocks per quarter
   weighting_scheme: 'equal'       # Equal money across all stocks
 
-selection_method: 'probability'   # Rank by ML probability
+sort_by: 'probability'   # Rank by ML probability
 min_prob_threshold: 0.5          # Only consider prob >= 0.5
 
 # Exit Strategy (simple percentage-based)
