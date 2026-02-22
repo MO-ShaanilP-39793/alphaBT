@@ -43,6 +43,7 @@ ENV/
 .vscode/
 .VSCodeCounter/
 .github/
+.cursor/
 .idea/
 *.swp
 *.swo
