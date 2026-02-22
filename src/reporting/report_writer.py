@@ -1,6 +1,9 @@
 """Main report orchestrator — generates the consolidated backtest Excel workbook."""
 
 from typing import Optional
+import io
+import math
+import struct
 
 import pandas as pd
 import warnings
@@ -38,6 +41,57 @@ from .charts import (
     create_distribution_chart,
     create_box_plot,
 )
+
+
+def _png_image_rows(
+    buffer: io.BytesIO,
+    excel_row_pts: float = 15.0,
+    padding: int = 2,
+) -> int:
+    """
+    Compute how many Excel rows a PNG image occupies, based on its actual pixel height
+    and the DPI embedded in the PNG's pHYs chunk (written by matplotlib at save time).
+
+    PNG binary layout used here:
+      IHDR chunk  (always first after the 8-byte signature):
+        bytes 16–19 : image height (px)
+      pHYs chunk  (always before IDAT; present when matplotlib saves with dpi=N):
+        4 bytes pixels-per-unit-X  (pixels per metre when unit==1)
+        4 bytes pixels-per-unit-Y
+        1 byte  unit specifier     (0=unknown, 1=metre)
+
+    Conversion:
+      dpi            = pixels_per_metre / 39.3701   (if unit == 1)
+      height_inches  = height_px / dpi
+      rows           = ceil(height_inches / (excel_row_pts / 72)) + padding
+
+    The buffer is seeked back to 0 afterwards so it remains usable by insert_image.
+    """
+    data = buffer.read()
+    buffer.seek(0)
+
+    # Height in pixels from IHDR
+    height_px = struct.unpack('>I', data[20:24])[0]
+
+    # Walk PNG chunks to find pHYs (always appears before IDAT)
+    dpi = 96  # sensible fallback if pHYs is absent
+    pos = 33  # first byte of the chunk after IHDR (8 sig + 4 len + 4 type + 13 data + 4 crc)
+    while pos + 12 <= len(data):
+        chunk_len = struct.unpack('>I', data[pos:pos + 4])[0]
+        chunk_type = data[pos + 4:pos + 8]
+        if chunk_type == b'pHYs':
+            px_per_metre = struct.unpack('>I', data[pos + 8:pos + 12])[0]
+            unit = data[pos + 16]
+            if unit == 1 and px_per_metre > 0:
+                dpi = round(px_per_metre / 39.3701)
+            break
+        if chunk_type == b'IDAT':
+            break  # pHYs always precedes IDAT; stop early
+        pos += 12 + chunk_len
+
+    height_inches = height_px / dpi
+    excel_row_height_inches = excel_row_pts / 72.0
+    return math.ceil(height_inches / excel_row_height_inches) + padding
 
 
 def generate_backtest_report(
@@ -318,23 +372,23 @@ def generate_backtest_report(
 
         if pf_vs_index_chart:
             charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": pf_vs_index_chart})
-            row_offset += 50
+            row_offset += _png_image_rows(pf_vs_index_chart)
 
         charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": drawdown_chart})
-        row_offset += 40
+        row_offset += _png_image_rows(drawdown_chart)
 
         charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": heatmap_chart})
-        row_offset += 40
+        row_offset += _png_image_rows(heatmap_chart)  # dynamic: scales with number of years
 
         if cy_heatmap:
             charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": cy_heatmap})
-            row_offset += 22
+            row_offset += _png_image_rows(cy_heatmap)
 
         charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": corr_heatmap})
-        row_offset += 22
+        row_offset += _png_image_rows(corr_heatmap)
 
         charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": bell_curve})
-        row_offset += 33
+        row_offset += _png_image_rows(bell_curve)
 
         charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": box_plot})
 

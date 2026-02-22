@@ -126,7 +126,7 @@ def create_growth_of_wealth_chart(monthly_returns_df, chart_title="Growth of Rs 
     plt.tight_layout()
 
     buffer = io.BytesIO()
-    plt.savefig(buffer, format="png", dpi=300)
+    plt.savefig(buffer, format="png", dpi=150, bbox_inches='tight')
     plt.close()
     buffer.seek(0)
     return buffer
@@ -257,7 +257,7 @@ def create_calendar_year_heatmap(calendar_year_df, chart_title="Calendar Year Re
     plt.tight_layout()
 
     buffer = io.BytesIO()
-    plt.savefig(buffer, format="png", dpi=300)
+    plt.savefig(buffer, format="png", dpi=150, bbox_inches='tight')
     plt.close()
     buffer.seek(0)
     return buffer
@@ -281,7 +281,7 @@ def create_correlation_heatmap(returns_df, chart_title="Correlation Matrix"):
     plt.tight_layout()
 
     buffer = io.BytesIO()
-    plt.savefig(buffer, format="png", dpi=300)
+    plt.savefig(buffer, format="png", dpi=150, bbox_inches='tight')
     plt.close()
     buffer.seek(0)
     return buffer
@@ -308,7 +308,7 @@ def create_distribution_chart(monthly_returns_df, chart_title="Distribution of M
     plt.tight_layout()
 
     buffer = io.BytesIO()
-    plt.savefig(buffer, format="png", dpi=300)
+    plt.savefig(buffer, format="png", dpi=150, bbox_inches='tight')
     plt.close()
     buffer.seek(0)
     return buffer
@@ -333,7 +333,7 @@ def create_box_plot(monthly_returns_df, chart_title="Box-Whisker Plot of Monthly
     plt.tight_layout()
 
     buffer = io.BytesIO()
-    plt.savefig(buffer, format="png", dpi=300)
+    plt.savefig(buffer, format="png", dpi=150, bbox_inches='tight')
     plt.close()
     buffer.seek(0)
     return buffer
