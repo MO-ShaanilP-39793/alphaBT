@@ -25,7 +25,10 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# pytest
 .coverage
+.pytest_cache
 
 # Virtual environments
 venv/
