@@ -166,10 +166,10 @@ index_exit:
   vol_adjustment:
     enabled: false      # Set to true to enable volatility adjustment
     lookback: 20        # Days to measure index volatility
-    high_vol_threshold: 0.25   # Annualized vol above this is "high" (25%)
-    low_vol_threshold: 0.15    # Annualized vol below this is "low" (15%)
-    high_vol_multiplier: 1.5   # Widen TP/SL by 50% in high vol markets
-    low_vol_multiplier: 0.8    # Tighten TP/SL by 20% in low vol markets
+    high_vol_threshold: 0.25   # Annualized vol above this is "high" (eg. 25%)
+    low_vol_threshold: 0.15    # Annualized vol below this is "low" (eg. 15%)
+    high_vol_multiplier: 1.5   # Widen TP/SL in high vol markets
+    low_vol_multiplier: 0.8    # Tighten TP/SL in low vol markets
 
 # =============================================================================
 # TIERED TP/SL THRESHOLDS (used when tp_mode/sl_mode: 'tiered')

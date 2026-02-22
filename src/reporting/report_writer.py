@@ -324,7 +324,7 @@ def generate_backtest_report(
         row_offset += 40
 
         charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": heatmap_chart})
-        row_offset += 22
+        row_offset += 40
 
         if cy_heatmap:
             charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": cy_heatmap})
