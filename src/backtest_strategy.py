@@ -34,25 +34,14 @@ from config.defaults import (
     INITIAL_CAPITAL,
     DEFAULT_CONFIG_PATH,
     DEFAULT_OUTPUT_BASE_DIR,
-    DEFAULT_CATEGORY_SCHEME,
-    DEFAULT_RUN_STOCK_SELECTION,
     DEFAULT_SELECTION_TYPE,
-    DEFAULT_CATEGORY_COUNTS,
-    DEFAULT_CATEGORY_WEIGHTS,
     DEFAULT_SORT_BY,
     DEFAULT_MIN_PROB_THRESHOLD,
     DEFAULT_WEIGHTING_SCHEME,
     DEFAULT_TOP_K,
     DEFAULT_TOP_K_WEIGHTING,
-    DEFAULT_TP_MODE,
-    DEFAULT_SL_MODE,
-    DEFAULT_TP_ENABLED,
-    DEFAULT_SL_ENABLED,
-    DEFAULT_ENTRY_PRICE_WINDOW,
-    DEFAULT_GENERATE_REPORT,
-    DEFAULT_TPSL_CATEGORY_DIMENSION,
 )
-from typing import Optional, Union
+from typing import Optional
 
 from config.schema import BacktestConfig
 from utils.logging_config import setup_logging, get_logger
@@ -179,7 +168,7 @@ def run_stock_selection(input_data: pd.DataFrame, category_scheme: str, category
     
     Returns:
     - DataFrame with selected stocks
-      - category_based: [quarter, co_name, cat, selection_cat, stock_weight] (+ cat_weight if weighting_scheme='use_category_weights')
+      - category_based: [quarter, co_name, cat, selection_cat, weight_cat, stock_weight] (+ cat_weight if weighting_scheme='use_category_weights')
       - top_k: [quarter, co_name, stock_weight] (+ cat if category in input)
     """
     if selection_type == 'top_k':
@@ -463,7 +452,7 @@ def _simulate_and_compute(
         tpsl_scheme: str,
         first_quarter: int,
         last_quarter: int,
-) -> tuple:
+    ) -> tuple:
     """Run trade simulation and compute daily portfolio values.
     
     Returns:
@@ -472,14 +461,24 @@ def _simulate_and_compute(
     """
     tpsl_category_dimension = config.tpsl_category_dimension
     selection_dimension = config.selection_dimension
+    weighting_dimension = config.weighting_dimension
     entry_price_window = config.entry_price_window
 
+    # BUG: may not work as intended for all tiered TP/SL variations
     # Set up tpsl_cat column for TP/SL category lookup
     if 'selection_cat' in selected_stocks.columns:
+        # We have category_based selection output with both selection_cat and weight_cat
         if tpsl_category_dimension in ('selection', selection_dimension):
             selected_stocks['tpsl_cat'] = selected_stocks['selection_cat']
+        elif tpsl_category_dimension in ('weighting', weighting_dimension):
+            selected_stocks['tpsl_cat'] = selected_stocks['weight_cat']
         else:
-            selected_stocks['tpsl_cat'] = selected_stocks['cat']
+            # tpsl_category_dimension is a direct dimension name (volatility/mcap)
+            # Use the column that matches the resolved tpsl_scheme
+            if tpsl_scheme == selection_dimension:
+                selected_stocks['tpsl_cat'] = selected_stocks['selection_cat']
+            else:  # tpsl_scheme == weighting_dimension
+                selected_stocks['tpsl_cat'] = selected_stocks['weight_cat']
 
     logger.info("[3/4] Simulating trades with TP/SL thresholds...")
 
@@ -723,7 +722,6 @@ def run_backtest(config_path: str = DEFAULT_CONFIG_PATH) -> Optional[tuple[str, 
     Parameters:
     - config_path: Path to the configuration YAML file
     """
-    # Phase 1: Console-only logging
     setup_logging(console_level=logging.INFO)
     
     # Record start time
@@ -816,5 +814,5 @@ def run_backtest(config_path: str = DEFAULT_CONFIG_PATH) -> Optional[tuple[str, 
 
 
 if __name__ == '__main__':
-    # Run the backtest
+    # Hari Om
     output_dir, portfolio_results, equity_curve = run_backtest()
