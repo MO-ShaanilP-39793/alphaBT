@@ -14,11 +14,10 @@ logger = get_logger(__name__)
 
 def calculate_position_sizes(quarterly_pf_stocks: pd.DataFrame, total_capital: float) -> pd.DataFrame:
     """
-    Allocates capital to each stock.
+    Allocates capital to each stock using stock_weight.
     
-    Supports two modes based on available columns (stock_weight column takes precedence):
-    - If 'stock_weight' column exists: Direct allocation
-    - If 'cat_weight' column exists: Category-based allocation
+    Uses the 'stock_weight' column to directly allocate capital to each stock.
+    The stock_weight column should sum to approximately 1.0 per quarter.
 
     Returns:
         the passed dataframe with additional cols: [allocated_capital, shares]
@@ -26,25 +25,11 @@ def calculate_position_sizes(quarterly_pf_stocks: pd.DataFrame, total_capital: f
     # Create a copy to avoid SettingWithCopy warnings
     quarterly_pf_stocks = quarterly_pf_stocks.copy()
     
-    if 'stock_weight' in quarterly_pf_stocks.columns:
-        quarterly_pf_stocks['allocated_capital'] = total_capital * quarterly_pf_stocks['stock_weight']
-    else:
-        # use cat_weight column
-        cat_counts = quarterly_pf_stocks['cat'].value_counts()
-        
-        def get_stock_allocation(row):
-            # How many stocks are in this category?
-            n_stocks = cat_counts[row['cat']]
-            
-            # Total capital assigned to this entire category
-            category_total_cap = total_capital * row['cat_weight']
-            
-            # Capital assigned to this specific stock
-            stock_cap = category_total_cap / n_stocks
-            return stock_cap
-
-        # Calculate allocated capital per stock
-        quarterly_pf_stocks['allocated_capital'] = quarterly_pf_stocks.apply(get_stock_allocation, axis=1)
+    if 'stock_weight' not in quarterly_pf_stocks.columns:
+        raise ValueError("Missing required column 'stock_weight' in quarterly_pf_stocks")
+    
+    # Direct allocation using stock_weight
+    quarterly_pf_stocks['allocated_capital'] = total_capital * quarterly_pf_stocks['stock_weight']
     
     # Calculate number of shares (Position Size)
     quarterly_pf_stocks['shares'] = quarterly_pf_stocks['allocated_capital'] / quarterly_pf_stocks['entry_price']
@@ -59,7 +44,7 @@ def generate_quarter_equity_curve(trades: pd.DataFrame, price_data: pd.DataFrame
     """
     Creates a daily series of portfolio value.
 
-    trades: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price, allocated_capital, shares]
+    trades: [quarter, co_name, cat, stock_weight, exit_date, entry_price, exit_price, allocated_capital, shares]
     (already filtered for the target quarter)
     price_data: [date, co_name, open, high, low, close]
     quarter: integer like 202402
@@ -227,7 +212,7 @@ def _generate_quarter_sequence(first_quarter: int, last_quarter: int) -> list[in
 
 def compute_portfolio_value_over_quarter(trades: pd.DataFrame, price_data: pd.DataFrame, target_quarter: int, initial_capital: float = INITIAL_CAPITAL, entry_price_window: int = DEFAULT_ENTRY_PRICE_WINDOW) -> Optional[pd.DataFrame]:
     '''
-    trades: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price]
+    trades: [quarter, co_name, cat, stock_weight, exit_date, entry_price, exit_price]
     price_data: [date, co_name, open, high, low, close]
     target_quarter: integer like 202402
     initial_capital: sum like 100 crs
@@ -243,9 +228,9 @@ def compute_portfolio_value_over_quarter(trades: pd.DataFrame, price_data: pd.Da
         return
 
     # Sizing
-    # quarter_df: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price]
+    # quarter_df: [quarter, co_name, cat, stock_weight, exit_date, entry_price, exit_price]
     quarter_df_sized = calculate_position_sizes(quarter_df, initial_capital)
-    # quarter_df_sized: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price, allocated_capital, shares]
+    # quarter_df_sized: [quarter, co_name, cat, stock_weight, exit_date, entry_price, exit_price, allocated_capital, shares]
 
     # Equity Curve
     equity_curve = generate_quarter_equity_curve(quarter_df_sized, price_data, target_quarter, entry_price_window)
@@ -258,7 +243,7 @@ def compute_portfolio_value_over_quarters(trades: pd.DataFrame, price_data: pd.D
     Computes portfolio value across multiple quarters at daily frequency.
     The ending value of each quarter becomes the starting capital for the next quarter.
 
-    trades: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price]
+    trades: [quarter, co_name, cat, stock_weight, exit_date, entry_price, exit_price]
     price_data: [date, co_name, open, high, low, close]
     first_quarter: integer like 202402 (start quarter, inclusive)
     last_quarter: integer like 202411 (end quarter, inclusive)
@@ -325,7 +310,7 @@ def compute_portfolio_vs_index(trades: pd.DataFrame, price_data: pd.DataFrame, i
     '''
     Computes portfolio performance vs benchmark index across multiple quarters.
 
-    trades: [quarter, co_name, cat, cat_weight, exit_date, entry_price, exit_price]
+    trades: [quarter, co_name, cat, stock_weight, exit_date, entry_price, exit_price]
     price_data: [date, co_name, open, high, low, close]
     index_price_data: [date, value] - benchmark index values
     first_quarter: integer like 202402 (start quarter, inclusive)

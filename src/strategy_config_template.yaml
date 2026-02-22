@@ -83,10 +83,10 @@ top_k_config:
 # Common selection options (used by both selection types)
 # -----------------------------------------------------------------------------
 
-# Stock selection method:
+# Stock sorting method:
 # - 'probability': Rank by ML model probability
-# - 'risk_adjusted': Rank by probability/volatility (better risk/return tradeoff)
-selection_method: 'probability'
+# - 'risk_adjusted_probability': Rank by probability/volatility (better risk/return tradeoff)
+sort_by: 'probability'
 
 # Minimum probability threshold (optional):
 # Only consider stocks with probability >= this value

@@ -29,12 +29,16 @@ def _mock_selected_stocks_category_based():
     for q in [Q1, Q2]:
         for i, cat in enumerate(cats):
             for name in STOCK_NAMES[i*3:(i+1)*3][:2]:  # 2 per cat
+                # stock_weight = cat_weight / n_stocks_in_category
+                # 2 stocks per category, so stock_weight = cat_weight / 2
+                stock_weight = weights[i] / 2
                 rows.append({
                     "quarter": q,
                     "co_name": name,
                     "cat": cat,
                     "selection_cat": cat,
-                    "cat_weight": weights[i],
+                    "stock_weight": stock_weight,
+                    "cat_weight": weights[i],  # Keep for informational purposes
                 })
     return pd.DataFrame(rows)
 
@@ -61,7 +65,7 @@ def _mock_trade_results():
                 "quarter": q,
                 "co_name": name,
                 "cat": "high_volatility",
-                "cat_weight": 0.33,
+                "stock_weight": 1.0 / 6,  # 6 stocks total
                 "entry_date": pd.Timestamp("2023-02-16"),
                 "exit_date": pd.Timestamp("2023-05-29"),
                 "entry_price": 100.0,

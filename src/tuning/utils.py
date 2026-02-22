@@ -25,7 +25,7 @@ from config.defaults import (
     DEFAULT_WEIGHTING_SCHEME,
     DEFAULT_TOP_K,
     DEFAULT_TOP_K_WEIGHTING,
-    DEFAULT_SELECTION_METHOD,
+    DEFAULT_SORT_BY,
     DEFAULT_TP_ENABLED,
     DEFAULT_SL_ENABLED,
     DEFAULT_TP_MODE,
@@ -279,7 +279,7 @@ def sample_parameters(trial: optuna.Trial, tuning_config: dict) -> dict:
     
     # ----- Determine if category_scheme needs sampling -----
     selection_params = {
-        'selection_type', 'selection_method', 'min_prob_threshold',
+        'selection_type', 'sort_by', 'min_prob_threshold',
         'category_counts', 'category_weights',
         'category_based_selection_weighting_scheme',
         'selection_dimension', 'weighting_dimension',
@@ -374,7 +374,7 @@ def build_config(fixed_config: dict, sampled_params: dict) -> dict:
         'k': get('top_k_k', DEFAULT_TOP_K),
         'weighting_scheme': get('top_k_weighting_scheme', DEFAULT_TOP_K_WEIGHTING),
     }
-    config['selection_method'] = get('selection_method', DEFAULT_SELECTION_METHOD)
+    config['sort_by'] = get('sort_by', DEFAULT_SORT_BY)
     config['min_prob_threshold'] = get('min_prob_threshold')
 
     # Cross-dimensional selection/weighting: fall back to category_scheme when not specified

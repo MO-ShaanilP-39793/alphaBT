@@ -46,7 +46,7 @@ class TestSelectTopKStocks:
     def test_selects_correct_count(self):
         from selection.stock_selection import select_top_k_stocks
         df = _make_input_data()
-        result = select_top_k_stocks(df, k=5, selection_method="probability")
+        result = select_top_k_stocks(df, k=5, sort_by="probability")
         for q in df["quarter"].unique():
             q_result = result[result["quarter"] == q]
             assert len(q_result) == 5
@@ -63,20 +63,20 @@ class TestSelectTopKStocks:
     def test_risk_adjusted_method(self):
         from selection.stock_selection import select_top_k_stocks
         df = _make_input_data()
-        result = select_top_k_stocks(df, k=3, selection_method="risk_adjusted")
+        result = select_top_k_stocks(df, k=3, sort_by="risk_adjusted_probability")
         assert len(result[result["quarter"] == 202302]) == 3
 
     def test_risk_adjusted_without_volatility_raises(self):
         from selection.stock_selection import select_top_k_stocks
         df = _make_input_data().drop(columns=["volatility"])
         with pytest.raises(ValueError):
-            select_top_k_stocks(df, k=3, selection_method="risk_adjusted")
+            select_top_k_stocks(df, k=3, sort_by="risk_adjusted_probability")
 
     def test_invalid_method_raises(self):
         from selection.stock_selection import select_top_k_stocks
         df = _make_input_data()
         with pytest.raises(ValueError):
-            select_top_k_stocks(df, k=3, selection_method="invalid")
+            select_top_k_stocks(df, k=3, sort_by="invalid")
 
     def test_category_renamed_to_cat(self):
         from selection.stock_selection import select_top_k_stocks

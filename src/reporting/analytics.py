@@ -420,12 +420,13 @@ def get_comprehensive_quarter_analysis(trade_results: pd.DataFrame) -> pd.DataFr
     """
     Get comprehensive analysis combining stock counts, category returns, holding periods,
     and TP/SL statistics per quarter.
+    
+    Uses stock_weight for portfolio return calculation.
     """
-    has_cat_weight = 'cat_weight' in trade_results.columns
     has_stock_weight = 'stock_weight' in trade_results.columns
 
-    if not (has_cat_weight or has_stock_weight):
-        raise ValueError("Missing weight column: need either 'cat_weight' or 'stock_weight'")
+    if not has_stock_weight:
+        raise ValueError("Missing required column 'stock_weight'")
 
     required_cols = {'quarter', 'cat', 'holding_period', 'stock_return'}
     if not required_cols.issubset(trade_results.columns):
@@ -473,13 +474,8 @@ def get_comprehensive_quarter_analysis(trade_results: pd.DataFrame) -> pd.DataFr
                 row[f'{cat}_return'] = None
 
         if len(valid_returns) > 0:
-            if has_cat_weight:
-                cat_ret_df = valid_returns.groupby('cat').agg({
-                    'stock_return': 'mean', 'cat_weight': 'first'
-                })
-                row['portfolio_return'] = round((cat_ret_df['stock_return'] * cat_ret_df['cat_weight']).sum(), 6)
-            elif has_stock_weight:
-                row['portfolio_return'] = round((valid_returns['stock_return'] * valid_returns['stock_weight']).sum(), 6)
+            # Use stock_weight directly for portfolio return calculation
+            row['portfolio_return'] = round((valid_returns['stock_return'] * valid_returns['stock_weight']).sum(), 6)
         else:
             row['portfolio_return'] = None
 

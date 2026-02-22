@@ -16,7 +16,7 @@ from tests.conftest import Q1, Q2, STOCK_NAMES, MCAP_CATEGORIES, _make_price_dat
 # Helpers
 # =============================================================================
 
-def _make_selected_stocks(quarter, stocks, mode="cat_weight"):
+def _make_selected_stocks(quarter, stocks, mode="stock_weight"):
     """Create selected_stocks DataFrame for simulate_trades."""
     rows = []
     for i, name in enumerate(stocks):
@@ -26,10 +26,8 @@ def _make_selected_stocks(quarter, stocks, mode="cat_weight"):
             "cat": MCAP_CATEGORIES.get(name, "largecap"),
             "prob": 0.8 - i * 0.05,
         }
-        if mode == "cat_weight":
-            row["cat_weight"] = 1.0 / 3
-        else:
-            row["stock_weight"] = 1.0 / len(stocks)
+        # Always use stock_weight (cat_weight mode is deprecated)
+        row["stock_weight"] = 1.0 / len(stocks)
         rows.append(row)
     return pd.DataFrame(rows)
 

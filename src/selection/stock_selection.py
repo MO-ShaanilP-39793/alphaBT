@@ -2,21 +2,16 @@ import pandas as pd
 import warnings
 
 from config.defaults import (
-    DEFAULT_SELECTION_METHOD,
+    DEFAULT_SORT_BY,
     DEFAULT_MIN_PROB_THRESHOLD,
     DEFAULT_TOP_K_WEIGHTING,
     DEFAULT_WEIGHTING_SCHEME,
     RISK_ADJUSTED_EPSILON,
     DEFAULT_MIN_PRICES_REQUIRED,
     DEFAULT_ENTRY_WINDOW_LENGTH,
-    VOLATILITY_CATEGORIES,
-    MCAP_CATEGORIES,
     get_dimension_categories,
 )
 from utils.quarter import get_entry_start_date
-
-
-# _get_dimension_categories is now get_dimension_categories in config.defaults
 
 
 def _assign_volatility_categories(series):
@@ -46,7 +41,7 @@ def _assign_volatility_categories(series):
 def select_top_k_stocks(
     stock_probabilities,
     k,
-    selection_method=DEFAULT_SELECTION_METHOD,
+    sort_by=DEFAULT_SORT_BY,
     min_prob_threshold=DEFAULT_MIN_PROB_THRESHOLD,
     weighting_scheme=DEFAULT_TOP_K_WEIGHTING):
     """
@@ -54,12 +49,12 @@ def select_top_k_stocks(
 
     Parameters:
     - stock_probabilities (pd.DataFrame): Input dataframe with columns ['quarter', 'co_name', 'prob'].
-        If selection_method='risk_adjusted', also requires 'volatility' column.
+        If sort_by='risk_adjusted_probability', also requires 'volatility' column.
         Optionally can include 'category' column which will be passed through to output.
     - k (int): Number of top stocks to select per quarter.
-    - selection_method (str): Method to rank stocks:
+    - sort_by (str): Method to rank/sort stocks:
         - 'probability': Sort by probability score (default)
-        - 'risk_adjusted': Sort by prob/volatility (risk-adjusted score)
+        - 'risk_adjusted_probability': Sort by prob/volatility (risk-adjusted score)
     - min_prob_threshold (float or None): Minimum probability threshold to filter stocks before selection.
         If None, no filtering is applied (default).
     - weighting_scheme (str): How to weight selected stocks:
@@ -68,22 +63,22 @@ def select_top_k_stocks(
     Returns:
         pd.DataFrame with columns ['quarter', 'co_name', 'stock_weight']
         If 'category' column exists in input, it will be included as 'cat' in output.
-        If selection_method='risk_adjusted', also includes 'risk_adj_score' column.
+        If sort_by='risk_adjusted_probability', also includes 'risk_adj_score' column.
     """
     
-    # Validate selection_method
-    valid_methods = ['probability', 'risk_adjusted']
-    if selection_method not in valid_methods:
-        raise ValueError(f"selection_method must be one of {valid_methods}, got '{selection_method}'")
+    # Validate sort_by
+    valid_methods = ['probability', 'risk_adjusted_probability']
+    if sort_by not in valid_methods:
+        raise ValueError(f"sort_by must be one of {valid_methods}, got '{sort_by}'")
     
     # Validate weighting_scheme
     valid_schemes = ['equal']
     if weighting_scheme not in valid_schemes:
         raise ValueError(f"weighting_scheme must be one of {valid_schemes}, got '{weighting_scheme}'")
     
-    # Check for volatility column if using risk_adjusted method
-    if selection_method == 'risk_adjusted' and 'volatility' not in stock_probabilities.columns:
-        raise ValueError("selection_method='risk_adjusted' requires 'volatility' column in input dataframe")
+    # Check for volatility column if using risk_adjusted_probability method
+    if sort_by == 'risk_adjusted_probability' and 'volatility' not in stock_probabilities.columns:
+        raise ValueError("sort_by='risk_adjusted_probability' requires 'volatility' column in input dataframe")
     
     # Check if category column exists in input
     has_category = 'category' in stock_probabilities.columns
@@ -102,8 +97,8 @@ def select_top_k_stocks(
         
         group = group.copy()
         
-        # Calculate risk-adjusted score if needed
-        if selection_method == 'risk_adjusted':
+        # Calculate risk-adjusted score if needed and sort stocks probability / risk_adjusted_probability
+        if sort_by == 'risk_adjusted_probability':
             group['risk_adj_score'] = group['prob'] / (group['volatility'] + RISK_ADJUSTED_EPSILON)
             group = group.sort_values(by='risk_adj_score', ascending=False)
         else:
@@ -134,11 +129,10 @@ def select_top_k_stocks(
             result_df = result_df.rename(columns={'category': 'cat'})
         
         # Build output columns
-        output_cols = ['quarter', 'co_name']
+        output_cols = ['quarter', 'co_name', 'stock_weight']
         if has_category:
             output_cols.append('cat')
-        output_cols.append('stock_weight')
-        if selection_method == 'risk_adjusted':
+        if sort_by == 'risk_adjusted_probability':
             output_cols.append('risk_adj_score')
         
         result_df = result_df[output_cols]
@@ -146,17 +140,16 @@ def select_top_k_stocks(
         return result_df
     else:
         # Return empty dataframe with correct columns if input was empty
-        output_cols = ['quarter', 'co_name']
+        output_cols = ['quarter', 'co_name', 'stock_weight']
         if has_category:
             output_cols.append('cat')
-        output_cols.append('stock_weight')
-        if selection_method == 'risk_adjusted':
+        if sort_by == 'risk_adjusted_probability':
             output_cols.append('risk_adj_score')
         return pd.DataFrame(columns=output_cols)
 
 
 # =============================================================================
-# UNIFIED CROSS-DIMENSIONAL SELECTION FUNCTION
+# CATEGORY BASED SELECTION AND WEIGHTING
 # =============================================================================
 
 def select_and_weight_stocks(
@@ -165,7 +158,7 @@ def select_and_weight_stocks(
     weighting_dimension,
     selection_counts,
     category_weights,
-    selection_method=DEFAULT_SELECTION_METHOD,
+    sort_by=DEFAULT_SORT_BY,
     min_prob_threshold=DEFAULT_MIN_PROB_THRESHOLD,
     weighting_scheme=DEFAULT_WEIGHTING_SCHEME):
     """
@@ -179,13 +172,13 @@ def select_and_weight_stocks(
     - stock_probabilities (pd.DataFrame): Input with columns ['quarter', 'co_name', 'prob'].
         Also requires 'volatility' if any dimension is 'volatility',
         and 'category' if any dimension is 'mcap'.
-        If selection_method='risk_adjusted', requires 'volatility'.
+        If sort_by='risk_adjusted_probability', requires 'volatility'.
     - selection_dimension (str): 'volatility' or 'mcap' — which axis to bucket/select stocks by
     - weighting_dimension (str): 'volatility' or 'mcap' — which axis to assign weights by
     - selection_counts (list): [n1, n2, n3] stocks to select per selection-dimension category
     - category_weights (list): [w1, w2, w3] weights per weighting-dimension category.
         Only used when weighting_scheme is 'use_category_weights'.
-    - selection_method (str): 'probability' or 'risk_adjusted'
+    - sort_by (str): 'probability' or 'risk_adjusted_probability' — how to rank/sort stocks
     - min_prob_threshold (float or None): Minimum probability threshold
     - weighting_scheme (str): 'use_category_weights' or 'equal'
     
@@ -194,8 +187,9 @@ def select_and_weight_stocks(
         - 'quarter', 'co_name'
         - 'cat': weighting dimension categories (used for position sizing)
         - 'selection_cat': selection dimension categories (informational)
-        - 'cat_weight' or 'stock_weight' depending on weighting_scheme
-        - 'risk_adj_score' (when selection_method='risk_adjusted')
+        - 'stock_weight': always present, direct stock-level weight
+        - 'cat_weight': present when weighting_scheme='use_category_weights' (informational)
+        - 'risk_adj_score' (when sort_by='risk_adjusted_probability')
     """
     # Validate dimensions
     for dim_name, dim_val in [('selection_dimension', selection_dimension),
@@ -206,13 +200,13 @@ def select_and_weight_stocks(
     # Validate required input columns
     needs_volatility = (selection_dimension == 'volatility' or
                         weighting_dimension == 'volatility' or
-                        selection_method == 'risk_adjusted')
+                        sort_by == 'risk_adjusted_probability')
     needs_mcap = selection_dimension == 'mcap' or weighting_dimension == 'mcap'
     
     if needs_volatility and 'volatility' not in stock_probabilities.columns:
         raise ValueError(
             f"'volatility' column required for selection_dimension='{selection_dimension}', "
-            f"weighting_dimension='{weighting_dimension}', selection_method='{selection_method}'"
+            f"weighting_dimension='{weighting_dimension}', sort_by='{sort_by}'"
         )
     if needs_mcap and 'category' not in stock_probabilities.columns:
         raise ValueError(
@@ -226,9 +220,9 @@ def select_and_weight_stocks(
     if weighting_scheme == 'use_category_weights' and len(category_weights) != 3:
         raise ValueError("category_weights must be a list of length 3 when weighting_scheme is 'use_category_weights'.")
     
-    valid_methods = ['probability', 'risk_adjusted']
-    if selection_method not in valid_methods:
-        raise ValueError(f"selection_method must be one of {valid_methods}, got '{selection_method}'")
+    valid_methods = ['probability', 'risk_adjusted_probability']
+    if sort_by not in valid_methods:
+        raise ValueError(f"sort_by must be one of {valid_methods}, got '{sort_by}'")
     valid_weighting = ['use_category_weights', 'equal']
     if weighting_scheme not in valid_weighting:
         raise ValueError(f"weighting_scheme must be one of {valid_weighting}, got '{weighting_scheme}'")
@@ -269,14 +263,14 @@ def select_and_weight_stocks(
             current_data['weight_cat'] = current_data['category']
         
         # Calculate risk-adjusted score if needed
-        if selection_method == 'risk_adjusted':
+        if sort_by == 'risk_adjusted_probability':
             current_data['risk_adj_score'] = current_data['prob'] / (current_data['volatility'] + RISK_ADJUSTED_EPSILON)
         
         # Select stocks per selection-dimension category
         for sel_cat in selection_cats:
             cat_data = current_data[current_data['selection_cat'] == sel_cat]
             
-            if selection_method == 'risk_adjusted':
+            if sort_by == 'risk_adjusted_probability':
                 cat_data = cat_data.sort_values(by='risk_adj_score', ascending=False)
             else:
                 cat_data = cat_data.sort_values(by='prob', ascending=False)
@@ -302,34 +296,50 @@ def select_and_weight_stocks(
     if final_selection:
         result_df = pd.concat(final_selection)
         
-        # 'cat' = weighting dimension (used by position sizing & equity curve breakdown)
-        result_df['cat'] = result_df['weight_cat']
+        # the 'cat' column is used in downstream in equity curve breakdown
+        # breakdown entails the value of categories on a daily basis
+        if weighting_scheme == 'use_category_weights':
+            result_df['cat'] = result_df['weight_cat']
+        elif weighting_scheme == 'equal':
+            result_df['cat'] = result_df['selection_cat']
         
-        # Assign equal weights per quarter if using 'equal' weighting scheme
         if weighting_scheme == 'equal':
+            # Equal weighting: each stock gets 1/n of the portfolio
             result_df['stock_weight'] = result_df.groupby('quarter')['co_name'].transform(
                 lambda x: 1.0 / len(x)
             )
+        elif weighting_scheme == 'use_category_weights':
+            # Category-based weighting: divide cat_weight by number of stocks in that category per quarter
+            # Group by quarter and cat, then divide cat_weight by count
+            result_df['stock_weight'] = result_df.groupby(['quarter', 'cat']).apply(
+                lambda g: g['cat_weight'] / len(g)
+            ).reset_index(level=[0, 1], drop=True)
         
-        weight_col = 'stock_weight' if weighting_scheme == 'equal' else 'cat_weight'
-        
-        base_cols = ['quarter', 'co_name', 'cat', 'selection_cat', weight_col]
-        if selection_method == 'risk_adjusted':
+        base_cols = ['quarter', 'co_name', 'cat', 'selection_cat', 'stock_weight']
+        # Include cat_weight for informational purposes when using category weights
+        if weighting_scheme == 'use_category_weights':
+            base_cols.append('cat_weight')
+        if sort_by == 'risk_adjusted_probability':
             base_cols.append('risk_adj_score')
         
         result_df = result_df[base_cols]
         result_df = result_df.reset_index(drop=True)
         return result_df
     else:
-        weight_col = 'stock_weight' if weighting_scheme == 'equal' else 'cat_weight'
-        base_cols = ['quarter', 'co_name', 'cat', 'selection_cat', weight_col]
-        if selection_method == 'risk_adjusted':
+        # Return empty dataframe with correct columns
+        base_cols = ['quarter', 'co_name', 'cat', 'selection_cat', 'stock_weight']
+        if weighting_scheme == 'use_category_weights':
+            base_cols.append('cat_weight')
+        if sort_by == 'risk_adjusted_probability':
             base_cols.append('risk_adj_score')
         return pd.DataFrame(columns=base_cols)
 
 
 # =============================================================================
 # PRICE DATA VALIDATION FUNCTIONS
+# to answer the question:
+# do we have probabilities for some stocks in some quarter, 
+# but no price data to trade that stock?
 # =============================================================================
 
 

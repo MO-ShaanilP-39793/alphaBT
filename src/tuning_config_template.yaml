@@ -138,9 +138,9 @@ search_space:
   #   choices: ['selection', 'weighting']
   
   # Stock ranking method
-  selection_method:
+  sort_by:
     type: categorical
-    choices: ['probability', 'risk_adjusted']
+    choices: ['probability', 'risk_adjusted_probability']
   
   # Minimum probability threshold (null = no filter)
   min_prob_threshold:

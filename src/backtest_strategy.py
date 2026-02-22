@@ -39,7 +39,7 @@ from config.defaults import (
     DEFAULT_SELECTION_TYPE,
     DEFAULT_CATEGORY_COUNTS,
     DEFAULT_CATEGORY_WEIGHTS,
-    DEFAULT_SELECTION_METHOD,
+    DEFAULT_SORT_BY,
     DEFAULT_MIN_PROB_THRESHOLD,
     DEFAULT_WEIGHTING_SCHEME,
     DEFAULT_TOP_K,
@@ -153,7 +153,7 @@ def save_config_copy(config: 'BacktestConfig', output_dir: str) -> None:
 
 
 def run_stock_selection(input_data: pd.DataFrame, category_scheme: str, category_counts: list[int], category_weights: list[float],
-                        selection_method: str = DEFAULT_SELECTION_METHOD, min_prob_threshold: Optional[float] = DEFAULT_MIN_PROB_THRESHOLD,
+                        sort_by: str = DEFAULT_SORT_BY, min_prob_threshold: Optional[float] = DEFAULT_MIN_PROB_THRESHOLD,
                         selection_type: str = DEFAULT_SELECTION_TYPE, top_k_config: Optional[dict] = None,
                         category_based_weighting_scheme: str = DEFAULT_WEIGHTING_SCHEME,
                         selection_dimension: Optional[str] = None, weighting_dimension: Optional[str] = None) -> pd.DataFrame:
@@ -166,7 +166,7 @@ def run_stock_selection(input_data: pd.DataFrame, category_scheme: str, category
     - category_counts: [n1, n2, n3] stocks to select per category (category_based only)
     - category_weights: [w1, w2, w3] weights per category (category_based only,
       ignored when category_based_weighting_scheme is 'equal')
-    - selection_method: 'probability' (default) or 'risk_adjusted'
+    - sort_by: 'probability' (default) or 'risk_adjusted_probability'
     - min_prob_threshold: Minimum probability to consider (None = no filter)
     - selection_type: 'category_based' (default) or 'top_k'
     - top_k_config: dict with 'k' and 'weighting_scheme' (top_k only)
@@ -179,7 +179,7 @@ def run_stock_selection(input_data: pd.DataFrame, category_scheme: str, category
     
     Returns:
     - DataFrame with selected stocks
-      - category_based: [quarter, co_name, cat, selection_cat, cat_weight/stock_weight]
+      - category_based: [quarter, co_name, cat, selection_cat, stock_weight] (+ cat_weight if weighting_scheme='use_category_weights')
       - top_k: [quarter, co_name, stock_weight] (+ cat if category in input)
     """
     if selection_type == 'top_k':
@@ -189,7 +189,7 @@ def run_stock_selection(input_data: pd.DataFrame, category_scheme: str, category
         return select_top_k_stocks(
             input_data,
             k=top_k_config.get('k', DEFAULT_TOP_K),
-            selection_method=selection_method,
+            sort_by=sort_by,
             min_prob_threshold=min_prob_threshold,
             weighting_scheme=top_k_config.get('weighting_scheme', DEFAULT_TOP_K_WEIGHTING)
         )
@@ -204,7 +204,7 @@ def run_stock_selection(input_data: pd.DataFrame, category_scheme: str, category
             weighting_dimension=wgt_dim,
             selection_counts=category_counts,
             category_weights=category_weights,
-            selection_method=selection_method,
+            sort_by=sort_by,
             min_prob_threshold=min_prob_threshold,
             weighting_scheme=category_based_weighting_scheme,
         )
@@ -399,7 +399,7 @@ def _select_stocks(
             config.category_scheme,
             config.category_counts,
             config.category_weights,
-            selection_method=config.selection_method,
+            sort_by=config.sort_by,
             min_prob_threshold=config.min_prob_threshold,
             selection_type=config.selection_type,
             top_k_config=(
@@ -624,7 +624,7 @@ def _log_config_summary(config: 'BacktestConfig') -> None:
             )
             logger.debug("Top k: %s", k)
             logger.debug("Weighting scheme: %s", weighting)
-        logger.debug("Selection method: %s", config.selection_method)
+        logger.debug("Sort by: %s", config.sort_by)
         if config.min_prob_threshold is not None:
             logger.debug("Min probability threshold: %s", config.min_prob_threshold)
     else:

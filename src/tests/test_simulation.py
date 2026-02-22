@@ -16,7 +16,7 @@ from tests.conftest import Q1, Q2, STOCK_NAMES, MCAP_CATEGORIES
 # Helpers
 # =============================================================================
 
-def _make_trades(quarter, stocks, weight_mode="cat_weight"):
+def _make_trades(quarter, stocks, weight_mode="stock_weight"):
     """Create a minimal trades DataFrame for simulation."""
     exit_dates = pd.bdate_range(start="2023-04-01", periods=len(stocks))
     rows = []
@@ -30,11 +30,8 @@ def _make_trades(quarter, stocks, weight_mode="cat_weight"):
             "entry_price": entry_price,
             "exit_price": exit_price,
             "exit_date": exit_dates[i],
+            "stock_weight": 1.0 / len(stocks),
         }
-        if weight_mode == "cat_weight":
-            row["cat_weight"] = 1.0 / 3
-        else:
-            row["stock_weight"] = 1.0 / len(stocks)
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -55,15 +52,15 @@ class TestCalculatePositionSizes:
         for _, row in result.iterrows():
             assert abs(row["allocated_capital"] - 1_000_000_000 / 3) < 1.0
 
-    def test_cat_weight_mode(self):
+    def test_stock_weight_sums_to_one(self):
         from backtest.simulation import calculate_position_sizes
         # Use stocks from all 3 categories so weights sum properly
         stocks = ["STOCK_A", "STOCK_B", "STOCK_D", "STOCK_E", "STOCK_G", "STOCK_H"]
-        trades = _make_trades(Q1, stocks, weight_mode="cat_weight")
+        trades = _make_trades(Q1, stocks, weight_mode="stock_weight")
         result = calculate_position_sizes(trades, total_capital=1_000_000_000)
         assert "allocated_capital" in result.columns
-        # Total allocated should match sum of cat_weights * capital
-        # largecap=0.33, midcap=0.33, smallcap=0.34 → total = 1.0
+        # Total allocated should match sum of stock_weights * capital
+        # Each stock gets 1/6 of capital, so total = 1.0
         total_allocated = result["allocated_capital"].sum()
         assert abs(total_allocated - 1_000_000_000) < 100
 

@@ -462,7 +462,7 @@ def simulate_trades(
     Calculate portfolio performance with TP/SL simulation.
     
     Supports two input modes:
-    - Selection mode: selected_stocks has ['quarter', 'co_name', 'cat', 'cat_weight']
+    - Selection mode: selected_stocks has ['quarter', 'co_name', 'cat', 'stock_weight'] (with optional 'cat_weight' for informational purposes)
     - Preselected mode: selected_stocks has ['quarter', 'co_name', 'stock_weight'] with optional 'cat'
     
     TP and SL modes can be configured independently, enabling mixed strategies
@@ -533,12 +533,9 @@ def simulate_trades(
         missing_cols = required_base_cols - set(selected_stocks.columns)
         raise ValueError(f"Missing required columns in selected_stocks: {missing_cols}")
     
-    # Check for weight column: either cat_weight (selection mode) or stock_weight (preselected mode)
-    has_cat_weight = 'cat_weight' in selected_stocks.columns
-    has_stock_weight = 'stock_weight' in selected_stocks.columns
-    
-    if not (has_cat_weight or has_stock_weight):
-        raise ValueError("Missing weight column: need either 'cat_weight' or 'stock_weight'")
+    # Check for stock_weight column (required for all modes)
+    if 'stock_weight' not in selected_stocks.columns:
+        raise ValueError("Missing required column 'stock_weight'")
 
     if not required_price_cols.issubset(price_data.columns):
         missing_cols = required_price_cols - set(price_data.columns)

@@ -237,7 +237,7 @@ def base_config(minimal_index_exit_config):
         "selection_type": "category_based",
         "category_counts": [2, 2, 2],
         "category_weights": [0.33, 0.33, 0.34],
-        "selection_method": "probability",
+        "sort_by": "probability",
         "min_prob_threshold": None,
         "category_based_selection_weighting_scheme": "use_category_weights",
         "tp_mode": "flat",
@@ -396,7 +396,8 @@ def trade_results_with_mcap():
                 "quarter": q,
                 "co_name": name,
                 "cat": cat,
-                "cat_weight": 0.33 if cat == "largecap" else (0.33 if cat == "midcap" else 0.34),
+                "stock_weight": 1.0 / len(stocks),  # Equal weighting
+                "cat_weight": 0.33 if cat == "largecap" else (0.33 if cat == "midcap" else 0.34),  # Informational
                 "mcap_category": cat,
                 "entry_price": 100.0 + i * 10,
                 "exit_price": (100.0 + i * 10) * (1.05 if tp_triggered else (0.95 if sl_triggered else 1.02)),
@@ -466,7 +467,8 @@ def sized_trades():
             "quarter": Q1,
             "co_name": name,
             "cat": MCAP_CATEGORIES[name],
-            "cat_weight": 0.33 if MCAP_CATEGORIES[name] != "smallcap" else 0.34,
+            "stock_weight": 1.0 / 6,  # Equal weighting for 6 stocks
+            "cat_weight": 0.33 if MCAP_CATEGORIES[name] != "smallcap" else 0.34,  # Informational
             "entry_price": entry_price,
             "exit_price": exit_price,
             "exit_date": exit_dates[i],

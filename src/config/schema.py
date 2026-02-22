@@ -26,7 +26,7 @@ from config.defaults import (
     DEFAULT_CATEGORY_SCHEME,
     DEFAULT_CATEGORY_WEIGHTS,
     DEFAULT_MIN_PROB_THRESHOLD,
-    DEFAULT_SELECTION_METHOD,
+    DEFAULT_SORT_BY,
     DEFAULT_SELECTION_TYPE,
     DEFAULT_TOP_K,
     DEFAULT_TOP_K_WEIGHTING,
@@ -206,7 +206,7 @@ class BacktestConfig(BaseModel):
     selection_type: str = DEFAULT_SELECTION_TYPE
     category_counts: list[int] = list(DEFAULT_CATEGORY_COUNTS)
     category_weights: list[float] = list(DEFAULT_CATEGORY_WEIGHTS)
-    selection_method: str = DEFAULT_SELECTION_METHOD
+    sort_by: str = DEFAULT_SORT_BY
     min_prob_threshold: Optional[float] = DEFAULT_MIN_PROB_THRESHOLD
     top_k_config: Optional[TopKConfig] = None
     category_based_selection_weighting_scheme: str = DEFAULT_WEIGHTING_SCHEME
