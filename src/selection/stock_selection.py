@@ -187,6 +187,7 @@ def select_and_weight_stocks(
         - 'quarter', 'co_name'
         - 'cat': weighting dimension categories (used for position sizing)
         - 'selection_cat': selection dimension categories (informational)
+        - 'weight_cat': weighting dimension categories (informational)
         - 'stock_weight': always present, direct stock-level weight
         - 'cat_weight': present when weighting_scheme='use_category_weights' (informational)
         - 'risk_adj_score' (when sort_by='risk_adjusted_probability')
@@ -315,7 +316,7 @@ def select_and_weight_stocks(
                 lambda g: g['cat_weight'] / len(g)
             ).reset_index(level=[0, 1], drop=True)
         
-        base_cols = ['quarter', 'co_name', 'cat', 'selection_cat', 'stock_weight']
+        base_cols = ['quarter', 'co_name', 'cat', 'selection_cat', 'weight_cat', 'stock_weight']
         # Include cat_weight for informational purposes when using category weights
         if weighting_scheme == 'use_category_weights':
             base_cols.append('cat_weight')
@@ -327,7 +328,7 @@ def select_and_weight_stocks(
         return result_df
     else:
         # Return empty dataframe with correct columns
-        base_cols = ['quarter', 'co_name', 'cat', 'selection_cat', 'stock_weight']
+        base_cols = ['quarter', 'co_name', 'cat', 'selection_cat', 'weight_cat', 'stock_weight']
         if weighting_scheme == 'use_category_weights':
             base_cols.append('cat_weight')
         if sort_by == 'risk_adjusted_probability':

@@ -561,14 +561,10 @@ def simulate_trades(
     # Sort the selected_stocks data
     selected_stocks = selected_stocks.sort_values(by=['quarter', 'co_name'], ignore_index=True)
     
-    # Process trades via itertuples (faster than .apply(axis=1) — avoids per-row
-    # Series construction overhead). Each iteration yields a namedtuple that we
-    # convert to a dict-like row for process_trade.
+    # Process trades row by row
     # TODO: vectorize inner loop for further performance gains
     trade_results = []
-    cols = selected_stocks.columns.tolist()
-    for tup in selected_stocks.itertuples(index=False):
-        row = pd.Series(tup, index=cols)
+    for _, row in selected_stocks.iterrows():
         result = process_trade(
             row, price_data, category_scheme, index_df,
             resolved_tp_mode, resolved_sl_mode,

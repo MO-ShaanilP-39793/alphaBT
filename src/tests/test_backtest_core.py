@@ -37,6 +37,7 @@ def _mock_selected_stocks_category_based():
                     "co_name": name,
                     "cat": cat,
                     "selection_cat": cat,
+                    "weight_cat": cat,
                     "stock_weight": stock_weight,
                     "cat_weight": weights[i],  # Keep for informational purposes
                 })
