@@ -47,7 +47,6 @@ All scripts must be run from the `src/` directory — paths in configs are relat
 | `tpsl.py` | Core TP/SL trade simulation. 4 modes (tiered/flat/atr/pivot), independent TP & SL mode selection, index-guided exits |
 | `simulation.py` | Position sizing (`calculate_position_sizes`), daily equity curves (`compute_portfolio_value_over_quarters`), portfolio vs index comparison |
 | `dynamic_levels.py` | ATR calculation, pivot point calculation, index volatility & regime detection functions |
-| `regime_dates.py` | Hardcoded crisis regimes (GFC, Covid, etc.) and market regimes (bull/bear/recovery, 2008–2025) |
 | `__init__.py` | Re-exports: `simulate_trades`, `compute_portfolio_value_over_quarters`, `compute_portfolio_vs_index`, `CRISIS_REGIMES`, `MARKET_REGIMES` |
 
 ### `selection/` — Stock Selection & Weighting

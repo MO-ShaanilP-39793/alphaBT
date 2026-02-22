@@ -212,7 +212,7 @@ Only crisis periods overlapping with your backtest date range are shown.
 
 Performance during bull, bear, and recovery markets.
 
-Defined as 6 bear phases, 4 bull phases, and 4 recovery phases from 2008–2025 (sourced from `backtest/regime_dates.py`).
+Defined as 6 bear phases, 4 bull phases, and 4 recovery phases from 2008–2025 (sourced from `config/regime_dates.yaml`).
 
 | Column | Description |
 |--------|-------------|
