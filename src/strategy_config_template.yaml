@@ -215,7 +215,7 @@ generate_report: true
 
 # Sub-periods for performance analysis (list of [start_year, end_year] pairs)
 # Each sub-period will get its own performance analysis section
-# Set to null or empty list to skip sub-period analysis
+# Comment out to skip sub-period analysis
 report_sub_periods:
   - [2020, 2022]
   - [2023, 2025]
