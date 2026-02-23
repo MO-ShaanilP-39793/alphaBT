@@ -1,11 +1,11 @@
 """
-Tuning Utilities for Optuna Hyperparameter Optimization
+Tuning Utilities
 
 This module provides helper functions for:
 - Loading and parsing tuning configuration
 - Sampling parameters from search space using Optuna trials
 - Building full configuration dictionaries from sampled parameters
-- Computing optimization metrics (Calmar ratio)
+- Computing optimization metrics
 """
 
 import yaml
@@ -53,12 +53,13 @@ from config.defaults import (
     DEFAULT_INDEPENDENT_TPSL_MODES,
     DEFAULT_TPSL_CATEGORY_DIMENSION,
     DEFAULT_TPSL_FALLBACK_PCT,
+    DEFAULT_TUNING_CONFIG_PATH,
 )
 
 logger = get_logger(__name__)
 
 
-def load_tuning_config(config_path: str = 'tuning_config.yaml') -> dict:
+def load_tuning_config(config_path: str = DEFAULT_TUNING_CONFIG_PATH) -> dict:
     """
     Load tuning configuration from YAML file.
     

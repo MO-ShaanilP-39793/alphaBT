@@ -1,5 +1,5 @@
 # =============================================================================
-# OPTUNA HYPERPARAMETER TUNING CONFIGURATION
+# OPTUNA TUNING CONFIGURATION
 # =============================================================================
 # This file defines the search space for backtesting strategy optimization.
 # Parameters are either fixed (passed through) or tunable (sampled by Optuna).
@@ -12,23 +12,23 @@ fixed:
   # Input data format depends on run_stock_selection setting:
   # - If run_stock_selection: true  → csv/parquet with quarter, co_name, prob, and either volatility or category
   # - If run_stock_selection: false → csv/parquet with quarter, co_name, stock_weight, and optionally category
-  input_data_path: "../data/dummy_data.csv"
+  input_data_path: "../data/inference_data_validated/inference_data.csv"
   # csv/parquet with date, co_name, open, high, low, close
-  price_data_path: "../data/ohlcv2.parquet"
+  price_data_path: "../data/price_data/ohlcv2.parquet"
   # csv/parquet with date, value
-  index_data_path: "../data/index_data_validated.csv"
+  index_data_path: "../data/index_data/index_data_validated.csv"
   
   # Quarter range for tuning (both inclusive)
   # These define the validation period over which the objective value is computed
-  first_quarter: 202202
-  last_quarter: 202405
+  first_quarter: null
+  last_quarter: null
   
   # Specify if stock selection is required
   run_stock_selection: true
   
   # Validate input data for price coverage issues
   # Set to false if data has already been validated to skip validation step
-  validate_input_data: true
+  validate_input_data: false
   
   # Report generation (keep disabled during tuning for speed)
   generate_report: false

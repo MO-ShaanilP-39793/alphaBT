@@ -1,5 +1,5 @@
 """
-Optuna Hyperparameter Tuning Script for Backtesting Strategy
+Tuning Script for Backtesting Strategy
 
 Supports both single-objective and multi-objective optimization.
 
@@ -27,7 +27,6 @@ After optimization:
 """
 
 import argparse
-import logging
 import shutil
 import warnings
 from datetime import datetime
@@ -79,7 +78,7 @@ from selection import (
 
 from reporting.analytics import compute_trailing_returns
 
-from utils.logging_config import setup_logging, get_logger
+from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -528,7 +527,7 @@ def setup_study_folder(study_name: str) -> Path:
     return study_folder
 
 
-def run_optimization(config_path: str = 'tuning_config.yaml',
+def run_optimization(config_path: str = DEFAULT_TUNING_CONFIG_PATH,
                      n_trials_override: int = None,
                      fresh_study: bool = False) -> optuna.Study:
     """
@@ -596,7 +595,7 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
     # -------------------------------------------------------------------------
     # Data Quality Validation
     # -------------------------------------------------------------------------
-    validate_input_data_flag = fixed_config.get('validate_input_data', True)  # always default True for tuning
+    validate_input_data_flag = fixed_config.get('validate_input_data', True)
     
     if validate_input_data_flag:
         run_stock_selection_flag = fixed_config.get('run_stock_selection', DEFAULT_RUN_STOCK_SELECTION)
@@ -654,7 +653,7 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
             else:
                 logger.info("No price data issues found. All stocks are tradeable.")
     else:
-        logger.info("Skipping input data validation (already validated).")
+        logger.info("Skipping input data validation.")
     
     # Copy tuning config to study folder
     shutil.copy2(config_path, tuning_config_copy_path)
@@ -821,7 +820,7 @@ def run_optimization(config_path: str = 'tuning_config.yaml',
 def main():
     """Main entry point with argument parsing."""
     parser = argparse.ArgumentParser(
-        description="Run Optuna hyperparameter tuning for backtesting strategy",
+        description="Run tuning for backtesting strategy",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
