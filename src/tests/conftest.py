@@ -386,9 +386,10 @@ def trade_results_with_mcap():
     Synthetic trade results with mcap/category info for reporting tests.
     2 quarters × varying stocks per category with TP/SL outcomes.
     """
+    stocks = STOCK_NAMES[:6]
     rows = []
     for q in [Q1, Q2]:
-        for i, name in enumerate(STOCK_NAMES[:6]):
+        for i, name in enumerate(stocks):
             cat = MCAP_CATEGORIES[name]
             tp_triggered = i % 3 == 0
             sl_triggered = i % 3 == 1
