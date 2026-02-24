@@ -1,8 +1,9 @@
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 import warnings
-from config.defaults import INITIAL_CAPITAL, DEFAULT_ENTRY_PRICE_WINDOW
+from config.defaults import INITIAL_CAPITAL, DEFAULT_ENTRY_PRICE_WINDOW, TRADING_DAYS_PER_YEAR
 from utils.quarter import get_quarter_dates
 from utils.logging_config import get_logger
 
@@ -40,141 +41,128 @@ def calculate_position_sizes(quarterly_pf_stocks: pd.DataFrame, total_capital: f
 # 2. DAILY EQUITY CURVE GENERATION (daily series of portfolio value)
 # --------------------------------------------------------------------------------
 
-def generate_quarter_equity_curve(trades: pd.DataFrame, price_data: pd.DataFrame, quarter: int, entry_price_window: int = DEFAULT_ENTRY_PRICE_WINDOW) -> pd.DataFrame:
+def generate_quarter_equity_curve(
+    trades: pd.DataFrame,
+    price_data: pd.DataFrame,
+    quarter: int,
+    entry_price_window: int = DEFAULT_ENTRY_PRICE_WINDOW,
+    risk_free_rate_annual: Optional[float] = None,
+) -> pd.DataFrame:
     """
-    Creates a daily series of portfolio value.
+    Creates a daily series of portfolio value with explicit cash tracking.
 
     trades: [quarter, co_name, cat, stock_weight, exit_date, entry_price, exit_price, allocated_capital, shares]
     (already filtered for the target quarter)
     price_data: [date, co_name, open, high, low, close]
     quarter: integer like 202402
     entry_price_window: Number of trading days used for entry (must match the window used in trade simulation)
+    risk_free_rate_annual: If set, idle cash earns this annual rate (compounded daily).
+        When None, Cash_In_Hand is still tracked but does not appreciate.
 
     Returns a dataframe with index: dates in the quarter
-        and a column called Total_Portfolio_Value
+        and columns Total_Portfolio_Value and Cash_In_Hand
     """
     # 1. Determine the Date Range of the quarter
     quarter_start_date, quarter_end_date = get_quarter_dates(quarter)
-    
+
     # 2. Identify the entry phase trading days for this quarter
-    all_dates = sorted(price_data[price_data['date'] >= quarter_start_date]['date'].unique())
-    
-    if len(all_dates) >= entry_price_window:
-        entry_phase_dates = all_dates[:entry_price_window]
-        chart_start_date = entry_phase_dates[0]
+    all_dates_from_start = pd.DatetimeIndex(
+        price_data.loc[price_data['date'] >= quarter_start_date, 'date'].unique()
+    ).sort_values()
+    if len(all_dates_from_start) >= entry_price_window:
+        entry_phase_dates = all_dates_from_start[:entry_price_window]
     else:
-        # Fallback if data is sparse
-        warnings.warn(
-            f"Insufficient trading days for quarter {quarter}. "
-            f"Found only {len(all_dates)} days (expected at least {entry_price_window}). "
-            f"Using available dates: {all_dates}",
-            UserWarning
-        )
-        entry_phase_dates = all_dates
-        chart_start_date = quarter_start_date
-    
-    # Set limits of the date index
-    date_range = pd.date_range(start=chart_start_date, end=quarter_end_date, freq='B')
-    
+        raise ValueError(f"Not enough trading days in quarter {quarter} to start the entry phase. Need {entry_price_window} days, got {len(all_dates_from_start)}.")
+
+    # date_range extracts trading days from the price data itself
+    date_range = all_dates_from_start[all_dates_from_start <= quarter_end_date]
+
     # 3. Prepare Price Data for Fast Lookup
-    # Pivot: Index=Date, Columns=Co_Name, Values=Close
     price_pivot = price_data.pivot(index='date', columns='co_name', values='close')
-    price_pivot = price_pivot.reindex(date_range).ffill()  # Align to date_range and forward fill gaps
-    
-    # 4. Calculate Daily Value (to be populated)
-    # columns will be stocks in the portfolio, and the value will be the 
-    # value of the position in that stock on that day
+    # Filter only to our exact trading days (No reindex with 'B', no ffill)
+    price_pivot = price_pivot.loc[date_range]
+
+    # Initialise daily_values dataframe
     daily_values = pd.DataFrame(index=date_range)
-    
-    # Set of entry phase dates for fast checking
-    entry_phase_set = set(entry_phase_dates)
-    
-    # Create mapping of stock to category for later aggregation
-    stock_to_category = dict(zip(trades['co_name'], trades['cat']))
-    
-    # Handle stocks with NaN entry_price - hold their allocated capital as cash
+
+    # Compute uninvested cash at the start of the quarter
+    uninvested_cash = 0.0
     invalid_entry_mask = trades['entry_price'].isna()
     if invalid_entry_mask.any():
         invalid_stocks = trades.loc[invalid_entry_mask, 'co_name'].tolist()
         uninvested_cash = trades.loc[invalid_entry_mask, 'allocated_capital'].sum()
         warnings.warn(
             f"Entry price is NaN for {len(invalid_stocks)} stock(s): {invalid_stocks}. "
-            f"Holding ₹{uninvested_cash/10000000:.2f} Cr as cash (could not enter these positions).",
+            f"Holding ₹{uninvested_cash/1_00_00_000:.2f} Cr as cash.",
             UserWarning
         )
-        # Add uninvested cash as a constant column
-        daily_values['_uninvested_cash'] = uninvested_cash
-        # Filter to only valid stocks for the main loop
         trades = trades[~invalid_entry_mask].copy()
+
+    # Track cash inflows generated by exits
+    cash_inflows = pd.Series(0.0, index=date_range)
     
-    for _, row in trades.iterrows():  # every iteration populates a column in daily_values
+    # Initialise running_cash to uninvested_cash
+    running_cash = uninvested_cash
+
+    # 4. Vectorized Equity Calculation
+    stock_cols = []
+    for _, row in trades.iterrows():
         co_name = row['co_name']
         shares = row['shares']
         entry_price = row['entry_price']
-        exit_date = row['exit_date']
-        exit_price = row['exit_price']
-        
-        stock_series = []
-        
-        for current_date in date_range:
-            current_date = pd.Timestamp(current_date)
-            
-            # CONDITION 1: Entry Phase (first entry_price_window days)
-            # Value is fixed at cost basis
-            if current_date in entry_phase_set:
-                daily_val = shares * entry_price
-                
-            # CONDITION 2: After Exit Date
-            # Value is fixed at exit proceeds (Cash)
-            elif current_date > exit_date:
-                daily_val = shares * exit_price
-                
-            # CONDITION 3: Active Holding Phase
-            # Value fluctuates with market price
-            else:
-                if current_date in price_pivot.index and co_name in price_pivot.columns:
-                    current_price = price_pivot.loc[current_date, co_name]
-                    
-                    if pd.isna(current_price):
-                        # Fallback if price is missing in the middle of trade
-                        warnings.warn(
-                            f"Missing price data for {co_name} on {current_date.date()}. "
-                            f"Using entry price {entry_price} as fallback.",
-                            UserWarning
-                        )
-                        daily_val = shares * entry_price 
-                    else:
-                        daily_val = shares * current_price
-                else:
-                    # Fallback if date not in price data (e.g. mismatch)
-                    warnings.warn(
-                        f"Date {current_date.date()} or stock {co_name} not found in price data. "
-                        f"Using entry price {entry_price} as fallback.",
-                        UserWarning
-                    )
-                    daily_val = shares * entry_price
+        exit_date = pd.Timestamp(row['exit_date'])
 
-            stock_series.append(daily_val)
-        
-        daily_values[co_name] = stock_series
+        # Initialize the column with scaled market prices
+        if co_name in price_pivot.columns:
+            stock_position_value = price_pivot[co_name] * shares
+            if stock_position_value.isna().any():
+                missing_dates = stock_position_value[stock_position_value.isna()].index.strftime('%Y-%m-%d').tolist()
+                raise ValueError(f"Missing price data detected for {co_name} on the following dates: {missing_dates}. ")
+        else:
+            raise ValueError(f"Stock {co_name} not found in price data.")
 
-    # Aggregate by category (skip placeholder categories like '_default')
-    categories = trades['cat'].unique()
-    real_categories = [c for c in categories if c != '_default']
-    for category in real_categories:
-        # Get all stocks in this category
-        stocks_in_category = [stock for stock, cat in stock_to_category.items() if cat == category]
-        # Only include stocks that are actually in daily_values (exclude invalid ones)
-        stocks_in_category = [s for s in stocks_in_category if s in daily_values.columns]
-        # Sum their values
-        if stocks_in_category:
-            daily_values[f'{category}_value'] = daily_values[stocks_in_category].sum(axis=1)
-    
-    # Sum columns to get Total Portfolio Value (only stock columns, not category columns)
-    # Include _uninvested_cash if it exists
-    stock_columns = [col for col in daily_values.columns if not col.endswith('_value')]
-    daily_values['Total_Portfolio_Value'] = daily_values[stock_columns].sum(axis=1)
-    
+        # Apply Entry Phase logic
+        entry_mask = stock_position_value.index.isin(entry_phase_dates)
+        stock_position_value.loc[entry_mask] = entry_price * shares
+
+        # Apply Exit Phase logic (Zero out equity, move to cash)
+        exit_mask = stock_position_value.index >= exit_date
+        stock_position_value.loc[exit_mask] = 0.0
+
+        # Update the dataframe
+        daily_values[co_name] = stock_position_value
+        stock_cols.append(co_name)
+
+        # Record Cash Inflow
+        exit_proceeds = shares * row['exit_price']
+        if exit_date < date_range[0]:
+            raise ValueError(f"Exit date of stock {co_name} in quarter {quarter} has exit date {exit_date} before start date {date_range[0]}.")
+        elif exit_date in cash_inflows.index:
+            cash_inflows.loc[exit_date] += exit_proceeds
+        else:
+            raise ValueError(f"Exit date of stock {co_name} in quarter {quarter} has exit date {exit_date} out of regular date range.")
+
+    # 5. Compute Cash_In_Hand through the quarter
+
+    # Compute daily rate of appreciation
+    r_daily = 0.0
+    if risk_free_rate_annual is not None and risk_free_rate_annual > 0:
+        r_daily = (1 + risk_free_rate_annual) ** (1 / TRADING_DAYS_PER_YEAR) - 1
+
+    cash_series = np.empty(len(date_range))
+    r_multiplier = 1 + r_daily if r_daily > 0 else 1.0
+
+    for idx in range(len(date_range)):
+        if idx > 0:
+            running_cash *= r_multiplier  # first, appreciate the cash holding of the previous day
+        running_cash += cash_inflows.iloc[idx]  # then, account for cash inflows
+        cash_series[idx] = running_cash
+
+    daily_values['Cash_In_Hand'] = cash_series
+
+    # Total Value is the sum of all stock columns plus cash
+    daily_values['Total_Portfolio_Value'] = daily_values[stock_cols].sum(axis=1) + cash_series
+
     return daily_values
 
 
@@ -210,35 +198,48 @@ def _generate_quarter_sequence(first_quarter: int, last_quarter: int) -> list[in
     return quarters
 
 
-def compute_portfolio_value_over_quarter(trades: pd.DataFrame, price_data: pd.DataFrame, target_quarter: int, initial_capital: float = INITIAL_CAPITAL, entry_price_window: int = DEFAULT_ENTRY_PRICE_WINDOW) -> Optional[pd.DataFrame]:
+def compute_portfolio_value_over_quarter(
+    trades: pd.DataFrame,
+    price_data: pd.DataFrame,
+    target_quarter: int,
+    initial_capital: float = INITIAL_CAPITAL,
+    entry_price_window: int = DEFAULT_ENTRY_PRICE_WINDOW,
+    risk_free_rate_annual: Optional[float] = None,
+) -> Optional[pd.DataFrame]:
     '''
     trades: [quarter, co_name, cat, stock_weight, exit_date, entry_price, exit_price]
     price_data: [date, co_name, open, high, low, close]
     target_quarter: integer like 202402
     initial_capital: sum like 100 crs
     entry_price_window: Number of trading days used for entry (must match the window used in trade simulation)
+    risk_free_rate_annual: If set, idle cash earns this annual rate.
 
     Returns a dataframe with index: dates in the quarter
-        and a column called Total_Portfolio_Value
+        and columns Total_Portfolio_Value and Cash_In_Hand
     '''
-    # Filter for target quarter
     quarter_df = trades[trades['quarter'] == target_quarter].copy()
     if quarter_df.empty:
-        logger.warning("No data found for quarter %s.", target_quarter)
-        return
+        raise ValueError(f"No data found for quarter {target_quarter}")
 
-    # Sizing
-    # quarter_df: [quarter, co_name, cat, stock_weight, exit_date, entry_price, exit_price]
     quarter_df_sized = calculate_position_sizes(quarter_df, initial_capital)
-    # quarter_df_sized: [quarter, co_name, cat, stock_weight, exit_date, entry_price, exit_price, allocated_capital, shares]
 
-    # Equity Curve
-    equity_curve = generate_quarter_equity_curve(quarter_df_sized, price_data, target_quarter, entry_price_window)
+    equity_curve = generate_quarter_equity_curve(
+        quarter_df_sized, price_data, target_quarter, entry_price_window,
+        risk_free_rate_annual=risk_free_rate_annual,
+    )
 
     return equity_curve
 
 
-def compute_portfolio_value_over_quarters(trades: pd.DataFrame, price_data: pd.DataFrame, first_quarter: int, last_quarter: int, initial_capital: float = INITIAL_CAPITAL, entry_price_window: int = DEFAULT_ENTRY_PRICE_WINDOW) -> Optional[pd.DataFrame]:
+def compute_portfolio_value_over_quarters(
+    trades: pd.DataFrame,
+    price_data: pd.DataFrame,
+    first_quarter: int,
+    last_quarter: int,
+    initial_capital: float = INITIAL_CAPITAL,
+    entry_price_window: int = DEFAULT_ENTRY_PRICE_WINDOW,
+    risk_free_rate_annual: Optional[float] = None,
+) -> Optional[pd.DataFrame]:
     '''
     Computes portfolio value across multiple quarters at daily frequency.
     The ending value of each quarter becomes the starting capital for the next quarter.
@@ -249,58 +250,43 @@ def compute_portfolio_value_over_quarters(trades: pd.DataFrame, price_data: pd.D
     last_quarter: integer like 202411 (end quarter, inclusive)
     initial_capital: sum like 100 crs
     entry_price_window: Number of trading days used for entry (must match the window used in trade simulation)
+    risk_free_rate_annual: If set, idle cash earns this annual rate.
 
     Returns a dataframe with index: dates across all quarters
-        and a column called Total_Portfolio_Value
+        and columns Total_Portfolio_Value and Cash_In_Hand
     '''
-    # Generate the sequence of quarters
     quarters = _generate_quarter_sequence(first_quarter, last_quarter)
     
     if not quarters:
-        logger.warning("No valid quarters in the specified range.")
-        return None
+        raise ValueError("No valid quarters in the specified range.")
     
     all_equity_curves = []
     current_capital = initial_capital
     
     for quarter in quarters:
-        # Compute equity curve for this quarter
         equity_curve = compute_portfolio_value_over_quarter(
-            trades, price_data, quarter, current_capital, entry_price_window
+            trades, price_data, quarter, current_capital, entry_price_window,
+            risk_free_rate_annual=risk_free_rate_annual,
         )
         
         if equity_curve is None or equity_curve.empty:
-            warnings.warn(f"No data for quarter {quarter}, skipping.", UserWarning)
-            continue
+            raise ValueError(f"equity curve is empty for {quarter}.")
         
-        # Store the equity curve with quarter info
-        equity_curve = equity_curve[['Total_Portfolio_Value']].copy()
+        equity_curve = equity_curve[['Total_Portfolio_Value', 'Cash_In_Hand']].copy()
         equity_curve['quarter'] = quarter
         all_equity_curves.append(equity_curve)
         
-        # Update capital for next quarter (ending value of this quarter)
         current_capital = equity_curve['Total_Portfolio_Value'].iloc[-1]
     
     if not all_equity_curves:
-        logger.warning("No equity curves generated for any quarter.")
-        return None
+        raise ValueError("No equity curves generated for any quarter.")
     
-    # Concatenate all equity curves
     combined_equity_curve = pd.concat(all_equity_curves)
     
-    # Check for and handle any overlapping dates
     duplicated_dates = combined_equity_curve.index[combined_equity_curve.index.duplicated(keep=False)]
     if len(duplicated_dates) > 0:
-        unique_duplicated = duplicated_dates.unique()
-        warnings.warn(
-            f"Found {len(unique_duplicated)} overlapping date(s) between quarters: "
-            f"{[d.strftime('%Y-%m-%d') for d in unique_duplicated[:5]]}{'...' if len(unique_duplicated) > 5 else ''}. "
-            f"Keeping the later quarter's value.",
-            UserWarning
-        )
-        combined_equity_curve = combined_equity_curve[~combined_equity_curve.index.duplicated(keep='last')]
+        raise ValueError(f"Found overlapping dates between quarters.")
     
-    # Sort by date
     combined_equity_curve = combined_equity_curve.sort_index()
     
     return combined_equity_curve

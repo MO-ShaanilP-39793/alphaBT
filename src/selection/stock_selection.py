@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import warnings
 
@@ -11,7 +12,7 @@ from config.defaults import (
     DEFAULT_ENTRY_WINDOW_LENGTH,
     get_dimension_categories,
 )
-from utils.quarter import get_entry_start_date
+from utils.quarter import get_entry_start_date, get_quarter_dates
 
 
 def _assign_volatility_categories(series):
@@ -340,12 +341,17 @@ def select_and_weight_stocks(
 # PRICE DATA VALIDATION FUNCTIONS
 # to answer the question:
 # do we have probabilities for some stocks in some quarter, 
-# but no price data to trade that stock?
+# but problematic price data to trade that stock in that quarter?
 # =============================================================================
 
 
-def validate_price_data_coverage(input_data, price_data, first_quarter=None, last_quarter=None,
-                                 min_prices_required=DEFAULT_MIN_PRICES_REQUIRED, entry_window_length=DEFAULT_ENTRY_WINDOW_LENGTH):
+def validate_price_data_coverage_just_entry(
+    input_data, 
+    price_data, 
+    first_quarter=None, 
+    last_quarter=None,
+    min_prices_required=DEFAULT_MIN_PRICES_REQUIRED, 
+    entry_window_length=DEFAULT_ENTRY_WINDOW_LENGTH):
     """
     Identify stocks every quarter in our input data (which have probabilities or are already selected)
     that we can't trade due to incomplete price data
@@ -419,43 +425,91 @@ def validate_price_data_coverage(input_data, price_data, first_quarter=None, las
     return pd.DataFrame(issues)
 
 
-def filter_tradeable_stocks(input_data, price_data, first_quarter=None, last_quarter=None,
-                            min_prices_required=DEFAULT_MIN_PRICES_REQUIRED, entry_window_length=DEFAULT_ENTRY_WINDOW_LENGTH):
+def validate_price_data_coverage_full(input_data, price_data, first_quarter=None, last_quarter=None):
     """
-    Remove stock-quarter combinations that cannot be traded due to price data issues.
+    Flags stocks part of inference data that have incomplete price data.
+    Enforces strict 100% coverage for the quarter to prevent downstream ValueError crashes.
+    """
+    price_data = price_data.copy()
+    price_data['date'] = pd.to_datetime(price_data['date'])
     
-    This function validates price data coverage and filters out problematic
-    stock-quarter combinations from the input data.
+    if first_quarter is None:
+        first_quarter = input_data['quarter'].min()
+    if last_quarter is None:
+        last_quarter = input_data['quarter'].max()
+        
+    input_data = input_data[
+        (input_data['quarter'] >= first_quarter) & 
+        (input_data['quarter'] <= last_quarter)
+    ]
     
-    Parameters:
-        input_data: DataFrame with candidate stocks (must have 'quarter', 'co_name')
-        price_data: DataFrame with OHLCV data (must have 'date', 'co_name', 'close')
-        first_quarter: Start quarter (inclusive). If None, uses min quarter in input_data.
-        last_quarter: End quarter (inclusive). If None, uses max quarter in input_data.
-        min_prices_required: Minimum non-NaN prices required for trading eligibility
-        entry_window_length: Length of the window in which minimum prices are required
+    issues = []
+    
+    # Process input_data quarter by quarter
+    for quarter, group in input_data.groupby('quarter'):
+        q_start, q_end = get_quarter_dates(quarter) 
+        
+        # Slice price data for the quarter
+        q_prices = price_data[
+            (price_data['date'] >= q_start) & 
+            (price_data['date'] <= q_end)
+        ]
+        
+        # Get actual trading days in this quarter for the WHOLE market
+        q_trading_days = np.sort(q_prices['date'].unique())
+        total_q_days = len(q_trading_days)
+        
+        if total_q_days == 0:
+            raise ValueError(f"No trading days in {quarter}")
+            
+        # Vectorized counting
+        full_q_counts = q_prices.groupby('co_name')['close'].count()
 
-    Returns:
-        Tuple of (filtered_input_data, issues_df):
-        - filtered_input_data: input_data with problematic rows removed
-        - issues_df: DataFrame describing what was filtered and why
+        # Strict 100% validation check
+        for stock in group['co_name'].unique():
+            q_count = full_q_counts.get(stock, 0)
+            
+            # STRICT CHECK: Stock must have traded every single day the market was open
+            if q_count != total_q_days:
+                missing_days = total_q_days - q_count
+                issues.append({
+                    'quarter': quarter,
+                    'co_name': stock,
+                    'issue': 'missing_trading_days',
+                    'detail': f'Missing {missing_days} day(s) of price data. Found {q_count}/{total_q_days} required market days.'
+                })
+
+    return pd.DataFrame(issues)
+
+
+def filter_tradeable_stocks(input_data, price_data, first_quarter=None, last_quarter=None):
     """
+    Returns:
+        Tuple of (filtered_input_data, issues_df)
+    """
+    if first_quarter is None:
+        first_quarter = input_data['quarter'].min()
+    if last_quarter is None:
+        last_quarter = input_data['quarter'].max()
+        
+    input_data = input_data[
+        (input_data['quarter'] >= first_quarter) & 
+        (input_data['quarter'] <= last_quarter)
+    ].copy()
+
     # Get issues
-    issues_df = validate_price_data_coverage(
-        input_data, price_data, first_quarter, last_quarter, min_prices_required, entry_window_length
-    )
+    issues_df = validate_price_data_coverage_full(input_data, price_data, first_quarter, last_quarter)
     
     if issues_df.empty:
-        return input_data.copy(), issues_df
+        return input_data, issues_df
     
-    # Create a set of (quarter, co_name) tuples to filter out
-    invalid_pairs = set(zip(issues_df['quarter'], issues_df['co_name']))
+    # Create a MultiIndex of the invalid pairs
+    invalid_index = pd.MultiIndex.from_frame(issues_df[['quarter', 'co_name']])
     
-    # Filter out invalid stock-quarter combinations
-    mask = input_data.apply(
-        lambda row: (row['quarter'], row['co_name']) not in invalid_pairs, 
-        axis=1
-    )
-    filtered_data = input_data[mask].copy()
+    # Create a MultiIndex of the input data
+    input_index = pd.MultiIndex.from_frame(input_data[['quarter', 'co_name']])
+    
+    # Filter by checking which input rows are NOT in the invalid index
+    filtered_data = input_data[~input_index.isin(invalid_index)].copy()
     
     return filtered_data, issues_df

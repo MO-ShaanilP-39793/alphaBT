@@ -73,7 +73,7 @@ from backtest_strategy import (
 
 from selection import (
     filter_tradeable_stocks,
-    validate_price_data_coverage,
+    validate_price_data_coverage_full,
 )
 
 from reporting.analytics import compute_trailing_returns
@@ -634,7 +634,7 @@ def run_optimization(config_path: str = DEFAULT_TUNING_CONFIG_PATH,
         else:
             # Save and Report issues but don't filter (user's preselected portfolio)
             logger.info("Validating price data coverage for preselected portfolio...")
-            data_issues = validate_price_data_coverage(
+            data_issues = validate_price_data_coverage_full(
                 data_cache.input_data,
                 data_cache.price_data,
                 first_quarter,

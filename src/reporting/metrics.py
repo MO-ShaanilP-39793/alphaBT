@@ -111,6 +111,45 @@ def compute_drawdown_series(daily_pf: pd.DataFrame) -> pd.DataFrame:
     return df[['date', 'portfolio_value', 'cummax', 'drawdown', 'drawdown_pct']]
 
 
+def compute_cash_metrics(daily_pf: pd.DataFrame) -> dict | None:
+    """
+    Compute cash analytics from daily portfolio values that include cash_in_hand.
+
+    Parameters:
+    - daily_pf: DataFrame with columns ['date', 'portfolio_value', 'quarter']
+                and optionally 'cash_in_hand'.
+
+    Returns dict with:
+      - avg_cash_pct: average cash as % of portfolio
+      - avg_cash: average cash amount (₹)
+      - cash_by_quarter: DataFrame(quarter, mean_cash_pct, mean_cash)
+    Returns None if cash_in_hand is not present.
+    """
+    if 'cash_in_hand' not in daily_pf.columns:
+        return None
+
+    df = daily_pf.copy()
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.sort_values('date', ignore_index=True)
+
+    df['_cash_pct'] = (df['cash_in_hand'] / df['portfolio_value']) * 100
+
+    avg_cash_pct = float(df['_cash_pct'].mean())
+    avg_cash = float(df['cash_in_hand'].mean())
+
+    cash_by_quarter = (
+        df.groupby('quarter')
+        .agg(mean_cash_pct=('_cash_pct', 'mean'), mean_cash=('cash_in_hand', 'mean'))
+        .reset_index()
+    )
+
+    return {
+        'avg_cash_pct': round(avg_cash_pct, 2),
+        'avg_cash': round(avg_cash, 2),
+        'cash_by_quarter': cash_by_quarter,
+    }
+
+
 def compute_benchmark_metrics(comparison_df: pd.DataFrame) -> dict:
     """
     Compute benchmark comparison metrics from portfolio vs index data.

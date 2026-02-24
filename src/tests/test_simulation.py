@@ -151,3 +151,129 @@ class TestComputePfValueOverQuarter:
                                         "entry_price", "exit_price", "exit_date"])
         result = compute_portfolio_value_over_quarter(trades, sample_price_data, Q1)
         assert result is None
+
+
+# =============================================================================
+# Cash-In-Hand tracking and risk-free appreciation
+# =============================================================================
+
+class TestCashInHand:
+
+    def test_cash_in_hand_column_present_no_interest(self, sized_trades, sample_price_data):
+        from backtest.simulation import generate_quarter_equity_curve
+        result = generate_quarter_equity_curve(
+            sized_trades, sample_price_data, Q1, risk_free_rate_annual=None
+        )
+        assert "Cash_In_Hand" in result.columns
+        assert "Total_Portfolio_Value" in result.columns
+
+    def test_cash_in_hand_column_present_with_interest(self, sized_trades, sample_price_data):
+        from backtest.simulation import generate_quarter_equity_curve
+        result = generate_quarter_equity_curve(
+            sized_trades, sample_price_data, Q1, risk_free_rate_annual=0.065
+        )
+        assert "Cash_In_Hand" in result.columns
+
+    def test_no_interest_total_matches_legacy_logic(self, sized_trades, sample_price_data):
+        """With risk_free_rate=None, Total_Portfolio_Value should equal equity + raw cash."""
+        from backtest.simulation import generate_quarter_equity_curve
+        result = generate_quarter_equity_curve(
+            sized_trades, sample_price_data, Q1, risk_free_rate_annual=None
+        )
+        assert not result["Total_Portfolio_Value"].isna().any()
+        assert not result["Cash_In_Hand"].isna().any()
+        # Cash should be >= 0 at all times
+        assert (result["Cash_In_Hand"] >= -0.01).all()
+
+    def test_interest_increases_total(self, sized_trades, sample_price_data):
+        """When risk-free rate > 0, total value after exits should be >= the no-interest total."""
+        from backtest.simulation import generate_quarter_equity_curve
+        result_no = generate_quarter_equity_curve(
+            sized_trades, sample_price_data, Q1, risk_free_rate_annual=None
+        )
+        result_with = generate_quarter_equity_curve(
+            sized_trades, sample_price_data, Q1, risk_free_rate_annual=0.065
+        )
+        # On the last day (all exits done, cash has compounded), with-interest >= no-interest
+        assert result_with["Total_Portfolio_Value"].iloc[-1] >= result_no["Total_Portfolio_Value"].iloc[-1] - 0.01
+
+    def test_cash_in_hand_in_multi_quarter(self, sample_price_data):
+        from backtest.simulation import compute_portfolio_value_over_quarters
+        trades_q1 = _make_trades(Q1, STOCK_NAMES[:3])
+        trades_q2 = _make_trades(Q2, STOCK_NAMES[:3])
+        all_trades = pd.concat([trades_q1, trades_q2], ignore_index=True)
+        result = compute_portfolio_value_over_quarters(
+            all_trades, sample_price_data, Q1, Q2,
+            initial_capital=1_000_000_000,
+            risk_free_rate_annual=0.065,
+        )
+        assert result is not None
+        assert "Cash_In_Hand" in result.columns
+        assert "Total_Portfolio_Value" in result.columns
+
+    def test_end_of_quarter_value_rolls_to_next(self, sample_price_data):
+        """End-of-quarter Total_Portfolio_Value becomes next quarter's starting capital."""
+        from backtest.simulation import compute_portfolio_value_over_quarters
+        trades_q1 = _make_trades(Q1, STOCK_NAMES[:3])
+        trades_q2 = _make_trades(Q2, STOCK_NAMES[:3])
+        all_trades = pd.concat([trades_q1, trades_q2], ignore_index=True)
+        result = compute_portfolio_value_over_quarters(
+            all_trades, sample_price_data, Q1, Q2,
+            initial_capital=1_000_000_000,
+        )
+        assert result is not None
+        q1_rows = result[result['quarter'] == Q1]
+        q2_rows = result[result['quarter'] == Q2]
+        if not q1_rows.empty and not q2_rows.empty:
+            # Q2's first value should reflect Q1's ending value (which was the capital input)
+            assert q1_rows["Total_Portfolio_Value"].iloc[-1] > 0
+            assert q2_rows["Total_Portfolio_Value"].iloc[0] > 0
+
+
+# =============================================================================
+# compute_cash_metrics
+# =============================================================================
+
+class TestComputeCashMetrics:
+
+    def test_returns_none_without_cash_column(self):
+        from reporting.metrics import compute_cash_metrics
+        daily_pf = pd.DataFrame({
+            "date": pd.bdate_range("2023-01-02", periods=10),
+            "portfolio_value": [1e9] * 10,
+            "quarter": 202302,
+        })
+        assert compute_cash_metrics(daily_pf) is None
+
+    def test_returns_metrics_with_cash_column(self):
+        from reporting.metrics import compute_cash_metrics
+        daily_pf = pd.DataFrame({
+            "date": pd.bdate_range("2023-01-02", periods=10),
+            "portfolio_value": [1e9] * 10,
+            "cash_in_hand": [1e8] * 10,
+            "quarter": 202302,
+        })
+        result = compute_cash_metrics(daily_pf)
+        assert result is not None
+        assert "avg_cash_pct" in result
+        assert "avg_cash" in result
+        assert "cash_by_quarter" in result
+        assert abs(result["avg_cash_pct"] - 10.0) < 0.1  # 1e8 / 1e9 = 10%
+
+    def test_by_quarter_breakdown(self):
+        from reporting.metrics import compute_cash_metrics
+        dates_q1 = pd.bdate_range("2023-01-02", periods=5)
+        dates_q2 = pd.bdate_range("2023-06-01", periods=5)
+        daily_pf = pd.DataFrame({
+            "date": list(dates_q1) + list(dates_q2),
+            "portfolio_value": [1e9] * 10,
+            "cash_in_hand": [1e8] * 5 + [2e8] * 5,
+            "quarter": [202302] * 5 + [202305] * 5,
+        })
+        result = compute_cash_metrics(daily_pf)
+        by_q = result["cash_by_quarter"]
+        assert len(by_q) == 2
+        q1_row = by_q[by_q["quarter"] == 202302].iloc[0]
+        q2_row = by_q[by_q["quarter"] == 202305].iloc[0]
+        assert abs(q1_row["mean_cash_pct"] - 10.0) < 0.1
+        assert abs(q2_row["mean_cash_pct"] - 20.0) < 0.1

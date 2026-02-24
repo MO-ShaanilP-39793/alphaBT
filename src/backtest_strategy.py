@@ -22,7 +22,7 @@ from selection import (
     select_and_weight_stocks,
     select_top_k_stocks,
     filter_tradeable_stocks,
-    validate_price_data_coverage,
+    validate_price_data_coverage_full,
 )
 from backtest import (
     simulate_trades,
@@ -32,6 +32,7 @@ from backtest import (
 from reporting import generate_backtest_report
 from config.defaults import (
     INITIAL_CAPITAL,
+    RISK_FREE_RATE,
     DEFAULT_CONFIG_PATH,
     DEFAULT_OUTPUT_BASE_DIR,
     DEFAULT_SELECTION_TYPE,
@@ -136,7 +137,7 @@ def save_config_copy(config: 'BacktestConfig', output_dir: str) -> None:
     config_data = config.model_dump() if isinstance(config, BacktestConfig) else config
     config_output_path = os.path.join(output_dir, 'config_used.yaml')
     with open(config_output_path, 'w') as file:
-        yaml.dump(config_data, file, default_flow_style=False)
+        yaml.dump(config_data, file, default_flow_style=False, sort_keys=False)
     
     logger.info("Configuration saved to: %s", config_output_path)
 
@@ -364,7 +365,6 @@ def _select_stocks(
     Returns:
         Tuple of (selected_stocks DataFrame, data_issues DataFrame or None)
     """
-    entry_price_window = config.entry_price_window
     run_stock_selection_flag = config.run_stock_selection
     data_issues = None
 
@@ -374,9 +374,7 @@ def _select_stocks(
         if not skip_price_data_validation:
             input_data_filtered, data_issues = filter_tradeable_stocks(
                 input_data_filtered, price_data,
-                first_quarter, last_quarter,
-                min_prices_required=entry_price_window,
-            )
+                first_quarter, last_quarter)
             if data_issues is not None and not data_issues.empty:
                 logger.debug(
                     "Filtered %d stock-quarter combinations with price data issues",
@@ -406,11 +404,9 @@ def _select_stocks(
         logger.info("[2/4] Using preselected portfolio...")
 
         if not skip_price_data_validation:
-            data_issues = validate_price_data_coverage(
+            data_issues = validate_price_data_coverage_full(
                 input_data_filtered, price_data,
-                first_quarter, last_quarter,
-                min_prices_required=entry_price_window,
-            )
+                first_quarter, last_quarter)
             if data_issues is not None and not data_issues.empty:
                 logger.warning(
                     "Found %d stock-quarter combinations with price data issues",
@@ -512,6 +508,8 @@ def _simulate_and_compute(
 
     logger.info("[4/4] Generating daily portfolio values...")
 
+    risk_free_rate = config.risk_free_rate if config.risk_free_rate is not None else RISK_FREE_RATE
+
     daily_pf_values = compute_portfolio_value_over_quarters(
         trade_results,
         price_data,
@@ -519,6 +517,7 @@ def _simulate_and_compute(
         last_quarter,
         INITIAL_CAPITAL,
         entry_price_window=entry_price_window,
+        risk_free_rate_annual=risk_free_rate,
     )
 
     if daily_pf_values is not None and not daily_pf_values.empty:
@@ -694,7 +693,15 @@ def _save_results_and_report(
     # Generate report
     if config.generate_report and equity_curve is not None and not equity_curve.empty:
         daily_pf = equity_curve.reset_index()
-        daily_pf.columns = ['date', 'portfolio_value', 'quarter']
+        col_map = {
+            daily_pf.columns[0]: 'date',
+            'Total_Portfolio_Value': 'portfolio_value',
+            'Cash_In_Hand': 'cash_in_hand',
+            'quarter': 'quarter',
+        }
+        daily_pf = daily_pf.rename(columns=col_map)
+        if 'cash_in_hand' in daily_pf.columns:
+            daily_pf['cash_ratio'] = daily_pf['cash_in_hand'] / daily_pf['portfolio_value']
 
         report_path = os.path.join(output_dir, 'backtest_report.xlsx')
         generate_backtest_report(

@@ -107,6 +107,17 @@ min_prob_threshold: null  # e.g., 0.5 to only consider stocks with >50% probabil
 entry_price_window: 3
 
 # =============================================================================
+# CASH / RISK-FREE RATE CONFIGURATION
+# =============================================================================
+
+# Annual risk-free rate applied to idle cash (exit proceeds and uninvested capital).
+# Cash compounds daily at this rate between exit and the next quarter's reinvestment.
+# - null (default): Uses the global default from config.defaults (currently 6.5%)
+# - 0: Disable cash appreciation (cash stays flat)
+# - Any positive float: Override rate (e.g., 0.07 for 7%)
+risk_free_rate: null
+
+# =============================================================================
 # TP/SL MODE CONFIGURATION
 # =============================================================================
 

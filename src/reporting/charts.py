@@ -314,6 +314,55 @@ def create_distribution_chart(monthly_returns_df, chart_title="Distribution of M
     return buffer
 
 
+def create_cash_pct_chart(daily_pf, chart_title="Cash % of Portfolio Over Time"):
+    """
+    Create a line chart showing cash as a percentage of portfolio value over time.
+
+    Parameters:
+    - daily_pf: DataFrame with columns ['date', 'portfolio_value'] and optionally
+                'cash_in_hand' and 'cash_ratio'.
+
+    Returns BytesIO buffer or None if cash data is unavailable.
+    """
+    if 'cash_ratio' not in daily_pf.columns or 'cash_in_hand' not in daily_pf.columns:
+        return None
+
+    df = daily_pf.copy()
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.sort_values('date').reset_index(drop=True)
+    
+    df['cash_pct'] = df['cash_ratio'] * 100  
+
+    fig, ax = plt.subplots(figsize=(14, 5))
+    ax.fill_between(df['date'], df['cash_pct'], 0, color='#1f77b4', alpha=0.3)
+    ax.plot(df['date'], df['cash_pct'], color='#1f77b4', linewidth=1.5)
+    ax.set_title(chart_title, fontsize=14)
+    ax.set_ylabel('Cash % of Portfolio', fontsize=12)
+    ax.set_xlabel('Date', fontsize=12)
+    ax.set_ylim(bottom=0)
+    ax.grid(True, linestyle=':', alpha=0.6)
+
+    date_range_days = (df['date'].iloc[-1] - df['date'].iloc[0]).days
+    if date_range_days > 365:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+    elif date_range_days > 180:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+    else:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+        ax.xaxis.set_major_locator(mdates.MonthLocator())
+
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format="png", dpi=150, bbox_inches='tight')
+    plt.close()
+    buffer.seek(0)
+    return buffer
+
+
 def create_box_plot(monthly_returns_df, chart_title="Box-Whisker Plot of Monthly Returns"):
     """Create Box-Whisker plot. Returns BytesIO buffer."""
     plt.figure(figsize=(12, 6))

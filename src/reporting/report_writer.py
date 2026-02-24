@@ -6,7 +6,6 @@ import math
 import struct
 
 import pandas as pd
-import warnings
 
 from config.defaults import INITIAL_CAPITAL
 from utils.logging_config import get_logger
@@ -15,8 +14,8 @@ logger = get_logger(__name__)
 
 from .metrics import (
     compute_portfolio_metrics,
-    compute_drawdown_series,
     compute_benchmark_metrics,
+    compute_cash_metrics,
 )
 from .analytics import (
     compute_portfolio_performance,
@@ -33,13 +32,13 @@ from .analytics import (
 )
 from .charts import (
     create_portfolio_vs_index_chart,
-    create_growth_of_wealth_chart,
     create_daily_drawdown_chart,
     create_monthly_returns_heatmap,
     create_calendar_year_heatmap,
     create_correlation_heatmap,
     create_distribution_chart,
     create_box_plot,
+    create_cash_pct_chart,
 )
 
 
@@ -230,6 +229,13 @@ def generate_backtest_report(
         except (KeyError, ValueError, ZeroDivisionError, TypeError) as e:
             logger.warning("Could not compute quarterly alpha: %s", e)
 
+    logger.info("Computing cash metrics...")
+    cash_metrics = None
+    try:
+        cash_metrics = compute_cash_metrics(daily_pf)
+    except (KeyError, ValueError, ZeroDivisionError, TypeError) as e:
+        logger.warning("Could not compute cash metrics: %s", e)
+
     # Stock counts by mcap (conditional)
     mcap_counts_df = None
     if trade_results is not None:
@@ -259,6 +265,7 @@ def generate_backtest_report(
         )
 
     drawdown_chart = create_daily_drawdown_chart(daily_pf)
+    cash_pct_chart = create_cash_pct_chart(daily_pf)
     heatmap_chart = create_monthly_returns_heatmap(daily_pf)
     cy_heatmap = create_calendar_year_heatmap(calendar_df) if not calendar_df.empty else None
     corr_heatmap = create_correlation_heatmap(combined_returns)
@@ -358,6 +365,19 @@ def generate_backtest_report(
                 writer, sheet_name="market_regimes", index=False
             )
 
+        # ----- Sheet: cash_metrics -----
+        if cash_metrics is not None:
+            summary_df = pd.DataFrame([{
+                'avg_cash_pct': cash_metrics['avg_cash_pct'],
+                'avg_cash': cash_metrics['avg_cash'],
+            }])
+            summary_df.to_excel(
+                writer, sheet_name="cash_metrics", startrow=0, index=False
+            )
+            cash_metrics['cash_by_quarter'].to_excel(
+                writer, sheet_name="cash_metrics", startrow=4, index=False
+            )
+
         # ----- Sheet: stock_counts_by_mcap -----
         if mcap_counts_df is not None:
             mcap_counts_df.to_excel(
@@ -376,6 +396,10 @@ def generate_backtest_report(
 
         charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": drawdown_chart})
         row_offset += _png_image_rows(drawdown_chart)
+
+        if cash_pct_chart:
+            charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": cash_pct_chart})
+            row_offset += _png_image_rows(cash_pct_chart)
 
         charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": heatmap_chart})
         row_offset += _png_image_rows(heatmap_chart)  # dynamic: scales with number of years
@@ -434,6 +458,8 @@ def generate_backtest_report(
                 worksheet.set_column('A:Z', 18)
             elif sheet_name == "benchmark_metrics":
                 worksheet.set_column('A:Z', 22)
+            elif sheet_name == "cash_metrics":
+                worksheet.set_column('A:C', 18, format_decimal)
             elif sheet_name not in ["charts", "trade_results",
                                      "daily_portfolio_values", "portfolio_vs_index",
                                      "data_quality_issues"]:
