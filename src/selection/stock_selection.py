@@ -8,11 +8,9 @@ from config.defaults import (
     DEFAULT_TOP_K_WEIGHTING,
     DEFAULT_WEIGHTING_SCHEME,
     RISK_ADJUSTED_EPSILON,
-    DEFAULT_MIN_PRICES_REQUIRED,
-    DEFAULT_ENTRY_WINDOW_LENGTH,
     get_dimension_categories,
 )
-from utils.quarter import get_entry_start_date, get_quarter_dates
+from utils.quarter import get_quarter_dates
 
 
 def _assign_volatility_categories(series):
@@ -343,86 +341,6 @@ def select_and_weight_stocks(
 # do we have probabilities for some stocks in some quarter, 
 # but problematic price data to trade that stock in that quarter?
 # =============================================================================
-
-
-def validate_price_data_coverage_just_entry(
-    input_data, 
-    price_data, 
-    first_quarter=None, 
-    last_quarter=None,
-    min_prices_required=DEFAULT_MIN_PRICES_REQUIRED, 
-    entry_window_length=DEFAULT_ENTRY_WINDOW_LENGTH):
-    """
-    Identify stocks every quarter in our input data (which have probabilities or are already selected)
-    that we can't trade due to incomplete price data
-    
-    A stock-quarter is considered invalid if there are not at least (min_prices_required) non-NaN 
-    closing prices available within the entry window (entry_date to entry_date + entry_window_length days).
-    
-    Parameters:
-        input_data: DataFrame with stocks to validate (must have 'quarter', 'co_name')
-        price_data: DataFrame with OHLCV data (must have 'date', 'co_name', 'close')
-        first_quarter: Start quarter (inclusive). If None, uses min quarter in input_data.
-        last_quarter: End quarter (inclusive). If None, uses max quarter in input_data.
-        min_prices_required: Minimum non-NaN prices required for trading eligibility
-        entry_window_length: Length of the window in which minimum prices are required
-    
-    Returns:
-        DataFrame with columns: [quarter, co_name, entry_start_date, issue, detail]
-        Empty DataFrame if no issues found.
-    """
-    # Ensure date column is datetime
-    price_data = price_data.copy()
-    price_data['date'] = pd.to_datetime(price_data['date'])
-    
-    # Determine quarter range
-    if first_quarter is None:
-        first_quarter = input_data['quarter'].min()
-    if last_quarter is None:
-        last_quarter = input_data['quarter'].max()
-    
-    # Filter input data to quarter range
-    input_data = input_data[
-        (input_data['quarter'] >= first_quarter) & 
-        (input_data['quarter'] <= last_quarter)
-    ]
-    
-    issues = []
-    
-    # Get unique stock-quarter combinations
-    stock_quarters = input_data[['quarter', 'co_name']].drop_duplicates()
-    
-    for _, row in stock_quarters.iterrows():
-        quarter = row['quarter']
-        stock = row['co_name']
-        
-        entry_start = get_entry_start_date(quarter)
-        entry_end = entry_start + pd.Timedelta(days=entry_window_length)
-        
-        # Get price data for this stock within the entry window
-        stock_prices = price_data[
-            (price_data['co_name'] == stock) & 
-            (price_data['date'] >= entry_start) &
-            (price_data['date'] <= entry_end)
-        ].sort_values('date')
-        
-        # Filter to non-NaN close prices
-        valid_prices = stock_prices[stock_prices['close'].notna()]
-        
-        # Check: At least min_prices_required non-NaN closing prices within window?
-        valid_count = len(valid_prices)
-        if valid_count < min_prices_required:
-            total_days = len(stock_prices)
-            nan_count = total_days - valid_count
-            issues.append({
-                'quarter': quarter,
-                'co_name': stock,
-                'entry_start_date': entry_start.strftime('%Y-%m-%d'),
-                'issue': 'insufficient_valid_prices_in_window',
-                'detail': f'Found {valid_count}/{min_prices_required} required non-NaN prices in {entry_window_length}-day window (total days: {total_days}, NaN: {nan_count})'
-            })
-    
-    return pd.DataFrame(issues)
 
 
 def validate_price_data_coverage_full(input_data, price_data, first_quarter=None, last_quarter=None):
