@@ -225,7 +225,7 @@ class BacktestConfig(BaseModel):
     entry_price_window: int = DEFAULT_ENTRY_PRICE_WINDOW
 
     # -- Cash / risk-free rate -----------------------------------------------
-    risk_free_rate: Optional[float] = None
+    cash_appreciation_rate: Optional[float] = None
 
     # -- Index exit ----------------------------------------------------------
     index_exit: Optional[IndexExitConfig] = None

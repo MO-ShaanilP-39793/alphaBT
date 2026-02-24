@@ -508,7 +508,7 @@ def _simulate_and_compute(
 
     logger.info("[4/4] Generating daily portfolio values...")
 
-    risk_free_rate = config.risk_free_rate if config.risk_free_rate is not None else RISK_FREE_RATE
+    cash_appreciation_rate = config.cash_appreciation_rate if config.cash_appreciation_rate is not None else RISK_FREE_RATE
 
     daily_pf_values = compute_portfolio_value_over_quarters(
         trade_results,
@@ -517,7 +517,7 @@ def _simulate_and_compute(
         last_quarter,
         INITIAL_CAPITAL,
         entry_price_window=entry_price_window,
-        risk_free_rate_annual=risk_free_rate,
+        risk_free_rate_annual=cash_appreciation_rate,
     )
 
     if daily_pf_values is not None and not daily_pf_values.empty:

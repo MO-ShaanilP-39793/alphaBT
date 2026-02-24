@@ -115,7 +115,7 @@ entry_price_window: 3
 # - null (default): Uses the global default from config.defaults (currently 6.5%)
 # - 0: Disable cash appreciation (cash stays flat)
 # - Any positive float: Override rate (e.g., 0.07 for 7%)
-risk_free_rate: null
+cash_appreciation_rate: null
 
 # =============================================================================
 # TP/SL MODE CONFIGURATION
