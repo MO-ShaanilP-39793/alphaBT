@@ -655,7 +655,7 @@ def _save_results_and_report(
         Path to the output directory.
     """
     trade_results = results['trade_results']
-    equity_curve = results['daily_pf_values']
+    daily_pf_values = results['daily_pf_values']
     first_quarter = results['first_quarter']
     last_quarter = results['last_quarter']
     data_issues = results.get('data_issues')
@@ -685,14 +685,14 @@ def _save_results_and_report(
         comparison_df = compute_portfolio_vs_index(
             trade_results, price_data, index_data,
             first_quarter, last_quarter, INITIAL_CAPITAL,
-            daily_pf_values=equity_curve,
+            daily_pf_values=daily_pf_values,
         )
     else:
         logger.info("Skipping index comparison (no index data path specified)")
 
     # Generate report
-    if config.generate_report and equity_curve is not None and not equity_curve.empty:
-        daily_pf = equity_curve.reset_index()
+    if config.generate_report and daily_pf_values is not None and not daily_pf_values.empty:
+        daily_pf = daily_pf_values.reset_index()
         col_map = {
             daily_pf.columns[0]: 'date',
             'Total_Portfolio_Value': 'portfolio_value',
@@ -789,7 +789,7 @@ def run_backtest(config_path: str = DEFAULT_CONFIG_PATH) -> Optional[tuple[str, 
     # -------------------------------------------------------------------------
     # Summary
     # -------------------------------------------------------------------------
-    equity_curve = results['daily_pf_values']
+    daily_pf_values = results['daily_pf_values']
     trade_results = results['trade_results']
 
     logger.info("=" * 60)
@@ -798,7 +798,7 @@ def run_backtest(config_path: str = DEFAULT_CONFIG_PATH) -> Optional[tuple[str, 
     logger.info("All outputs saved to: %s", output_dir)
     logger.info("Files generated:")
     logger.info("  - config_used.yaml (configuration traceability)")
-    if config.generate_report and equity_curve is not None and not equity_curve.empty:
+    if config.generate_report and daily_pf_values is not None and not daily_pf_values.empty:
         logger.info("  - backtest_report.xlsx (metrics, charts, trade data — all in one)")
     logger.info("  - backtest_log.txt (full execution log)")
     
@@ -817,9 +817,9 @@ def run_backtest(config_path: str = DEFAULT_CONFIG_PATH) -> Optional[tuple[str, 
     else:
         logger.info("Total execution time: %.2fs", seconds)
     
-    return output_dir, trade_results, equity_curve
+    return output_dir, trade_results, daily_pf_values
 
 
 if __name__ == '__main__':
     # Hari Om
-    output_dir, portfolio_results, equity_curve = run_backtest()
+    output_dir, portfolio_results, daily_pf_values = run_backtest()
