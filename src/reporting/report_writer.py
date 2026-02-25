@@ -100,7 +100,6 @@ def generate_backtest_report(
     output_path: Optional[str] = None,
     sub_periods: Optional[list[list[int]]] = None,
     input_frequency: str = "daily",
-    report_title: str = "Backtest Report",
     data_issues: Optional[pd.DataFrame] = None,
     first_quarter: Optional[int] = None,
     last_quarter: Optional[int] = None,

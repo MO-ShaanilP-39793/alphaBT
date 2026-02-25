@@ -691,7 +691,7 @@ def _save_results_and_report(
         logger.info("Skipping index comparison (no index data path specified)")
 
     # Generate report
-    if config.generate_report and daily_pf_values is not None and not daily_pf_values.empty:
+    if config.generate_report:
         daily_pf = daily_pf_values.reset_index()
         col_map = {
             daily_pf.columns[0]: 'date',
@@ -700,10 +700,10 @@ def _save_results_and_report(
             'quarter': 'quarter',
         }
         daily_pf = daily_pf.rename(columns=col_map)
-        if 'cash_in_hand' in daily_pf.columns:
-            daily_pf['cash_ratio'] = daily_pf['cash_in_hand'] / daily_pf['portfolio_value']
-
-        report_path = os.path.join(output_dir, 'backtest_report.xlsx')
+        daily_pf['cash_ratio'] = daily_pf['cash_in_hand'] / daily_pf['portfolio_value']
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        report_path = os.path.join(output_dir, f'backtest_report_{timestamp}.xlsx')
         generate_backtest_report(
             daily_pf=daily_pf,
             trade_results=trade_results,
@@ -711,13 +711,12 @@ def _save_results_and_report(
             output_path=report_path,
             sub_periods=config.report_sub_periods,
             input_frequency="daily",
-            report_title="Backtest Report",
             data_issues=data_issues,
             first_quarter=first_quarter,
             last_quarter=last_quarter,
         )
-    elif config.generate_report:
-        logger.info("Skipping report (no equity curve data available)")
+    else:
+        logger.info("Skipping report generation.")
 
     return output_dir
 
