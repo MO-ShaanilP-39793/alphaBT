@@ -76,7 +76,7 @@ def compute_portfolio_performance(returns_df: pd.DataFrame, input_frequency: str
 
     strategy_returns_df = pd.DataFrame(
         strategy_returns,
-        index=["G-Rs100", "AReturns", "ARisk", "Sharpe", "DDown", "Sortino",
+        index=["G-Rs100", "AReturns", "ARisk", "Ret/Risk", "DDown", "Sortino",
                "Skewness", "Kurtosis", "%Up_Periods", "%Down_Periods"],
         columns=returns_df.columns
     )

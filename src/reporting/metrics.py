@@ -47,16 +47,18 @@ def compute_portfolio_metrics(daily_pf: pd.DataFrame, risk_free_rate: float = RI
     daily_vol = df['daily_return'].std()
     annualized_vol = daily_vol * np.sqrt(TRADING_DAYS_PER_YEAR)
 
-    # Sharpe Ratio
+    # Sharpe Ratio (excess-return: subtracts risk-free rate)
     excess_return = cagr - risk_free_rate
     sharpe = excess_return / annualized_vol if annualized_vol > 0 else 0
 
-    # Sortino Ratio
-    target_return = risk_free_rate / TRADING_DAYS_PER_YEAR
-    downside_diff = df['daily_return'] - target_return
-    downside_diff = np.where(downside_diff < 0, downside_diff, 0)
-    downside_dev = np.sqrt(np.mean(downside_diff**2)) * np.sqrt(TRADING_DAYS_PER_YEAR)
-    sortino = excess_return / downside_dev if downside_dev > 0 else 0
+    # Sortino Ratio (matches periodic_returns: ann_return / downside_dev, target=0)
+    negative_returns = df['daily_return'].dropna()
+    negative_returns = negative_returns[negative_returns < 0]
+    downside_dev = (
+        negative_returns.std() * np.sqrt(TRADING_DAYS_PER_YEAR)
+        if len(negative_returns) > 1 else 0
+    )
+    sortino = cagr / downside_dev if downside_dev > 0 else 0
 
     # Maximum Drawdown (shared implementation)
     mdd = compute_max_drawdown(daily_pf)
@@ -87,7 +89,7 @@ def compute_portfolio_metrics(daily_pf: pd.DataFrame, risk_free_rate: float = RI
         'total_return_pct': round(total_return * 100, 2),
         'cagr_pct': round(cagr * 100, 2),
         'volatility_pct': round(annualized_vol * 100, 2),
-        'sharpe_ratio': round(sharpe, 3),
+        'sharpe_ratio_ex_Rf': round(sharpe, 3),
         'sortino_ratio': round(sortino, 3),
         'max_drawdown_pct': round(max_drawdown * 100, 2),
         'calmar_ratio': round(calmar, 3),
