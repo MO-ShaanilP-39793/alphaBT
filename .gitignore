@@ -67,3 +67,8 @@ src/strategy_grid_config.yaml
 
 # Log files
 *.log
+
+# Data
+*.csv
+*.parquet
+*.xlsx
