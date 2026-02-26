@@ -310,10 +310,10 @@ def select_and_weight_stocks(
             )
         elif weighting_scheme == 'use_category_weights':
             # Category-based weighting: divide cat_weight by number of stocks in that category per quarter
-            # Group by quarter and cat, then divide cat_weight by count
-            result_df['stock_weight'] = result_df.groupby(['quarter', 'cat']).apply(
-                lambda g: g['cat_weight'] / len(g)
-            ).reset_index(level=[0, 1], drop=True)
+            # Group by quarter and cat, then divide cat_weight by count (use transform for Series alignment)
+            result_df['stock_weight'] = result_df.groupby(['quarter', 'cat'])['cat_weight'].transform(
+                lambda x: x / len(x)
+            )
         
         base_cols = ['quarter', 'co_name', 'cat', 'selection_cat', 'weight_cat', 'stock_weight']
         # Include cat_weight for informational purposes when using category weights
