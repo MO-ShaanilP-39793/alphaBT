@@ -223,6 +223,11 @@ Sharpe Ratio = (CAGR - Risk-Free Rate) / Volatility
 
 **Why it matters**: Adjusts for risk – a 30% return with 50% vol could be worse than 15% return with 10% vol.
 
+> **Two variants in the report.** The `portfolio_metrics` sheet reports `sharpe_ratio_ex_Rf` using
+> the excess-return formula above. The `periodic_returns` sheet reports `Ret/Risk`, which is
+> `AReturns / ARisk` without subtracting the risk-free rate. Both are useful — the first measures
+> reward per unit of risk above the risk-free alternative; the second measures raw return efficiency.
+
 ---
 
 ### Sortino Ratio

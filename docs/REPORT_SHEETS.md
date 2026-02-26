@@ -47,8 +47,8 @@ Standalone portfolio performance summary (no benchmark needed).
 | `total_return_pct` | Total cumulative return (%) |
 | `cagr_pct` | Compound Annual Growth Rate (%) |
 | `volatility_pct` | Annualized volatility (%) |
-| `sharpe_ratio` | Sharpe ratio (risk-free rate = 6.5%) |
-| `sortino_ratio` | Sortino ratio (downside deviation only) |
+| `sharpe_ratio_ex_Rf` | Sharpe ratio using excess return: `(CAGR − Rf) / vol`, Rf = 6.5% |
+| `sortino_ratio` | Sortino ratio: `CAGR / downside_dev`, downside_dev = std of negative daily returns × √252 |
 | `max_drawdown_pct` | Maximum peak-to-trough drawdown (%) |
 | `calmar_ratio` | CAGR / Max Drawdown |
 | `var_95_pct` | 95% Value at Risk — daily (%) |
@@ -87,9 +87,9 @@ Since-inception and optional sub-period performance statistics. Multiple section
 | `G-Rs100` | Growth of ₹100 |
 | `AReturns` | Annualized return |
 | `ARisk` | Annualized risk (volatility) |
-| `Sharpe` | Sharpe ratio |
+| `Ret/Risk` | Return-to-risk ratio: `AReturns / ARisk` (no risk-free rate subtracted) |
 | `DDown` | Maximum drawdown |
-| `Sortino` | Sortino ratio |
+| `Sortino` | Sortino ratio: `AReturns / downside_dev` (no risk-free rate subtracted) |
 | `Skewness` | Return distribution skewness |
 | `Kurtosis` | Return distribution kurtosis |
 | `%Up_Periods` | Percentage of positive months |
@@ -172,7 +172,14 @@ Per-quarter trade breakdown by category.
 | `avg_holding_period_TP` | Average holding period for TP exits |
 | `{cat}_avg_hp` | Average holding period per category |
 | `{cat}_return` | Average return per category |
-| `portfolio_return` | Aggregate portfolio return for the quarter |
+| `portfolio_return` | Aggregate portfolio return for the quarter (stock-selection attribution; see note below) |
+
+> **`portfolio_return` here is a stock-selection attribution metric**, not the realised portfolio return.
+> It is computed as `Σ(stock_return × stock_weight)` — a weighted sum of individual trade-level
+> returns (`(exit_price − entry_price) / entry_price`) using the initial capital allocation weights.
+> This deliberately **excludes cash drag**, mid-quarter rebalancing effects, and entry-phase
+> mark-to-market behaviour. For the true realised portfolio return (which includes all of these),
+> see `Portfolio_Return` in the [`quarterly_alpha`](#9-quarterly_alpha) sheet.
 
 ---
 
@@ -183,11 +190,27 @@ Per-quarter outperformance vs benchmark with summary statistics appended at the 
 | Column | Description |
 |--------|-------------|
 | `Quarter` | Quarter code or summary label |
-| `Portfolio_Return` | Portfolio return for the quarter (%) |
+| `Portfolio_Return` | Realised portfolio return for the quarter (see note below) |
 | `Benchmark_Return` | Benchmark return for the quarter (%) |
 | `Outperformance` | Alpha = Portfolio − Benchmark (%) |
 
 Summary rows at the bottom include: Average, Median, Std Dev, Min, Max, % Outperforming.
+
+> **`Portfolio_Return` here is the true realised portfolio return**, computed by compounding
+> daily percentage changes of the total portfolio value (`∏(1 + daily_return) − 1`).
+> Because the portfolio value includes both stock positions and cash holdings, this figure
+> accounts for cash drag, mid-quarter exits to cash, risk-free-rate appreciation on idle cash,
+> and the entry-phase flat-valuation window. It will therefore differ from the
+> `portfolio_return` in [`quarter_analysis`](#8-quarter_analysis), which is a pure
+> stock-selection metric using fixed initial weights.
+>
+> **Why the two differ** (in order of typical impact):
+> 1. **Cash component** — daily portfolio value includes uninvested cash and post-exit proceeds;
+>    the trade-level weighted sum ignores cash entirely.
+> 2. **Dynamic effective weights** — as stocks exit mid-quarter, remaining positions' weights
+>    shift relative to total portfolio value; the daily series captures this, the static sum does not.
+> 3. **Entry-phase valuation** — during the entry window, positions are held at entry price
+>    (not mark-to-market), which mutes early daily returns.
 
 ---
 
@@ -298,6 +321,191 @@ Daily comparison of portfolio and index performance. Only present when index dat
 ### 17. `data_quality_issues`
 
 Log of data anomalies detected during validation. Only present if issues were found.
+
+---
+
+## Methodological Notes
+
+Cross-sheet nuances, implicit conventions, and edge-case behaviours that are useful to know
+when interpreting the report or building downstream analysis on top of it.
+
+---
+
+### Date ranges differ between `portfolio_metrics` and all other analytics sheets
+
+`portfolio_metrics` is computed directly from `daily_pf` (the full equity curve starting on
+day 1). Every other analytics sheet is computed from `combined_returns`, which is built via
+`portfolio_value.pct_change().dropna()` — dropping the first day because there is no prior
+value to compute a return from. If benchmark data starts later than portfolio data, the
+`.dropna()` after `pd.concat([portfolio, benchmark], axis=1)` can trim additional early dates.
+
+Consequence: CAGR and other annualized figures on `portfolio_metrics` cover a slightly
+different period than `AReturns` on `periodic_returns`.
+
+(`report_writer.py` line 137 — `pct_change().dropna()`; line 147 — `concat(...).dropna()`)
+
+---
+
+### Three different "alpha" measures across sheets
+
+| Sheet | Column | What it measures | Scale |
+|---|---|---|---|
+| `benchmark_metrics` | `alpha_pct` | Total cumulative outperformance over the full backtest, from portfolio value series | Pre-scaled (e.g., 25.5 = 25.5 pp) |
+| `quarterly_alpha` | `Outperformance` | Per-quarter compounded return difference from daily returns | Decimal (e.g., 0.05), displayed via Excel `%` format |
+| `periodic_returns` | (implicit: Portfolio `AReturns` − Benchmark `AReturns`) | Difference of geometrically annualized returns | Pre-scaled ×100 |
+
+These cannot be reconciled: quarterly outperformances do not sum to total alpha (compounding
+is non-linear), and an annualized return difference is a different quantity from both.
+
+(`metrics.py` lines 201–203; `analytics.py` lines 332–334; `analytics.py` lines 52–53)
+
+---
+
+### CAGR annualization: calendar days vs trading days
+
+`portfolio_metrics` annualizes via `(final/initial)^(365.25/calendar_days) − 1`
+(`utils/metrics.py`). `periodic_returns` annualizes via `(1 + cum_ret)^(252/trading_days) − 1`
+(`_helpers.py` line 67). These diverge when data has holiday gaps or spans partial years.
+
+---
+
+### Max drawdown: price-level vs log-return reconstruction
+
+`portfolio_metrics` computes drawdown from portfolio values directly (`utils/metrics.py`
+lines 77–81). `periodic_returns` reconstructs drawdowns from log-returns and applies an
+intermediate `np.round(..., 4)` (`_helpers.py` lines 46–50). Mathematically equivalent,
+but the early rounding can produce edge-case differences of ±0.01%.
+
+---
+
+### Forward-fill of index data creates phantom 0% benchmark return days
+
+When the portfolio trades on a day the benchmark index doesn't (exchange holiday mismatch),
+`simulation.py` line 340 forward-fills the last available index value (`reindex(pf_dates).ffill()`).
+This produces artificial 0% index-return days that systematically deflate beta and
+correlation, and inflate tracking error — proportional to the number of mismatched holidays.
+
+---
+
+### Entry-phase flat valuation compresses measured volatility
+
+During the first `entry_price_window` (default 3) trading days of each quarter, all stock
+positions are valued at `entry_price × shares` rather than market close (`simulation.py`
+lines 125–126). The equity curve shows 0% return for those days. Over a full year this
+contributes ~12 artificial zero-return days, slightly compressing measured volatility and
+inflating Sharpe/Sortino ratios computed from the daily equity curve.
+
+---
+
+### SL is always checked before TP on same-candle days
+
+In `tpsl.py` lines 327–338, stop loss is evaluated before take profit on each trading day.
+If a single candle spans both thresholds (`low ≤ SL` and `high ≥ TP`), the SL deterministically
+wins. Without tick data, which was hit first is unknowable. This introduces a systematic
+pessimistic bias in strategy returns.
+
+---
+
+### Regime exit can override a profitable TP
+
+In `tpsl.py`, regime-based exit is checked *before* SL/TP (line 316). If both fire on the
+same day, exit price is the close (often worse than `tp_price`), silently overriding a
+profitable take-profit exit.
+
+---
+
+### Cash drag is real but invisible in `quarter_analysis`
+
+When `risk_free_rate_annual` is `None` (the default), idle cash earns nothing. Early SL exits
+can leave significant capital as dead weight for the rest of the quarter. This drag is reflected
+in the daily equity curve (and therefore in `quarterly_alpha`'s `Portfolio_Return`), but is
+completely invisible in `quarter_analysis`'s `portfolio_return`, which only considers
+`Σ(stock_return × stock_weight)`. See the notes on [quarter_analysis](#8-quarter_analysis)
+and [quarterly_alpha](#9-quarterly_alpha) for full details.
+
+---
+
+### Calendar year and monthly filters silently drop partial periods
+
+- **Calendar year returns**: years with ≤ 230 trading days (daily) or ≤ 11 months (monthly)
+  are excluded. First and last years of the backtest are typically partial and will be dropped
+  without annotation. (`analytics.py` lines 132–134)
+- **Monthly returns** (used for `up_down_months`, distribution chart, box plot): months with
+  ≤ 15 trading days are excluded. The first and last months of the backtest are almost always
+  dropped. (`analytics.py` lines 195–197)
+
+---
+
+### `holding_period` is calendar days from a synthetic midpoint
+
+`holding_period` in `trade_results` is computed as `(exit_date − entry_date).days`
+(`tpsl.py` line 346), in **calendar days**. The anchor `entry_date` is the midpoint of
+the entry window (e.g., day 2 of a 3-day window), not the first day of capital deployment.
+This undercounts actual capital-at-risk time by `entry_price_window // 2` calendar days.
+
+---
+
+### Variable quarter lengths
+
+Quarter boundaries are calendar dates (e.g., Feb 15 – May 30), mapped to actual trading
+days via price data. Depending on weekday alignment and market holidays, each quarter has
+a different number of trading days (~60–65). Quarter-over-quarter return comparisons are
+not on equal footing, though this is not surfaced in the report.
+
+---
+
+### Trailing returns use fixed trading-day approximations
+
+"1-month" trailing = 21 trading days, "3-month" = 63 trading days, etc.
+(`analytics.py` lines 158–160, using `int(252/12)`, `int(252/4)`). These are approximations,
+not calendar-month boundaries. Users comparing against external sources that use calendar
+periods will see small discrepancies.
+
+---
+
+### Decimal vs ×100 scaling across sheets
+
+Almost all analytics sheets store return values pre-multiplied by 100 (e.g., `15.23` for
+15.23%) and use Excel format `0.00`. The exception is `quarterly_alpha`, which stores
+raw decimals (e.g., `0.1523`) and uses Excel `0.0%` format. Both display correctly in Excel,
+but copying data across sheets for external analysis requires awareness of the 100× difference.
+
+---
+
+### `quarterly_alpha` summary rows mix text and numeric types
+
+The summary rows at the bottom of `quarterly_alpha` (Total Quarters, Outperformance Quarters)
+store integer counts as `str(...)`, not numbers. These sit in a column formatted as `0.0%`,
+which means Excel ignores the format for those cells. This can break sorting or filtering
+on the `Portfolio_Return` column.
+
+(`analytics.py` lines 360–367)
+
+---
+
+### Down-period counting includes zero-return days
+
+`periodic_returns` defines `%Down_Periods = 100 − %Up_Periods`, where up is strict `> 0`.
+Days with exactly 0% return (including the ~12 entry-phase flat days per year) are counted
+as down periods. `portfolio_metrics` reports only `positive_days_pct` and uses a NaN-excluded
+denominator, making the two not directly reconcilable.
+
+(`analytics.py` lines 61–62; `metrics.py` lines 77–78)
+
+---
+
+### `portfolio_metrics` and `benchmark_metrics` have no Excel number format
+
+These two sheets set only column width, not a number format (`report_writer.py` lines 456–459).
+Values display with full floating-point precision rather than the `0.00` used on other sheets.
+
+---
+
+### Hardcoded `252` in `compute_benchmark_metrics`
+
+Tracking error and information ratio use a literal `252` instead of the imported
+`TRADING_DAYS_PER_YEAR` constant (`metrics.py` lines 182, 185). Currently they agree, but
+this is a latent bug if the constant is ever changed.
 
 ---
 
