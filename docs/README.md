@@ -18,6 +18,12 @@
 | [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md) | Complete YAML parameter reference for `strategy_config.yaml` |
 | [STRATEGIC_OPTIONS.md](STRATEGIC_OPTIONS.md) | Strategy selection guidance — choosing modes, categories, and TP/SL approaches |
 
+## Portfolio Selection
+
+| Document | Description |
+|----------|-------------|
+| `get_portfolio.py` | Forward-looking stock selection — outputs a portfolio CSV without backtesting |
+
 ## Tuning & Optimization
 
 | Document | Description |
