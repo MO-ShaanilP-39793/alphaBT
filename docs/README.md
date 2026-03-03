@@ -46,6 +46,18 @@
 | [dynamic_levels_reference.md](dynamic_levels_reference.md) | `backtest/dynamic_levels.py` — ATR, pivot points, index functions |
 | [model_training_targets.md](model_training_targets.md) | ML target creation methodology |
 
+## Discussion Papers
+
+| Document | Description |
+|----------|-------------|
+| [QUARTERLY_RESULTS_AND_SIGNAL_TIMING.md](QUARTERLY_RESULTS_AND_SIGNAL_TIMING.md) | Signal timing, SEBI deadlines, and whether quarterly results are priced in by entry |
+
+## Deep Dives
+
+| Document | Description |
+|----------|-------------|
+| [CASH_APPRECIATION.md](CASH_APPRECIATION.md) | Practitioner's guide to realising the cash appreciation assumption — instruments, operations, and gap analysis |
+
 ## Proposals
 
 | Document | Description |
