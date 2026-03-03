@@ -30,9 +30,9 @@ fixed:
   # Set to false if data has already been validated to skip validation step
   validate_input_data: false
   
-  # Risk-free rate applied to idle cash (exit proceeds + uninvested capital).
+  # Cash appreciation rate applied to idle cash (exit proceeds + uninvested capital).
   # null = use global default (6.5%), 0 = no cash appreciation.
-  risk_free_rate: null
+  cash_appreciation_rate: null
 
   # Report generation (keep disabled during tuning for speed)
   generate_report: false
