@@ -28,6 +28,7 @@ After optimization:
 
 import argparse
 import shutil
+import traceback
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -182,7 +183,13 @@ def set_trial_user_attributes(
         daily_pf_values = results.get('daily_pf_values')
         if daily_pf_values is not None and not daily_pf_values.empty:
             daily_pf = daily_pf_values.reset_index()
-            daily_pf.columns = ['date', 'portfolio_value', 'quarter']
+            col_map = {
+                daily_pf.columns[0]: 'date',
+                'Total_Portfolio_Value': 'portfolio_value',
+                'Cash_In_Hand': 'cash_in_hand',
+                'quarter': 'quarter',
+            }
+            daily_pf = daily_pf.rename(columns=col_map)
             
             # Number of trades
             trial.set_user_attr('n_trades', len(trade_results))
@@ -362,6 +369,12 @@ def _parse_objective_config(optuna_config: dict) -> dict:
         }
 
 
+# Maximum number of consecutive trial exceptions before aborting the study.
+# Prevents silently burning through thousands of trials when every trial hits
+# the same systematic error (e.g. a schema change, missing column, etc.).
+_MAX_CONSECUTIVE_FAILURES = 5
+
+
 def create_objective(tuning_config: dict, data_cache: DataCache, 
                      obj_config: dict, suppress_warnings: bool = True):
     """
@@ -388,16 +401,19 @@ def create_objective(tuning_config: dict, data_cache: DataCache,
     # Single penalty (float) for single-obj, tuple for multi-obj
     failure_return = tuple(failure_penalties) if is_multi_obj else failure_penalties[0]
     
+    # Mutable counter shared across trials via closure
+    _consecutive_exceptions = [0]
+    
     def objective(trial: optuna.Trial):
         """
         Objective function that samples parameters, runs backtest,
         and returns the optimization objective(s).
         """
-        with warnings.catch_warnings():
-            if suppress_warnings:
-                warnings.simplefilter("ignore")
-            
-            try:
+        try:
+            with warnings.catch_warnings():
+                if suppress_warnings:
+                    warnings.simplefilter("ignore")
+                
                 # 1. Sample parameters from search space
                 sampled_params = sample_parameters(trial, tuning_config)
                 
@@ -423,7 +439,13 @@ def create_objective(tuning_config: dict, data_cache: DataCache,
                 
                 # Prepare daily_pf in expected format
                 daily_pf = daily_pf_values.reset_index()
-                daily_pf.columns = ['date', 'portfolio_value', 'quarter']
+                col_map = {
+                    daily_pf.columns[0]: 'date',
+                    'Total_Portfolio_Value': 'portfolio_value',
+                    'Cash_In_Hand': 'cash_in_hand',
+                    'quarter': 'quarter',
+                }
+                daily_pf = daily_pf.rename(columns=col_map)
                 
                 # 5. Compute objective value(s)
                 if is_multi_obj:
@@ -442,6 +464,9 @@ def create_objective(tuning_config: dict, data_cache: DataCache,
                     
                     # 6. Store user attributes
                     set_trial_user_attributes(trial, sampled_params, results)
+                    
+                    # Reset consecutive failure counter on success
+                    _consecutive_exceptions[0] = 0
                     return final_values
                 else:
                     objective_value = compute_objective(
@@ -454,15 +479,34 @@ def create_objective(tuning_config: dict, data_cache: DataCache,
                     
                     # 6. Store user attributes
                     set_trial_user_attributes(trial, sampled_params, results)
+                    
+                    # Reset consecutive failure counter on success
+                    _consecutive_exceptions[0] = 0
                     return objective_value
                 
-            except Exception as e:
-                # Broad catch intentional: Optuna convention — failed trials return
-                # penalty value rather than crashing the study. With backtest_core()
-                # no longer swallowing errors, this is the single catch point for all
-                # failures in the backtest pipeline.
-                warnings.warn(f"Trial {trial.number} failed with error: {str(e)}")
-                return failure_return
+        except Exception as e:
+            _consecutive_exceptions[0] += 1
+            
+            # Always log the error via the logger (not warnings — those get suppressed)
+            logger.error(
+                "Trial %d failed (%d consecutive): %s",
+                trial.number, _consecutive_exceptions[0], e,
+            )
+            logger.debug(
+                "Trial %d traceback:\n%s",
+                trial.number, traceback.format_exc(),
+            )
+            
+            # If the first N trials all crash, this is a systematic error.
+            # Abort immediately instead of silently burning through all trials.
+            if _consecutive_exceptions[0] >= _MAX_CONSECUTIVE_FAILURES:
+                raise RuntimeError(
+                    f"{_consecutive_exceptions[0]} consecutive trials failed with "
+                    f"exceptions. This is likely a systematic error — aborting study. "
+                    f"Last error: {e}"
+                ) from e
+            
+            return failure_return
     
     return objective
 
