@@ -188,7 +188,22 @@ Wraps `backtest_core()` with:
 
 For each quarter: allocates capital via weights → tracks daily mark-to-market → chains quarters.
 
-**Output:** Equity curve DataFrame: `[date, Total_Portfolio_Value, quarter]`.
+**Output:** Equity curve DataFrame: `[date, Total_Portfolio_Value, Cash_In_Hand, quarter]`.
+
+> **Cash appreciation note:** When `risk_free_rate_annual` is set, idle cash (from uninvested capital
+> and exit proceeds) appreciates at a daily rate derived from the annual rate using **trading days**
+> (252), not calendar days (365):
+>
+> ```
+> r_daily = (1 + risk_free_rate_annual) ^ (1/252) - 1
+> ```
+>
+> Because the equity curve only contains trading days (sourced from price data — weekends and
+> holidays are excluded), the rate is applied once per trading day. This means cash does **not**
+> receive separate appreciation on weekends, but the math is intentionally correct: applying a
+> 1/252-based rate across ~252 trading days in a year compounds back to the full annual rate.
+> Using a calendar-day rate (1/365) on only ~252 trading days would systematically undershoot the
+> target annual return.
 
 ### D. Simulation → Reporting
 
