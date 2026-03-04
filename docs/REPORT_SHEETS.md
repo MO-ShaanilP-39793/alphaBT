@@ -99,7 +99,7 @@ Since-inception and optional sub-period performance statistics. Multiple section
 
 ### 4. `rolling_returns`
 
-Distribution statistics for rolling 1-year, 3-year, and 5-year annualized returns. Up to three sections stacked vertically.
+Distribution statistics for rolling 3-month, 6-month (raw cumulative), and 1-year, 3-year, 5-year (annualized) returns. Up to five sections stacked vertically.
 
 | Column | Description |
 |--------|-------------|

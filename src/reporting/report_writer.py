@@ -189,6 +189,10 @@ def generate_backtest_report(
                 sub_period_dfs.append(sp_df)
 
     logger.info("Computing rolling performance...")
+    rolling_3m = compute_rolling_performance(combined_returns, input_frequency, 3, "monthly", annualize=False)
+    rolling_3m.index.name = "Rolling_3M" if not rolling_3m.empty else None
+    rolling_6m = compute_rolling_performance(combined_returns, input_frequency, 6, "monthly", annualize=False)
+    rolling_6m.index.name = "Rolling_6M" if not rolling_6m.empty else None
     rolling_1y = compute_rolling_performance(combined_returns, input_frequency, 1, "yearly")
     rolling_1y.index.name = "Rolling_1Y" if not rolling_1y.empty else None
     rolling_3y = compute_rolling_performance(combined_returns, input_frequency, 3, "yearly")
@@ -309,6 +313,16 @@ def generate_backtest_report(
 
         # ----- Sheet: rolling_returns -----
         start_row = 0
+        if not rolling_3m.empty:
+            rolling_3m.reset_index().to_excel(
+                writer, startrow=start_row, sheet_name="rolling_returns", index=False
+            )
+            start_row += len(rolling_3m) + 5
+        if not rolling_6m.empty:
+            rolling_6m.reset_index().to_excel(
+                writer, startrow=start_row, sheet_name="rolling_returns", index=False
+            )
+            start_row += len(rolling_6m) + 5
         if not rolling_1y.empty:
             rolling_1y.reset_index().to_excel(
                 writer, startrow=start_row, sheet_name="rolling_returns", index=False

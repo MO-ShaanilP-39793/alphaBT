@@ -85,8 +85,16 @@ def compute_portfolio_performance(returns_df: pd.DataFrame, input_frequency: str
     return strategy_returns_df.transpose()
 
 
-def compute_rolling_performance(returns_df: pd.DataFrame, input_frequency: str = "daily", roll_period: int = 1, roll_type: str = "yearly") -> pd.DataFrame:
-    """Compute rolling returns statistics with probability distributions."""
+def compute_rolling_performance(returns_df: pd.DataFrame, input_frequency: str = "daily", roll_period: int = 1, roll_type: str = "yearly", annualize: bool = True) -> pd.DataFrame:
+    """Compute rolling returns statistics with probability distributions.
+
+    Parameters
+    ----------
+    annualize : bool, default True
+        When True, percentile stats and probability buckets use annualized
+        returns.  When False (useful for short windows like 3M / 6M), the
+        raw cumulative rolling returns are reported instead.
+    """
     input_frequency = input_frequency.strip().lower()
     roll_type = roll_type.strip().lower()
 
@@ -99,16 +107,21 @@ def compute_rolling_performance(returns_df: pd.DataFrame, input_frequency: str =
         return pd.DataFrame()
 
     rolling_returns = returns_df.add(1).rolling(roll_period_scaled).apply(np.prod).dropna().sub(1)
-    ann_rolling_returns = rolling_returns.apply(lambda x: (1 + x) ** annualization_factor).sub(1)
+
+    if annualize:
+        display_returns = rolling_returns.apply(lambda x: (1 + x) ** annualization_factor).sub(1)
+    else:
+        display_returns = rolling_returns
 
     summary_df = rolling_returns.describe()
     summary_df = summary_df.drop("std", axis=0, errors='ignore')
-    summary_df.iloc[1:, :] = summary_df.iloc[1:, :].apply(lambda x: (1 + x) ** annualization_factor).sub(1)
+    if annualize:
+        summary_df.iloc[1:, :] = summary_df.iloc[1:, :].apply(lambda x: (1 + x) ** annualization_factor).sub(1)
 
-    summary_df.loc["<0%P"] = _compute_probability_buckets(ann_rolling_returns, upper_bound=0)
-    summary_df.loc["0-10%P"] = _compute_probability_buckets(ann_rolling_returns, lower_bound=0, upper_bound=0.1)
-    summary_df.loc["10-20%P"] = _compute_probability_buckets(ann_rolling_returns, lower_bound=0.1, upper_bound=0.2)
-    summary_df.loc[">20%P"] = _compute_probability_buckets(ann_rolling_returns, lower_bound=0.2)
+    summary_df.loc["<0%P"] = _compute_probability_buckets(display_returns, upper_bound=0)
+    summary_df.loc["0-10%P"] = _compute_probability_buckets(display_returns, lower_bound=0, upper_bound=0.1)
+    summary_df.loc["10-20%P"] = _compute_probability_buckets(display_returns, lower_bound=0.1, upper_bound=0.2)
+    summary_df.loc[">20%P"] = _compute_probability_buckets(display_returns, lower_bound=0.2)
 
     summary_df.iloc[1:, :] = summary_df.iloc[1:, :] * 100
     summary_df = np.round(summary_df, 2)
