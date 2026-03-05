@@ -374,6 +374,7 @@ def build_config(fixed_config: dict, sampled_params: dict) -> dict:
     config['top_k_config'] = {
         'k': get('top_k_k', DEFAULT_TOP_K),
         'weighting_scheme': get('top_k_weighting_scheme', DEFAULT_TOP_K_WEIGHTING),
+        'category_caps': get('top_k_category_caps', None),
     }
     config['sort_by'] = get('sort_by', DEFAULT_SORT_BY)
     config['min_prob_threshold'] = get('min_prob_threshold')

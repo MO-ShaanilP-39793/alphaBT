@@ -310,6 +310,8 @@ selection_type: 'top_k'
 top_k_config:
   k: 30                       # Select top 30 stocks
   weighting_scheme: 'equal'   # Currently only option
+  category_caps:              # Optional: limit stocks per mcap category
+    smallcap: 10              # At most 10 smallcap stocks
 ```
 
 #### top_k_config.k
@@ -327,6 +329,29 @@ top_k_config:
 **Valid values**: `'equal'` (only option currently)
 
 **Effect**: Each selected stock gets `1/k` of capital
+
+#### top_k_config.category_caps
+
+**Type**: Dict (string → integer) or `null`
+
+**Default**: `null` (no caps)
+
+**Description**: Optional per-category maximum stock counts. When sorting by `risk_adjusted_probability`, certain mcap categories (e.g., smallcap) may dominate the top-k. Category caps let you limit how many stocks from each category are selected.
+
+**Valid keys**: `largecap`, `midcap`, `smallcap`
+
+**Behavior**: Stocks are sorted globally by the chosen `sort_by` method, then picked top-down. When a category's count reaches its cap, further stocks from that category are skipped. Categories not listed in the dict are uncapped. If fewer than `k` stocks remain after applying caps, a warning is emitted and the portfolio is smaller.
+
+**Requires**: `category` column in input data.
+
+**Example**:
+```yaml
+top_k_config:
+  k: 25
+  weighting_scheme: 'equal'
+  category_caps:
+    smallcap: 10    # At most 10 smallcap, rest must be midcap/largecap
+```
 
 ---
 
@@ -727,6 +752,12 @@ top_k:
     type: int
     low: 10
     high: 50
+  category_caps:
+    type: categorical
+    choices:
+      - null                        # No caps
+      - {smallcap: 10}              # Cap smallcap at 10
+      - {smallcap: 8, midcap: 12}   # Cap both
 ```
 
 Sampled only when `selection_type` trial value is `'top_k'`.

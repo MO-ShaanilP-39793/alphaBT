@@ -42,7 +42,8 @@ def select_top_k_stocks(
     k,
     sort_by=DEFAULT_SORT_BY,
     min_prob_threshold=DEFAULT_MIN_PROB_THRESHOLD,
-    weighting_scheme=DEFAULT_TOP_K_WEIGHTING):
+    weighting_scheme=DEFAULT_TOP_K_WEIGHTING,
+    category_caps=None):
     """
     Selects top k stocks per quarter based on probability or risk-adjusted scores.
 
@@ -58,6 +59,11 @@ def select_top_k_stocks(
         If None, no filtering is applied (default).
     - weighting_scheme (str): How to weight selected stocks:
         - 'equal': Each stock gets weight 1/n where n is number of stocks selected for that quarter.
+    - category_caps (dict or None): Optional per-category maximum stock counts.
+        Keys are mcap category names (e.g., 'smallcap', 'midcap', 'largecap'),
+        values are the maximum number of stocks allowed from that category.
+        Categories not listed are uncapped. Requires 'category' column in input.
+        Example: {'smallcap': 10} — at most 10 smallcap stocks per quarter.
 
     Returns:
         pd.DataFrame with columns ['quarter', 'co_name', 'stock_weight']
@@ -78,6 +84,21 @@ def select_top_k_stocks(
     # Check for volatility column if using risk_adjusted_probability method
     if sort_by == 'risk_adjusted_probability' and 'volatility' not in stock_probabilities.columns:
         raise ValueError("sort_by='risk_adjusted_probability' requires 'volatility' column in input dataframe")
+    
+    # Validate category_caps
+    if category_caps is not None:
+        if 'category' not in stock_probabilities.columns:
+            raise ValueError(
+                "category_caps requires 'category' column in input dataframe. "
+                "Input data must include mcap categories (largecap/midcap/smallcap)."
+            )
+        from config.defaults import MCAP_CATEGORIES
+        invalid_cats = set(category_caps.keys()) - set(MCAP_CATEGORIES)
+        if invalid_cats:
+            raise ValueError(
+                f"category_caps keys must be valid mcap categories {MCAP_CATEGORIES}, "
+                f"got invalid: {invalid_cats}"
+            )
     
     # Check if category column exists in input
     has_category = 'category' in stock_probabilities.columns
@@ -110,7 +131,27 @@ def select_top_k_stocks(
                 f"Quarter {quarter}: Requested {k} stocks, but only {available_count} available."
             )
         
-        selected = group.head(k).copy()
+        if category_caps is not None:
+            # Iterative selection with per-category caps
+            cat_counts = {}  # track how many stocks selected per category
+            selected_indices = []
+            for idx, row in group.iterrows():
+                cat = row['category']
+                cap = category_caps.get(cat)  # None means uncapped
+                if cap is not None and cat_counts.get(cat, 0) >= cap:
+                    continue  # skip — this category has hit its cap
+                selected_indices.append(idx)
+                cat_counts[cat] = cat_counts.get(cat, 0) + 1
+                if len(selected_indices) >= k:
+                    break
+            selected = group.loc[selected_indices].copy()
+            if len(selected) < k and available_count >= k:
+                warnings.warn(
+                    f"Quarter {quarter}: Requested {k} stocks, but only {len(selected)} "
+                    f"available after applying category_caps {category_caps}."
+                )
+        else:
+            selected = group.head(k).copy()
         n_selected = len(selected)
         
         # Assign weights based on weighting_scheme

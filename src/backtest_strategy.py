@@ -181,7 +181,8 @@ def run_stock_selection(input_data: pd.DataFrame, category_scheme: str, category
             k=top_k_config.get('k', DEFAULT_TOP_K),
             sort_by=sort_by,
             min_prob_threshold=min_prob_threshold,
-            weighting_scheme=top_k_config.get('weighting_scheme', DEFAULT_TOP_K_WEIGHTING)
+            weighting_scheme=top_k_config.get('weighting_scheme', DEFAULT_TOP_K_WEIGHTING),
+            category_caps=top_k_config.get('category_caps'),
         )
     elif selection_type == 'category_based':
         # Resolve dimensions (backward compatible: fall back to category_scheme)

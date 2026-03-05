@@ -103,6 +103,8 @@ selection_type: 'top_k'           # Simple: pick top N stocks
 top_k_config:
   k: 30                           # Select 30 stocks per quarter
   weighting_scheme: 'equal'       # Equal money across all stocks
+  # category_caps:               # Optional: limit stocks per category
+  #   smallcap: 10               # At most 10 smallcap stocks
 
 sort_by: 'probability'   # Rank by ML probability
 min_prob_threshold: 0.5          # Only consider prob >= 0.5

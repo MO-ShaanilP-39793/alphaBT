@@ -193,6 +193,16 @@ top_k:
     type: categorical
     choices: ['equal']  # Currently only 'equal' supported
 
+  # Optional per-category stock caps (requires 'category' column in input)
+  # Limits how many stocks from each mcap category can be selected.
+  # Use null for no caps, or dict like {smallcap: 10} to cap smallcap at 10.
+  # category_caps:
+  #   type: categorical
+  #   choices:
+  #     - null                      # No caps
+  #     - {smallcap: 10}            # Cap smallcap at 10
+  #     - {smallcap: 8, midcap: 12} # Cap both
+
 # =============================================================================
 # TPSL MODE-SPECIFIC SEARCH SPACES
 # =============================================================================

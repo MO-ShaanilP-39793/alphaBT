@@ -77,6 +77,7 @@ class TopKConfig(BaseModel):
 
     k: int = DEFAULT_TOP_K
     weighting_scheme: str = DEFAULT_TOP_K_WEIGHTING
+    category_caps: Optional[dict[str, int]] = None  # e.g., {'smallcap': 10}
 
 
 class TieredConfig(BaseModel):

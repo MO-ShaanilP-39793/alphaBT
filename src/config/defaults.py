@@ -74,6 +74,7 @@ DEFAULT_TPSL_CATEGORY_DIMENSION = 'selection'
 # Top-k selection
 DEFAULT_TOP_K = 30
 DEFAULT_TOP_K_WEIGHTING = 'equal'
+DEFAULT_TOP_K_CATEGORY_CAPS = None  # No per-category caps by default
 
 # Risk-adjusted ranking epsilon (avoids division-by-zero)
 RISK_ADJUSTED_EPSILON = 1e-8

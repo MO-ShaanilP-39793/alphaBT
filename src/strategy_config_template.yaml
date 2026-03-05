@@ -78,6 +78,12 @@ category_based_selection_weighting_scheme: 'use_category_weights'
 top_k_config:
   k: 30                        # Number of top stocks to select per quarter
   weighting_scheme: 'equal'    # How to weight stocks ('equal' = 1/k weight each)
+  # category_caps:             # Optional: max stocks per mcap category (requires 'category' column)
+  #   smallcap: 10             # At most 10 smallcap stocks (uncapped categories have no limit)
+  #   midcap: 15               # At most 15 midcap stocks
+  # Omit or set to null to disable caps. Only mcap categories are supported:
+  # largecap, midcap, smallcap. Useful when sorting by risk_adjusted_probability
+  # tends to over-select from one category.
 
 # -----------------------------------------------------------------------------
 # Common selection options (used by both selection types)
