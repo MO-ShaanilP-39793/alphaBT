@@ -93,6 +93,43 @@ def _png_image_rows(
     return math.ceil(height_inches / excel_row_height_inches) + padding
 
 
+def _format_monthly_returns_for_excel(monthly_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Format monthly returns DataFrame for Excel export.
+    
+    - Converts Date index to 'MMM YYYY' format (e.g., 'Jan 2020')
+    - Multiplies returns by 100 (0.0234 → 2.34, formatted as 2.34% in Excel)
+    - Rounds to 2 decimal places
+    - Resets index to make Date a column
+    
+    Parameters:
+    - monthly_df: DataFrame with date index and return columns (decimal format)
+    
+    Returns:
+    - DataFrame ready for .to_excel() with index=False
+    """
+    if monthly_df.empty:
+        return monthly_df
+    
+    formatted_df = monthly_df.copy()
+    
+    # Convert date index to 'MMM YYYY' format
+    formatted_df.index = formatted_df.index.strftime('%b %Y')
+    formatted_df.index.name = 'Month'
+    
+    # Convert returns from decimal to percentage (multiply by 100)
+    # Excel percentage format will display 2.34 as '2.34%'
+    formatted_df = formatted_df * 100
+    
+    # Round to 2 decimal places
+    formatted_df = formatted_df.round(2)
+    
+    # Reset index to make Month a column
+    formatted_df = formatted_df.reset_index()
+    
+    return formatted_df
+
+
 def generate_backtest_report(
     daily_pf: pd.DataFrame,
     trade_results: pd.DataFrame,
@@ -152,6 +189,9 @@ def generate_backtest_report(
 
     # Monthly returns (for charts)
     monthly_df = compute_monthly_returns_from_daily(combined_returns, input_frequency)
+
+    # Format monthly returns for Excel sheet
+    monthly_performance_sheet = _format_monthly_returns_for_excel(monthly_df)
 
     # Date range
     data_start = combined_returns.index.min()
@@ -429,6 +469,12 @@ def generate_backtest_report(
 
         charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": box_plot})
 
+        # ----- Sheet: monthly_performance (monthly returns data) -----
+        if not monthly_performance_sheet.empty:
+            monthly_performance_sheet.to_excel(
+                writer, sheet_name="monthly_performance", index=False
+            )
+
         # ----- Sheet: trade_results (raw data) -----
         trade_results.to_excel(
             writer, sheet_name="trade_results", index=False
@@ -473,6 +519,9 @@ def generate_backtest_report(
                 worksheet.set_column('A:Z', 22)
             elif sheet_name == "cash_metrics":
                 worksheet.set_column('A:C', 18, format_decimal)
+            elif sheet_name == "monthly_performance":
+                worksheet.set_column('A:A', 15)  # Month column
+                worksheet.set_column('B:Z', 12, percent_format)  # Return columns
             elif sheet_name not in ["charts", "trade_results",
                                      "daily_portfolio_values", "portfolio_vs_index",
                                      "data_quality_issues"]:
