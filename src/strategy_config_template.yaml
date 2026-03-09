@@ -150,6 +150,22 @@ atr_config:
   period: 14            # Number of days for ATR calculation
   tp_multiplier: 2.0    # Multiplier for take profit distance
   sl_multiplier: 1.5    # Multiplier for stop loss distance
+  # Optional: per-quarter overrides for ATR parameters.
+  # Each quarter key can override any subset of period, tp_multiplier, sl_multiplier.
+  # Quarters without an entry use the base values above.
+  # quarter_overrides:
+  #   202202:
+  #     period: 10
+  #     tp_multiplier: 2.5
+  #     sl_multiplier: 1.0
+  #   202205:
+  #     tp_multiplier: 1.8    # only override multiplier; period stays 14
+  #   202208:
+  #     period: 20
+  #   202211:
+  #     period: 14
+  #     tp_multiplier: 3.0
+  #     sl_multiplier: 2.0
 
 # Pivot-based configuration (used when tp_mode or sl_mode is 'pivot')
 # Uses classic pivot point formula with resistance (R1-R3) and support (S1-S3) levels

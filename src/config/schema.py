@@ -90,6 +90,16 @@ class TieredConfig(BaseModel):
     default_sl_pct: float = DEFAULT_TPSL_FALLBACK_PCT
 
 
+class AtrQuarterOverride(BaseModel):
+    """Per-quarter ATR parameter overrides.  All fields are optional;
+    only the fields present will replace the base AtrConfig values."""
+    model_config = ConfigDict(extra="forbid")
+
+    period: Optional[int] = None
+    tp_multiplier: Optional[float] = None
+    sl_multiplier: Optional[float] = None
+
+
 class AtrConfig(BaseModel):
     """ATR-based TP/SL configuration."""
     model_config = ConfigDict(extra="forbid")
@@ -97,6 +107,24 @@ class AtrConfig(BaseModel):
     period: int = DEFAULT_ATR_PERIOD
     tp_multiplier: float = DEFAULT_ATR_TP_MULTIPLIER
     sl_multiplier: float = DEFAULT_ATR_SL_MULTIPLIER
+    quarter_overrides: Optional[dict[int, AtrQuarterOverride]] = None
+
+    @field_validator("quarter_overrides", mode="before")
+    @classmethod
+    def _coerce_and_validate_quarter_keys(cls, v):
+        if v is None:
+            return v
+        validated: dict[int, AtrQuarterOverride] = {}
+        for key, val in v.items():
+            key = int(key)
+            month = key % 100
+            if month not in {2, 5, 8, 11}:
+                raise ValueError(
+                    f"quarter_overrides key {key} has month {month:02d}; "
+                    f"expected one of 02, 05, 08, 11"
+                )
+            validated[key] = val
+        return validated
 
 
 class PivotConfig(BaseModel):

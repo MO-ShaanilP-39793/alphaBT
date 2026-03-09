@@ -49,6 +49,34 @@ from config.defaults import (
 )
 from utils.quarter import get_quarter_dates
 
+
+def _resolve_atr_for_quarter(atr_config: dict | None, quarter: int) -> dict | None:
+    """Return an atr_config dict with quarter_overrides resolved for *quarter*.
+
+    If *atr_config* is ``None`` or has no ``quarter_overrides``, or the given
+    quarter has no entry, the base config (minus the ``quarter_overrides`` key)
+    is returned unchanged.  Otherwise the base values are merged with the
+    quarter-specific overrides (override wins for non-``None`` fields).
+    """
+    if atr_config is None:
+        return atr_config
+
+    overrides_map = atr_config.get('quarter_overrides')
+    base = {k: v for k, v in atr_config.items() if k != 'quarter_overrides'}
+
+    if not overrides_map:
+        return base
+
+    quarter_override = overrides_map.get(int(quarter))
+    if quarter_override is None:
+        return base
+
+    for key, value in quarter_override.items():
+        if value is not None:
+            base[key] = value
+    return base
+
+
 def calculate_thresholds_tiered(
         entry_price, 
         cat,
@@ -565,11 +593,12 @@ def simulate_trades(
     # TODO: vectorize inner loop for further performance gains
     trade_results = []
     for _, row in selected_stocks.iterrows():
+        effective_atr = _resolve_atr_for_quarter(atr_config, row['quarter'])
         result = process_trade(
             row, price_data, category_scheme, index_df,
             resolved_tp_mode, resolved_sl_mode,
             use_tp, use_sl, entry_price_window,
-            tiered_config=tiered_config, atr_config=atr_config,
+            tiered_config=tiered_config, atr_config=effective_atr,
             pivot_config=pivot_config, flat_config=flat_config,
             index_exit_config=index_exit_config,
         )
