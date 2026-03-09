@@ -50,6 +50,7 @@
 
 | Document | Description |
 |----------|-------------|
+| [ENTRY_PRICE_WINDOW.md](ENTRY_PRICE_WINDOW.md) | How the entry price window works, link to target construction, and rationale for splitting entry across three days |
 | [QUARTERLY_RESULTS_AND_SIGNAL_TIMING.md](QUARTERLY_RESULTS_AND_SIGNAL_TIMING.md) | Signal timing, SEBI deadlines, and whether quarterly results are priced in by entry |
 
 ## Deep Dives
