@@ -351,8 +351,13 @@ def _resolve_exit(
                 regime_exit = True
                 break
 
-        # Check Stop Loss (against Low)
+        # Check for SL
         if sl_price is not None and day_data['low'] <= sl_price:
+            if day_data['open'] <= sl_price:
+                exit_date = current_date
+                exit_price = day_data['open']
+                sl_triggered = True
+                break
             exit_date = current_date
             exit_price = sl_price
             sl_triggered = True
