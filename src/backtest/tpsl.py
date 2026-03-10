@@ -365,6 +365,11 @@ def _resolve_exit(
 
         # Check Take Profit (against High)
         if tp_price is not None and day_data['high'] >= tp_price:
+            if day_data['open'] >= tp_price:
+                exit_date = current_date
+                exit_price = day_data['open']
+                tp_triggered = True
+                break
             exit_date = current_date
             exit_price = tp_price
             tp_triggered = True
