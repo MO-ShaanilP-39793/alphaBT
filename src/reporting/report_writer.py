@@ -114,7 +114,7 @@ def _format_monthly_returns_for_excel(monthly_df: pd.DataFrame) -> pd.DataFrame:
     formatted_df = monthly_df.copy()
     
     # Convert date index to 'MMM YYYY' format
-    formatted_df.index = formatted_df.index.strftime('%b %Y')
+    formatted_df.index = pd.to_datetime(formatted_df.index).strftime('%b %Y')
     formatted_df.index.name = 'Month'
     
     # Convert returns from decimal to percentage (multiply by 100)
