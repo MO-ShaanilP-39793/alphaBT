@@ -126,21 +126,24 @@ def generate_quarter_equity_curve(
         stock_position_value.loc[entry_mask] = entry_price * shares
 
         # Apply Exit Phase logic (Zero out equity, move to cash)
-        exit_mask = stock_position_value.index >= exit_date
-        stock_position_value.loc[exit_mask] = 0.0
+        # NaT exit_date means position is still open — skip zeroing out.
+        if pd.notna(exit_date):
+            exit_mask = stock_position_value.index >= exit_date
+            stock_position_value.loc[exit_mask] = 0.0
 
         # Update the dataframe
         daily_values[co_name] = stock_position_value
         stock_cols.append(co_name)
 
-        # Record Cash Inflow
-        exit_proceeds = shares * row['exit_price']
-        if exit_date < date_range[0]:
-            raise ValueError(f"Exit date of stock {co_name} in quarter {quarter} has exit date {exit_date} before start date {date_range[0]}.")
-        elif exit_date in cash_inflows.index:
-            cash_inflows.loc[exit_date] += exit_proceeds
-        else:
-            raise ValueError(f"Exit date of stock {co_name} in quarter {quarter} has exit date {exit_date} out of regular date range.")
+        # Record Cash Inflow (skip for open positions with NaT exit)
+        if pd.notna(exit_date) and pd.notna(row['exit_price']):
+            exit_proceeds = shares * row['exit_price']
+            if exit_date < date_range[0]:
+                raise ValueError(f"Exit date of stock {co_name} in quarter {quarter} has exit date {exit_date} before start date {date_range[0]}.")
+            elif exit_date in cash_inflows.index:
+                cash_inflows.loc[exit_date] += exit_proceeds
+            else:
+                raise ValueError(f"Exit date of stock {co_name} in quarter {quarter} has exit date {exit_date} out of regular date range.")
 
     # 5. Compute Cash_In_Hand through the quarter
 
