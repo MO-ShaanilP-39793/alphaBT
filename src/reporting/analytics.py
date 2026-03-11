@@ -537,6 +537,11 @@ def get_comprehensive_quarter_analysis(trade_results: pd.DataFrame) -> pd.DataFr
             row['SL_count'] = int(sl_count)
             row['time_exit_count'] = int(time_exit_count)
 
+            if 'tp_pct_used' in group.columns:
+                row['avg_TP_pct'] = round(group['tp_pct_used'].mean(), 4)
+            if 'sl_pct_used' in group.columns:
+                row['avg_SL_pct'] = round(group['sl_pct_used'].mean(), 4)
+
             sl_trades = group[group['SL_triggered'] == True]
             row['avg_holding_period_SL'] = round(sl_trades['holding_period'].mean(), 2) if len(sl_trades) > 0 else None
 
