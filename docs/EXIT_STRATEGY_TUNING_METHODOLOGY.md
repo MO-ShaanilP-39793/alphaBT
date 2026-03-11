@@ -188,7 +188,7 @@ The guiding principle is that exit strategy parameters should be treated as **sl
 | 1 | Full-window multi-objective optimisation (201702–202511), coarse step sizes | Discover the parameter landscape |
 | 2 | Analyse top 10+ Pareto solutions for clustering and dispersion | Identify the robust region |
 | 3 | Evaluate candidate configurations across 3 rolling sub-periods | Verify temporal stability |
-| 4 | Hold out the final 5 quarters, optimise on the remainder, validate | Formal out-of-sample sanity check |
+| 4 | Hold out the final 8 quarters, optimise on the remainder, validate | Formal out-of-sample sanity check |
 | 5 | Re-optimise on the full window; adopt the ensemble median of top solutions | Production-grade parameters |
 | 6 | Deploy; re-evaluate annually, not quarterly | Avoid parameter whipsaw |
 
