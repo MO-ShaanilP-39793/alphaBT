@@ -434,6 +434,8 @@ def generate_backtest_report(
             summary_df = pd.DataFrame([{
                 'avg_cash_pct': cash_metrics['avg_cash_pct'],
                 'avg_cash': cash_metrics['avg_cash'],
+                'avg_cash_pct_1m': cash_metrics['avg_cash_pct_1m'],
+                'avg_cash_pct_2m': cash_metrics['avg_cash_pct_2m'],
             }])
             summary_df.to_excel(
                 writer, sheet_name="cash_metrics", startrow=0, index=False

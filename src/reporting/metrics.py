@@ -2,7 +2,9 @@
 
 import pandas as pd
 import numpy as np
+from datetime import timedelta
 
+from utils.quarter import get_quarter_dates
 from config.defaults import (
     RISK_FREE_RATE,
     TRADING_DAYS_PER_YEAR,
@@ -145,9 +147,36 @@ def compute_cash_metrics(daily_pf: pd.DataFrame) -> dict | None:
         .reset_index()
     )
 
+    # Intra-quarter snapshots: cash % at 1 month and 2 months into each quarter
+    snapshot_rows = []
+    for q in cash_by_quarter['quarter']:
+        q_df = df[df['quarter'] == q]
+        if q_df.empty:
+            snapshot_rows.append({'quarter': q, 'cash_pct_1m': np.nan, 'cash_pct_2m': np.nan})
+            continue
+        entry_start, _ = get_quarter_dates(q)
+        target_1m = entry_start + timedelta(days=30)
+        target_2m = entry_start + timedelta(days=60)
+        row = {'quarter': q}
+        for label, target_date in [('cash_pct_1m', target_1m), ('cash_pct_2m', target_2m)]:
+            candidates = q_df[q_df['date'] <= target_date]
+            if candidates.empty:
+                row[label] = np.nan
+            else:
+                row[label] = float(candidates.iloc[-1]['_cash_pct'])
+        snapshot_rows.append(row)
+
+    snapshot_df = pd.DataFrame(snapshot_rows)
+    cash_by_quarter = cash_by_quarter.merge(snapshot_df, on='quarter', how='left')
+
+    avg_cash_pct_1m = round(float(cash_by_quarter['cash_pct_1m'].mean()), 2)
+    avg_cash_pct_2m = round(float(cash_by_quarter['cash_pct_2m'].mean()), 2)
+
     return {
         'avg_cash_pct': round(avg_cash_pct, 2),
         'avg_cash': round(avg_cash, 2),
+        'avg_cash_pct_1m': avg_cash_pct_1m,
+        'avg_cash_pct_2m': avg_cash_pct_2m,
         'cash_by_quarter': cash_by_quarter,
     }
 
