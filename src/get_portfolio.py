@@ -240,8 +240,7 @@ def _compute_levels_and_exits(selected_stocks, config, tpsl_scheme,
 # Daily portfolio + index series
 # ---------------------------------------------------------------------------
 
-def _build_daily_series(selected_stocks, config, price_data, index_data, as_of,
-                        first_q, last_q):
+def _build_daily_series(selected_stocks, config, price_data, index_data, as_of):
     """Build daily portfolio value (and index) series through as_of.
 
     Returns a detailed DataFrame with columns:
@@ -568,14 +567,6 @@ def get_portfolio(
         selected_stocks = _compute_levels_and_exits(
             selected_stocks, config, tpsl_scheme,
             price_data, index_df, as_of_ts,
-        )
-
-        n_with_entry = selected_stocks['price_data_adequate'].sum()
-        n_tp = selected_stocks['TP_triggered'].sum()
-        n_sl = selected_stocks['SL_triggered'].sum()
-        logger.info(
-            "Levels: %d/%d with entry | TP triggered: %d | SL triggered: %d",
-            n_with_entry, len(selected_stocks), n_tp, n_sl,
         )
 
         # Build daily series
