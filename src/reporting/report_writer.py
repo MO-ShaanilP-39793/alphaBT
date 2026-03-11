@@ -27,6 +27,7 @@ from .analytics import (
     compute_crisis_regime_returns,
     compute_market_regime_returns,
     compute_quarterly_alpha,
+    compute_churn_analysis,
     get_stock_counts_by_mcap,
     get_comprehensive_quarter_analysis,
 )
@@ -39,6 +40,7 @@ from .charts import (
     create_distribution_chart,
     create_box_plot,
     create_cash_pct_chart,
+    create_churn_chart,
 )
 
 
@@ -279,6 +281,14 @@ def generate_backtest_report(
     except (KeyError, ValueError, ZeroDivisionError, TypeError) as e:
         logger.warning("Could not compute cash metrics: %s", e)
 
+    logger.info("Computing churn analysis...")
+    churn_df = None
+    if trade_results is not None:
+        try:
+            churn_df = compute_churn_analysis(trade_results)
+        except (KeyError, ValueError, ZeroDivisionError, TypeError) as e:
+            logger.warning("Could not compute churn analysis: %s", e)
+
     # Stock counts by mcap (conditional)
     mcap_counts_df = None
     if trade_results is not None:
@@ -314,6 +324,7 @@ def generate_backtest_report(
     corr_heatmap = create_correlation_heatmap(combined_returns)
     bell_curve = create_distribution_chart(monthly_df)
     box_plot = create_box_plot(monthly_df)
+    churn_chart = create_churn_chart(churn_df) if churn_df is not None and not churn_df.empty else None
 
     # =========================================================================
     # WRITE EXCEL WORKBOOK
@@ -431,6 +442,12 @@ def generate_backtest_report(
                 writer, sheet_name="cash_metrics", startrow=4, index=False
             )
 
+        # ----- Sheet: churn_analysis -----
+        if churn_df is not None and not churn_df.empty:
+            churn_df.to_excel(
+                writer, sheet_name="churn_analysis", index=False
+            )
+
         # ----- Sheet: stock_counts_by_mcap -----
         if mcap_counts_df is not None:
             mcap_counts_df.to_excel(
@@ -468,6 +485,10 @@ def generate_backtest_report(
         row_offset += _png_image_rows(bell_curve)
 
         charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": box_plot})
+        row_offset += _png_image_rows(box_plot)
+
+        charts_sheet.insert_image(f'A{row_offset}', "plot.png", {"image_data": churn_chart})
+        row_offset += _png_image_rows(churn_chart)
 
         # ----- Sheet: monthly_performance (monthly returns data) -----
         if not monthly_performance_sheet.empty:
@@ -507,6 +528,9 @@ def generate_backtest_report(
                 worksheet.set_column('B:Z', 12, format_decimal)
             elif sheet_name in ["crisis_regimes", "market_regimes"]:
                 worksheet.set_column('A:A', 25)
+            elif sheet_name == "churn_analysis":
+                worksheet.set_column('A:A', 12)
+                worksheet.set_column('B:E', 16, format_decimal)
             elif sheet_name == "stock_counts_by_mcap":
                 worksheet.set_column('A:A', 12)
                 worksheet.set_column('B:E', 15, format_decimal)

@@ -383,6 +383,74 @@ def compute_quarterly_alpha(daily_returns_df: pd.DataFrame, trade_results: pd.Da
     return result_df
 
 
+def compute_churn_analysis(trade_results: pd.DataFrame) -> pd.DataFrame:
+    """Compute quarter-over-quarter stock churn (retained vs new stocks).
+
+    Parameters:
+        trade_results: DataFrame with at least ``quarter`` and ``co_name`` columns.
+
+    Returns:
+        DataFrame with columns: quarter, num_stocks, num_retained, num_new,
+        retention_pct.  An 'Average' summary row is appended at the end
+        (averages exclude the first quarter).
+    """
+    if trade_results is None or trade_results.empty:
+        return pd.DataFrame(columns=['quarter', 'num_stocks', 'num_retained', 'num_new', 'retention_pct'])
+
+    quarters_sorted = sorted(trade_results['quarter'].unique())
+    if len(quarters_sorted) < 2:
+        return pd.DataFrame(columns=['quarter', 'num_stocks', 'num_retained', 'num_new', 'retention_pct'])
+
+    # Create a mapping of quarter to set of stocks in that quarter
+    stock_sets = {
+        q: set(trade_results.loc[trade_results['quarter'] == q, 'co_name'].unique())
+        for q in quarters_sorted
+    }
+
+    # Create a list of rows for the result DataFrame
+    rows = []
+
+    # Initialize previous quarter's stock set to None for the first iteration
+    prev_stocks = None
+
+    # Loop through quarters in sorted order to compute retained vs new stocks
+    for q in quarters_sorted:
+        cur_stocks = stock_sets[q]
+        n = len(cur_stocks)
+        if prev_stocks is None:
+            retained = 0
+        else:
+            # Compute number of retained stocks as the intersection of current and previous quarter's stock sets
+            retained = len(cur_stocks & prev_stocks)
+        # Compute number of new stocks as total stocks in current quarter minus retained stocks
+        new = n - retained
+        retention_pct = (retained / n * 100) if n > 0 else 0.0
+        rows.append({
+            'quarter': q,
+            'num_stocks': n,
+            'num_retained': retained,
+            'num_new': new,
+            'retention_pct': round(retention_pct, 2),
+        })
+        # Update previous quarter's stock set for the next iteration
+        prev_stocks = cur_stocks
+    
+    # Compile the list of rows into a DataFrame
+    result = pd.DataFrame(rows)
+
+    # Average row (exclude first quarter where retained is trivially 0)
+    avg_slice = result.iloc[1:]
+    avg_row = pd.DataFrame([{
+        'quarter': 'Average',
+        'num_stocks': round(result['num_stocks'].mean(), 2),
+        'num_retained': round(avg_slice['num_retained'].mean(), 2),
+        'num_new': round(avg_slice['num_new'].mean(), 2),
+        'retention_pct': round(avg_slice['retention_pct'].mean(), 2),
+    }])
+    result = pd.concat([result, avg_row], ignore_index=True)
+    return result
+
+
 def get_stock_counts_by_mcap(trade_results: pd.DataFrame) -> pd.DataFrame:
     """Get count of stocks by market cap category per quarter."""
     has_mcap_category = 'mcap_category' in trade_results.columns

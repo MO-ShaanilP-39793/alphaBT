@@ -386,3 +386,44 @@ def create_box_plot(monthly_returns_df, chart_title="Box-Whisker Plot of Monthly
     plt.close()
     buffer.seek(0)
     return buffer
+
+
+def create_churn_chart(churn_df):
+    """Create a bar chart of quarter-over-quarter stock retention %.  Returns BytesIO buffer or None."""
+    if churn_df is None or churn_df.empty:
+        return None
+
+    # Exclude the 'Average' summary row for plotting
+    plot_df = churn_df[churn_df['quarter'] != 'Average'].copy()
+    if plot_df.empty:
+        return None
+
+    avg_row = churn_df[churn_df['quarter'] == 'Average']
+    avg_pct = avg_row['retention_pct'].values[0] if not avg_row.empty else None
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    x_labels = plot_df['quarter'].astype(str)
+    bars = ax.bar(x_labels, plot_df['retention_pct'], color='#4C72B0', edgecolor='white', width=0.6)
+
+    # Value labels on bars
+    for bar, val in zip(bars, plot_df['retention_pct']):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.8,
+                f'{val:.1f}%', ha='center', va='bottom', fontsize=8)
+
+    if avg_pct is not None:
+        ax.axhline(avg_pct, color='#C44E52', linestyle='--', linewidth=1.2,
+                   label=f'Average: {avg_pct:.1f}%')
+        ax.legend(loc='upper right', fontsize=9)
+
+    ax.set_title('Quarter-over-Quarter Stock Retention', fontsize=12)
+    ax.set_xlabel('Quarter')
+    ax.set_ylabel('Retention %')
+    ax.set_ylim(0, min(plot_df['retention_pct'].max() + 15, 105))
+    plt.xticks(rotation=45, ha='right', fontsize=8)
+    plt.tight_layout()
+
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
+    plt.close()
+    buffer.seek(0)
+    return buffer
