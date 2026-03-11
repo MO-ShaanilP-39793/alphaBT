@@ -72,9 +72,9 @@ The conclusion is that full-window optimisation is useful as a discovery tool bu
 
 ---
 
-## Recommended Approach: Optimisation with Stability Analysis
+## Optimisation with Stability Analysis
 
-For the specific case of three ATR parameters over approximately eight years of quarterly data, a **hybrid approach** is recommended over a strict train/validate/test split.
+For the specific case of three ATR parameters over approximately eight years of quarterly data, a **hybrid approach** can be preferred over a strict train/validate/test split.
 
 ### Step 1: Full-Window Optimisation (Landscape Discovery)
 
@@ -92,17 +92,15 @@ Select two or three promising configurations from the Pareto front and evaluate 
 
 | Window | Approximate Coverage |
 |--------|---------------------|
-| 201702 – 202002 | Pre-COVID market and initial crash (~12 quarters) |
-| 202002 – 202302 | COVID recovery through 2022 correction (~12 quarters) |
-| 202302 – 202511 | Recent market environment (~10 quarters) |
+| 201702 – 202002 | Pre-COVID market and initial crash |
+| 202005 – 202302 | COVID recovery through 2022 correction |
+| 202305 – 202511 | Recent market environment |
 
 A robust exit strategy should exhibit reasonable risk-adjusted returns across all three windows. The assessment criteria are qualitative but meaningful:
 
 - Is CAGR positive across all windows?
 - Does maximum drawdown remain within acceptable bounds?
-- Does the Calmar ratio remain in broadly the same order of magnitude, or does it collapse in one window?
-
-A configuration that produces a Calmar ratio of 4.0 on the full period but turns negative over 2022–2023 is a statistical artefact, not a viable deployment strategy.
+- Do ratios like Sharpe, Sortino, and Calmar remain in broadly the same order of magnitude, or do they collapse on one window?
 
 ### Step 3: Anchored Out-of-Sample Validation
 
@@ -113,28 +111,13 @@ Optimisation window:   201702 – 202311
 Held-out test window:  202402 – 202511   
 ```
 
-This affords the optimiser a substantial training window spanning multiple regimes while keeping the most recent data entirely unseen. The test window is short — eight quarters — so its specific metrics should not be over-interpreted. However, a categorical failure in the held-out period (e.g., the strategy produces negative returns or drawdowns far exceeding backtested expectations) constitutes a meaningful red flag.
+This affords the optimiser a substantial training window spanning multiple regimes while keeping the most recent data entirely unseen. The test window is short — eight quarters — so its specific metrics should not be over-interpreted. However, a categorical failure in the held-out period constitutes a meaningful red flag.
 
-**An important subtlety:** after validation, if the practitioner is satisfied with out-of-sample performance, the final production parameters should be estimated by **re-optimising on the full window**. The held-out test has served its purpose — building confidence that the parameter region is not an artefact. Discarding five quarters of information from the final parameter estimates is unnecessarily wasteful. This mirrors standard practice in applied machine learning, where models are often retrained on all available data after validation confirms the approach.
+**An important subtlety:** after validation, if the practitioner is satisfied with out-of-sample performance, the final production parameters should be estimated by **re-optimising on the full window**. The held-out test has served its purpose — building confidence that the parameter region is not an artefact. Discarding eight quarters of information from the final parameter estimates is unnecessarily wasteful. This mirrors standard practice in applied machine learning, where models are often retrained on all available data after validation confirms the approach.
 
 ### Step 4: Ensemble Consensus for Production Parameters (optional)
 
-Rather than adopting the single best trial from the final optimisation, take the **median values across the top 10 Pareto-optimal solutions**. For example:
-
-```
-Top 10 trials:
-  Trial 099: period=14, tp_mult=2.00, sl_mult=1.25
-  Trial 087: period=12, tp_mult=2.25, sl_mult=1.50
-  Trial 076: period=14, tp_mult=1.75, sl_mult=1.25
-  ...
-
-Production parameters:
-  period:        14    (median)
-  tp_multiplier: 2.00  (median)
-  sl_multiplier: 1.25  (median)
-```
-
-This ensemble approach is inherently more robust than selecting any single optimum, as it averages out the trial-specific noise that inevitably afflicts individual solutions.
+Rather than adopting the single best trial from the final optimisation, take the **median values across the top 10 Pareto-optimal solutions**. This ensemble approach is inherently more robust than selecting any single optimum, as it averages out the trial-specific noise that inevitably afflicts individual solutions.
 
 ---
 
@@ -152,7 +135,7 @@ For three ATR parameters with coarse discretisation:
 - With coarse step sizes, the effective search space is on the order of a few thousand configurations — far too small to warrant the statistical machinery of three-way data partitioning.
 - The dominant risk is not parameter-level overfitting but **regime mismatch**: the future market may behave differently than any historical period. No data split can protect against this.
 
-The stability analysis described above — evaluating candidate configurations across multiple temporal windows — provides a more informative robustness assessment than a single held-out test on five quarters.
+The stability analysis described above — evaluating candidate configurations across multiple temporal windows — provides a more informative robustness assessment than a single held-out test on eight quarters.
 
 ---
 
@@ -183,7 +166,7 @@ A natural instinct is to re-optimise exit strategy parameters every quarter as n
 
 - **Parameter whipsaw.** Quarterly re-optimisation may cause the strategy to alternate between materially different parameter regimes (e.g., `tp_multiplier` of 2.0 one quarter, 3.5 the next) based on noisy recent data. This inconsistency undermines confidence and complicates deployment.
 - **Subtle look-ahead leakage.** If the optimisation window extends to "last completed quarter" and parameters are deployed the following quarter, the most recent quarter's results — which may reflect transient conditions — exert disproportionate influence.
-- **ATR already adapts.** The ATR values themselves respond to changing volatility. The multipliers represent a structural choice about how aggressively to take profit or cut losses relative to prevailing volatility. Such structural decisions should change infrequently.
+- **ATR already adapts.** The ATR values themselves respond to changing volatility. The multipliers represent a **structural choice** about how aggressively to take profit or cut losses relative to prevailing volatility. Such structural decisions should change infrequently.
 
 ### Recommended Cadence
 
@@ -192,7 +175,7 @@ A natural instinct is to re-optimise exit strategy parameters every quarter as n
 | **At initial deployment** | Full optimisation + stability analysis + out-of-sample check (as described above) |
 | **Quarterly** | Deploy the strategy and record live performance. Do not re-tune. |
 | **Annually (or semi-annually)** | Re-run the full optimisation on the expanded dataset (now including live quarters). Compare the new optimal region to current production parameters. Update only if there is a meaningful shift in the optimal basin. |
-| **Ad hoc** | Re-tune if live performance degrades beyond a predefined threshold (e.g., rolling two-quarter Calmar falls below 50% of backtested expectation), or following a structural regime break (e.g., a monetary policy inflection, a market crisis). |
+| **Ad hoc** | Re-tune if live performance degrades beyond a predefined threshold (e.g., rolling two-quarter Sharpe deviates significantly from backtested expectation), or following a structural regime break (e.g., a monetary policy inflection, a market crisis). |
 
 The guiding principle is that exit strategy parameters should be treated as **slowly-evolving structural choices**, not as signals to be refreshed with each new data point.
 
