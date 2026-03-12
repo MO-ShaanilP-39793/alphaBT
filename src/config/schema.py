@@ -138,7 +138,7 @@ class PivotConfig(BaseModel):
     @field_validator("tp_level")
     @classmethod
     def _validate_tp_level(cls, v: str) -> str:
-        allowed = {"R1", "R2", "R3"}
+        allowed = {"R1", "R1_R2", "R2", "R2_R3", "R3"}
         if v not in allowed:
             raise ValueError(f"tp_level must be one of {allowed}, got '{v}'")
         return v
@@ -146,7 +146,7 @@ class PivotConfig(BaseModel):
     @field_validator("sl_level")
     @classmethod
     def _validate_sl_level(cls, v: str) -> str:
-        allowed = {"S1", "S2", "S3"}
+        allowed = {"S1", "S1_S2", "S2", "S2_S3", "S3"}
         if v not in allowed:
             raise ValueError(f"sl_level must be one of {allowed}, got '{v}'")
         return v

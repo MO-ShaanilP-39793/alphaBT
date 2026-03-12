@@ -162,13 +162,23 @@ def calculate_pivot_points(price_df: pd.DataFrame, co_name: str,
     s2 = pivot - (high - low)
     s3 = low - 2 * (high - pivot)
     
+    # Midpoint levels (mean of adjacent levels)
+    r1_r2 = (r1 + r2) / 2
+    r2_r3 = (r2 + r3) / 2
+    s1_s2 = (s1 + s2) / 2
+    s2_s3 = (s2 + s3) / 2
+    
     return {
         'pivot': pivot,
         'R1': r1,
+        'R1_R2': r1_r2,
         'R2': r2,
+        'R2_R3': r2_r3,
         'R3': r3,
         'S1': s1,
+        'S1_S2': s1_s2,
         'S2': s2,
+        'S2_S3': s2_s3,
         'S3': s3,
         'period_high': high,
         'period_low': low,
@@ -187,8 +197,8 @@ def calculate_pivot_thresholds(price_df: pd.DataFrame, co_name: str, entry_price
     - co_name: Stock name
     - entry_price: Entry price of the trade
     - end_date: Date to calculate pivots up to
-    - tp_level: Which resistance level to use for TP ('R1', 'R2', 'R3')
-    - sl_level: Which support level to use for SL ('S1', 'S2', 'S3')
+    - tp_level: Which resistance level to use for TP ('R1', 'R1_R2', 'R2', 'R2_R3', 'R3')
+    - sl_level: Which support level to use for SL ('S1', 'S1_S2', 'S2', 'S2_S3', 'S3')
     - lookback_days: Days to look back for pivot calculation
     
     Returns:
@@ -223,7 +233,7 @@ def calculate_pivot_thresholds(price_df: pd.DataFrame, co_name: str, entry_price
     # Validate: TP should be above entry, SL should be below entry
     if tp_price is not None and tp_price <= entry_price:
         # If calculated TP is below entry, use next level up
-        level_order = ['R1', 'R2', 'R3']
+        level_order = ['R1', 'R1_R2', 'R2', 'R2_R3', 'R3']
         current_idx = level_order.index(tp_level) if tp_level in level_order else 0
         for i in range(current_idx + 1, len(level_order)):
             if pivots[level_order[i]] > entry_price:
@@ -249,7 +259,7 @@ def calculate_pivot_thresholds(price_df: pd.DataFrame, co_name: str, entry_price
     
     if sl_price is not None and sl_price >= entry_price:
         # If calculated SL is above entry, use next level down
-        level_order = ['S1', 'S2', 'S3']
+        level_order = ['S1', 'S1_S2', 'S2', 'S2_S3', 'S3']
         current_idx = level_order.index(sl_level) if sl_level in level_order else 0
         for i in range(current_idx + 1, len(level_order)):
             if pivots[level_order[i]] < entry_price:

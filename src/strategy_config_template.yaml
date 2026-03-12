@@ -171,8 +171,8 @@ atr_config:
 # Uses classic pivot point formula with resistance (R1-R3) and support (S1-S3) levels
 pivot_config:
   lookback_days: 60     # Days of price history for pivot calculation
-  tp_level: 'R1'        # Which resistance level for TP: 'R1', 'R2', or 'R3'
-  sl_level: 'S1'        # Which support level for SL: 'S1', 'S2', or 'S3'
+  tp_level: 'R1'        # Resistance for TP: 'R1', 'R1_R2', 'R2', 'R2_R3', or 'R3'
+  sl_level: 'S1'        # Support for SL: 'S1', 'S1_S2', 'S2', 'S2_S3', or 'S3'
 
 # Flat configuration (used when tp_mode or sl_mode is 'flat')
 # Same threshold for ALL stocks regardless of category - simplest mode
