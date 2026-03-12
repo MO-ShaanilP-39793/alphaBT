@@ -38,6 +38,12 @@
 | [OUTPUTS_AND_METRICS.md](OUTPUTS_AND_METRICS.md) | Output file overview, metric definitions, formula reference |
 | [REPORT_SHEETS.md](REPORT_SHEETS.md) | Detailed guide to every sheet in `backtest_report.xlsx` |
 
+## Interactive Dashboard
+
+| Document | Description |
+|----------|-------------|
+| `visualization/dashboard.py` | Plotly + Streamlit interactive drill-down dashboard — portfolio vs index, TP/SL outcomes, per-stock candlestick charts, P&L waterfall, and more. Launch with `streamlit run src/visualization/dashboard.py -- --run-dir <run_dir>` or set `launch_dashboard: true` in config. |
+
 ## Module References
 
 | Document | Description |

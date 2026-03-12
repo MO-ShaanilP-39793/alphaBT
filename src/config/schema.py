@@ -261,6 +261,7 @@ class BacktestConfig(BaseModel):
 
     # -- Reporting -----------------------------------------------------------
     generate_report: bool = DEFAULT_GENERATE_REPORT
+    launch_dashboard: bool = False
     report_sub_periods: Optional[list[list[int]]] = None
 
     # -- Tuning-only ---------------------------------------------------------

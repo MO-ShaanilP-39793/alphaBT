@@ -246,6 +246,12 @@ tiered_config:
 # Creates a single Excel workbook with all metrics, embedded charts, and raw data
 generate_report: true
 
+# Launch interactive Plotly + Streamlit drill-down dashboard after backtest
+# The dashboard lets you explore per-quarter performance, TP/SL outcomes,
+# individual stock price charts, and more.
+# Requires: pip install plotly  (streamlit is already a dependency)
+launch_dashboard: false
+
 # Sub-periods for performance analysis (list of [start_year, end_year] pairs)
 # Each sub-period will get its own performance analysis section
 # Comment out to skip sub-period analysis

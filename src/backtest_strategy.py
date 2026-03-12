@@ -802,6 +802,21 @@ def run_backtest(config_path: str = DEFAULT_CONFIG_PATH) -> Optional[tuple[str, 
         logger.info("  - backtest_report.xlsx (metrics, charts, trade data — all in one)")
     logger.info("  - backtest_log.txt (full execution log)")
     
+    # -------------------------------------------------------------------------
+    # 5. Optional: launch interactive dashboard
+    # -------------------------------------------------------------------------
+    if config.launch_dashboard and output_dir:
+        try:
+            import subprocess, sys
+            dashboard_script = os.path.join(os.path.dirname(__file__), "visualization", "dashboard.py")
+            logger.info("Launching interactive dashboard for: %s", output_dir)
+            subprocess.Popen(
+                [sys.executable, "-m", "streamlit", "run", dashboard_script, "--", "--run-dir", output_dir],
+                cwd=os.path.dirname(__file__),
+            )
+        except Exception as e:
+            logger.warning("Could not launch dashboard: %s", e)
+    
     # Calculate and log execution time
     end_time = datetime.now()
     elapsed_time = end_time - start_time
