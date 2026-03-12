@@ -100,8 +100,9 @@ def _format_monthly_returns_for_excel(monthly_df: pd.DataFrame) -> pd.DataFrame:
     Format monthly returns DataFrame for Excel export.
     
     - Converts Date index to 'MMM YYYY' format (e.g., 'Jan 2020')
-    - Multiplies returns by 100 (0.0234 → 2.34, formatted as 2.34% in Excel)
-    - Rounds to 2 decimal places
+    - Keeps returns in decimal form (e.g. 0.0533); the sheet uses Excel % format
+      which multiplies by 100 for display (0.0533 → 5.33%)
+    - Rounds to 4 decimal places so displayed percentage has 2 decimal places
     - Resets index to make Date a column
     
     Parameters:
@@ -119,12 +120,9 @@ def _format_monthly_returns_for_excel(monthly_df: pd.DataFrame) -> pd.DataFrame:
     formatted_df.index = pd.to_datetime(formatted_df.index).strftime('%b %Y')
     formatted_df.index.name = 'Month'
     
-    # Convert returns from decimal to percentage (multiply by 100)
-    # Excel percentage format will display 2.34 as '2.34%'
-    formatted_df = formatted_df * 100
-    
-    # Round to 2 decimal places
-    formatted_df = formatted_df.round(2)
+    # Keep returns in decimal form; monthly_performance sheet uses percent_format
+    # (Excel's % format multiplies cell value by 100 when displaying)
+    formatted_df = formatted_df.round(4)
     
     # Reset index to make Month a column
     formatted_df = formatted_df.reset_index()
