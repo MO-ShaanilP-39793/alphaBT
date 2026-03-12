@@ -45,15 +45,20 @@ def holdings_gantt_chart(
 
     df = df.sort_values("entry_date", ascending=True)
 
+    _MS_PER_DAY = 86_400_000  # Plotly date axes use milliseconds internally
+
     fig = go.Figure()
 
     for _, row in df.iterrows():
         colour = _EXIT_COLOURS.get(row["exit_type"], "#aaa")
         ret = row.get("stock_return")
         ret_str = f"{ret * 100:.1f}%" if pd.notna(ret) else "—"
+        duration_ms = (row["exit_date"] - row["entry_date"]).total_seconds() * 1000
+        # Ensure a visible minimum width (1 day) for same-day exits
+        duration_ms = max(duration_ms, _MS_PER_DAY)
         fig.add_trace(
             go.Bar(
-                x=[(row["exit_date"] - row["entry_date"]).days],
+                x=[duration_ms],
                 y=[row["co_name"]],
                 base=[row["entry_date"]],
                 orientation="h",
@@ -71,7 +76,7 @@ def holdings_gantt_chart(
             )
         )
 
-    # Legend entries (one per type)
+    # Legend entries (one per type present)
     for exit_type, colour in _EXIT_COLOURS.items():
         if exit_type in df["exit_type"].values:
             fig.add_trace(
