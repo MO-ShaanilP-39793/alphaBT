@@ -5,6 +5,10 @@ Runs the stock selection pipeline from strategy_config.yaml (or a custom config)
 WITHOUT backtesting. Outputs a CSV of selected stocks with portfolio weights
 for the coming quarter(s).
 
+Outputs are saved in a dedicated run folder under selected_stocks_data/ named
+after the config and timestamp (e.g. strategy_config_20250311_143022/). Each
+run folder contains the CSVs plus a copy of the config used (config_used.yaml).
+
 With ``--with-levels``, also computes entry/TP/SL levels, detects TP/SL
 triggers and exit prices/dates through the data's as-of date, and outputs
 daily portfolio and index series — supporting weekly re-runs and dashboard use.
@@ -24,6 +28,7 @@ The script reuses the same strategy_config.yaml used for backtesting.
 import argparse
 import logging
 import os
+import shutil
 import sys
 from datetime import datetime
 
@@ -54,6 +59,25 @@ from utils.logging_config import setup_logging, get_logger
 logger = get_logger(__name__)
 
 DEFAULT_OUTPUT_DIR = "../selected_stocks_data"
+
+
+def _get_run_output_dir(config_path: str) -> str:
+    """Build a dedicated run folder name from config path and timestamp.
+    e.g. selected_stocks_data/strategy_config_20250311_143022/
+    """
+    config_stem = os.path.splitext(os.path.basename(config_path))[0] or "config"
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    run_name = f"{config_stem}_{timestamp}"
+    return os.path.join(DEFAULT_OUTPUT_DIR, run_name)
+
+
+def _ensure_run_dir_and_save_config(run_dir: str, config_path: str) -> None:
+    """Create run directory and copy the config file used into it."""
+    os.makedirs(run_dir, exist_ok=True)
+    dest_config = os.path.join(run_dir, "config_used.yaml")
+    if os.path.isfile(config_path):
+        shutil.copy2(config_path, dest_config)
+        logger.info("Config copied to run folder: %s", dest_config)
 
 
 # ---------------------------------------------------------------------------
@@ -532,6 +556,11 @@ def get_portfolio(
     # --- 6. Enrich with probability scores ---
     selected_stocks = _merge_prob_column(selected_stocks, input_data)
 
+    # --- 6b. Create dedicated run folder and save config used ---
+    run_dir = _get_run_output_dir(config_path)
+    _ensure_run_dir_and_save_config(run_dir, config_path)
+    logger.info("Output run folder: %s", os.path.abspath(run_dir))
+
     # --- 7. Levels, exit monitoring, and daily series ---
     daily_series_path = None
 
@@ -573,29 +602,23 @@ def get_portfolio(
         logger.info("Building daily portfolio/index series through %s...",
                      as_of_ts.date())
         daily_series = _build_daily_series(
-            selected_stocks, config, price_data, index_df,
-            as_of_ts, first_q, last_q,
+            selected_stocks, config, price_data, index_df, as_of_ts,
         )
 
         if daily_series is not None and not daily_series.empty:
-            os.makedirs(DEFAULT_OUTPUT_DIR, exist_ok=True)
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             daily_series_path = os.path.join(
-                DEFAULT_OUTPUT_DIR,
-                f"daily_series_{first_q}_{as_of_ts.strftime('%Y%m%d')}_{timestamp}.csv",
+                run_dir,
+                f"daily_series_{first_q}_{as_of_ts.strftime('%Y%m%d')}.csv",
             )
             daily_series.to_csv(daily_series_path, index=False)
             logger.info("Daily series saved to: %s", daily_series_path)
 
-    # --- 8. Save selection output ---
+    # --- 8. Save selection output (always inside run folder) ---
     if output_path is None:
-        os.makedirs(DEFAULT_OUTPUT_DIR, exist_ok=True)
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        output_path = os.path.join(DEFAULT_OUTPUT_DIR, f"selection_{timestamp}.csv")
-
-    parent_dir = os.path.dirname(output_path)
-    if parent_dir:
-        os.makedirs(parent_dir, exist_ok=True)
+        output_path = os.path.join(run_dir, "selection.csv")
+    else:
+        # Put user-specified file inside the run folder (use basename)
+        output_path = os.path.join(run_dir, os.path.basename(output_path))
 
     selected_stocks.to_csv(output_path, index=False)
     logger.info("Selection saved to: %s", output_path)
@@ -656,7 +679,8 @@ price settings are also consumed.
     parser.add_argument(
         '--output', '-o',
         default=None,
-        help='Output CSV file path (default: selected_stocks_data/selection_<timestamp>.csv)'
+        help='Output CSV filename (saved inside run folder; default: selection.csv). '
+             'Run folder is selected_stocks_data/<config_name>_<timestamp>/ and includes config_used.yaml.'
     )
     parser.add_argument(
         '--validate-prices',

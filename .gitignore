@@ -4,6 +4,7 @@ backtesting_results/
 optimization_results/
 tuning_logs/
 prospective_strategies/
+selected_stocks_data/
 
 # Python
 __pycache__/
