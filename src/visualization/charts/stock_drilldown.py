@@ -12,6 +12,34 @@ _BUFFER_DAYS_BEFORE = 5
 _BUFFER_DAYS_AFTER = 10
 
 
+def _resolve_tp_sl_prices(trade_row: pd.Series):
+    """Return (tp_price, sl_price) preferring direct columns over pct derivation.
+
+    get_portfolio --with-levels stores the actual TP/SL prices (more accurate
+    for pivot/ATR modes).  The backtest report only has pct, so we fall back
+    to ``entry * (1 +/- pct)`` when the price columns are absent or NaN.
+    """
+    entry_price = trade_row.get("entry_price")
+
+    # Try direct price columns first
+    tp_price = trade_row.get("tp_price")
+    sl_price = trade_row.get("sl_price")
+
+    if pd.notna(tp_price):
+        tp_price = float(tp_price)
+    else:
+        tp_pct = trade_row.get("tp_pct_used", np.nan)
+        tp_price = (entry_price * (1 + tp_pct)) if (pd.notna(tp_pct) and pd.notna(entry_price)) else None
+
+    if pd.notna(sl_price):
+        sl_price = float(sl_price)
+    else:
+        sl_pct = trade_row.get("sl_pct_used", np.nan)
+        sl_price = (entry_price * (1 - sl_pct)) if (pd.notna(sl_pct) and pd.notna(entry_price)) else None
+
+    return tp_price, sl_price
+
+
 def stock_candlestick_chart(
     co_name: str,
     trade_row: pd.Series,
@@ -26,8 +54,9 @@ def stock_candlestick_chart(
     co_name : str
         Stock name.
     trade_row : Series
-        Row from trade_results with entry_date, exit_date, entry_price,
-        exit_price, TP_triggered, SL_triggered, tp_pct_used, sl_pct_used.
+        Row from trade_results.  Accepts both backtest output
+        (tp_pct_used/sl_pct_used) and get_portfolio output
+        (tp_price/sl_price columns).
     price_data : DataFrame
         Full price data (date, co_name, open, high, low, close).
     quarter_start, quarter_end : Timestamps
@@ -40,11 +69,11 @@ def stock_candlestick_chart(
     tp_triggered = bool(trade_row.get("TP_triggered", False))
     sl_triggered = bool(trade_row.get("SL_triggered", False))
 
-    tp_pct = trade_row.get("tp_pct_used", np.nan)
-    sl_pct = trade_row.get("sl_pct_used", np.nan)
+    tp_price, sl_price = _resolve_tp_sl_prices(trade_row)
 
-    tp_price = entry_price * (1 + tp_pct) if pd.notna(tp_pct) and pd.notna(entry_price) else None
-    sl_price = entry_price * (1 - sl_pct) if pd.notna(sl_pct) and pd.notna(entry_price) else None
+    # Compute display-only pct (for annotation label)
+    tp_pct_display = ((tp_price / entry_price) - 1) if (tp_price and pd.notna(entry_price) and entry_price > 0) else None
+    sl_pct_display = (1 - (sl_price / entry_price)) if (sl_price and pd.notna(entry_price) and entry_price > 0) else None
 
     if pd.notna(exit_date):
         exit_date = pd.Timestamp(exit_date)
@@ -109,33 +138,35 @@ def stock_candlestick_chart(
 
     # --- TP level ---
     if tp_price is not None:
+        pct_label = f" ({tp_pct_display*100:.1f}%)" if tp_pct_display is not None else ""
         fig.add_hline(
             y=tp_price, line_dash="dot", line_color="#2ca02c",
-            annotation_text=f"TP ₹{tp_price:,.2f} ({tp_pct*100:.1f}%)",
+            annotation_text=f"TP ₹{tp_price:,.2f}{pct_label}",
             annotation_position="top right",
             row=1, col=1,
         )
-        # Green zone between entry and TP
-        fig.add_hrect(
-            y0=entry_price, y1=tp_price,
-            fillcolor="rgba(44,160,44,0.07)", line_width=0,
-            row=1, col=1,
-        )
+        if pd.notna(entry_price):
+            fig.add_hrect(
+                y0=entry_price, y1=tp_price,
+                fillcolor="rgba(44,160,44,0.07)", line_width=0,
+                row=1, col=1,
+            )
 
     # --- SL level ---
     if sl_price is not None:
+        pct_label = f" ({sl_pct_display*100:.1f}%)" if sl_pct_display is not None else ""
         fig.add_hline(
             y=sl_price, line_dash="dot", line_color="#d62728",
-            annotation_text=f"SL ₹{sl_price:,.2f} ({sl_pct*100:.1f}%)",
+            annotation_text=f"SL ₹{sl_price:,.2f}{pct_label}",
             annotation_position="bottom right",
             row=1, col=1,
         )
-        # Red zone between entry and SL
-        fig.add_hrect(
-            y0=sl_price, y1=entry_price,
-            fillcolor="rgba(214,39,40,0.07)", line_width=0,
-            row=1, col=1,
-        )
+        if pd.notna(entry_price):
+            fig.add_hrect(
+                y0=sl_price, y1=entry_price,
+                fillcolor="rgba(214,39,40,0.07)", line_width=0,
+                row=1, col=1,
+            )
 
     # --- Entry date marker ---
     if pd.notna(entry_date):
@@ -191,17 +222,15 @@ def stock_candlestick_chart(
 def stock_info_card(trade_row: pd.Series) -> dict:
     """Return a dict of key info for display beside the candlestick chart."""
     entry_price = trade_row.get("entry_price")
-    tp_pct = trade_row.get("tp_pct_used", np.nan)
-    sl_pct = trade_row.get("sl_pct_used", np.nan)
-
-    tp_price = entry_price * (1 + tp_pct) if pd.notna(tp_pct) and pd.notna(entry_price) else None
-    sl_price = entry_price * (1 - sl_pct) if pd.notna(sl_pct) and pd.notna(entry_price) else None
+    tp_price, sl_price = _resolve_tp_sl_prices(trade_row)
 
     stock_return = trade_row.get("stock_return")
 
     exit_type = "TP" if trade_row.get("TP_triggered") else (
         "SL" if trade_row.get("SL_triggered") else (
-            "Regime" if trade_row.get("regime_exit") else "Time"
+            "Regime" if trade_row.get("regime_exit") else (
+                "Open" if pd.isna(trade_row.get("exit_date")) else "Time"
+            )
         )
     )
 

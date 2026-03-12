@@ -11,6 +11,7 @@ _EXIT_COLOURS = {
     "SL": "#d62728",
     "Time": "#7f7f7f",
     "Regime": "#9467bd",
+    "Open": "#1f77b4",
 }
 
 
@@ -21,6 +22,8 @@ def _classify_exit(row: pd.Series) -> str:
         return "SL"
     if row.get("regime_exit"):
         return "Regime"
+    if pd.isna(row.get("exit_date")):
+        return "Open"
     return "Time"
 
 
@@ -76,7 +79,7 @@ def exit_by_category_bar(trades: pd.DataFrame) -> go.Figure:
     grouped = df.groupby([cat_col, "exit_type"]).size().unstack(fill_value=0)
 
     fig = go.Figure()
-    for exit_type in ["TP", "SL", "Time", "Regime"]:
+    for exit_type in ["TP", "SL", "Time", "Regime", "Open"]:
         if exit_type not in grouped.columns:
             continue
         fig.add_trace(
@@ -106,10 +109,11 @@ def exit_by_category_bar(trades: pd.DataFrame) -> go.Figure:
 def return_vs_holding_scatter(trades: pd.DataFrame) -> go.Figure:
     """Scatter plot of stock return vs holding period, coloured by exit type."""
     df = _add_exit_type(trades)
+    df = df.dropna(subset=["stock_return", "holding_period"])
 
     fig = go.Figure()
 
-    for exit_type in ["TP", "SL", "Time", "Regime"]:
+    for exit_type in ["TP", "SL", "Time", "Regime", "Open"]:
         subset = df[df["exit_type"] == exit_type]
         if subset.empty:
             continue

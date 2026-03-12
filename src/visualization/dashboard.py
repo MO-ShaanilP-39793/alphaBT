@@ -5,6 +5,9 @@ Launch:
     cd src
     streamlit run visualization/dashboard.py -- --run-dir ../backtesting_results/run_XXX
 
+Also works with get_portfolio --with-levels output:
+    streamlit run visualization/dashboard.py -- --run-dir ../selected_stocks_data/strategy_config_XXX
+
 Or from repo root:
     streamlit run src/visualization/dashboard.py -- --run-dir backtesting_results/run_XXX
 """
@@ -89,6 +92,8 @@ def _load_data(run_dir: str) -> dict:
         "comparison_df": data.comparison_df,
         "config": data.config,
         "quarters": data.quarters,
+        "is_live_quarter": data.is_live_quarter,
+        "as_of_date": data.as_of_date,
     }
 
 
@@ -100,6 +105,8 @@ def _to_dashboard_data(raw: dict) -> DashboardData:
         index_data=raw["index_data"],
         comparison_df=raw["comparison_df"],
         config=raw["config"],
+        is_live_quarter=raw.get("is_live_quarter", False),
+        as_of_date=raw.get("as_of_date"),
     )
 
 
@@ -120,6 +127,12 @@ def _fmt_cr(v: float) -> str:
 
 def _render_sidebar(data: DashboardData):
     st.sidebar.title("alphaBT Dashboard")
+
+    if data.is_live_quarter:
+        st.sidebar.markdown("**:blue[LIVE QUARTER]**")
+        if data.as_of_date is not None:
+            st.sidebar.caption(f"Data as of {data.as_of_date.strftime('%Y-%m-%d')}")
+
     st.sidebar.markdown("---")
 
     quarters = data.quarters
@@ -136,16 +149,20 @@ def _render_sidebar(data: DashboardData):
     n_stocks = len(q_trades)
     tp_count = int(q_trades["TP_triggered"].sum()) if "TP_triggered" in q_trades.columns else 0
     sl_count = int(q_trades["SL_triggered"].sum()) if "SL_triggered" in q_trades.columns else 0
+    open_count = int((q_trades["exit_date"].isna()).sum()) if "exit_date" in q_trades.columns else 0
 
     st.sidebar.markdown(f"**Stocks:** {n_stocks}")
     st.sidebar.markdown(f"**TP Hits:** {tp_count}  |  **SL Hits:** {sl_count}")
+    if open_count > 0:
+        st.sidebar.markdown(f"**Still Open:** {open_count}")
 
     pf_col = "portfolio_value" if "portfolio_value" in q_daily.columns else "Total_Portfolio_Value"
     if pf_col in q_daily.columns and len(q_daily) >= 2:
         start_val = q_daily[pf_col].iloc[0]
         end_val = q_daily[pf_col].iloc[-1]
         q_return = (end_val - start_val) / start_val * 100
-        st.sidebar.metric("Quarter Return", f"{q_return:+.2f}%")
+        label = "Return (so far)" if data.is_live_quarter else "Quarter Return"
+        st.sidebar.metric(label, f"{q_return:+.2f}%")
         st.sidebar.markdown(f"Start: {_fmt_cr(start_val)}  →  End: {_fmt_cr(end_val)}")
 
     st.sidebar.markdown("---")
@@ -253,7 +270,7 @@ def _tab_aggregate(data: DashboardData, quarter: int):
     q_start, q_end = get_quarter_dates(quarter)
 
     st.plotly_chart(
-        holdings_gantt_chart(q_trades, q_start, q_end),
+        holdings_gantt_chart(q_trades, q_start, q_end, as_of_date=data.as_of_date),
         use_container_width=True,
     )
 
@@ -280,7 +297,7 @@ def main():
     parser = argparse.ArgumentParser(description="alphaBT Dashboard")
     parser.add_argument(
         "--run-dir", required=True,
-        help="Path to a backtest run directory (e.g. backtesting_results/run_XXX)",
+        help="Path to a backtest run directory or get_portfolio --with-levels output folder",
     )
     # Streamlit passes its own args; parse only known ones.
     args, _ = parser.parse_known_args()

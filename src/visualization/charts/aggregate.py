@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -14,6 +16,7 @@ _EXIT_COLOURS = {
     "SL": "#d62728",
     "Time": "#7f7f7f",
     "Regime": "#9467bd",
+    "Open": "#1f77b4",
 }
 
 
@@ -24,6 +27,8 @@ def _classify_exit(row: pd.Series) -> str:
         return "SL"
     if row.get("regime_exit"):
         return "Regime"
+    if pd.isna(row.get("exit_date")):
+        return "Open"
     return "Time"
 
 
@@ -35,13 +40,23 @@ def holdings_gantt_chart(
     trades: pd.DataFrame,
     quarter_start: pd.Timestamp,
     quarter_end: pd.Timestamp,
+    as_of_date: Optional[pd.Timestamp] = None,
 ) -> go.Figure:
-    """Horizontal bar (Gantt-style) showing each stock's holding window."""
+    """Horizontal bar (Gantt-style) showing each stock's holding window.
+
+    Parameters
+    ----------
+    as_of_date : Timestamp, optional
+        For live/partial quarters, open positions extend to this date
+        instead of the full quarter end.
+    """
     df = trades.copy()
     df["exit_type"] = df.apply(_classify_exit, axis=1)
     df["entry_date"] = pd.to_datetime(df["entry_date"])
     df["exit_date"] = pd.to_datetime(df["exit_date"])
-    df["exit_date"] = df["exit_date"].fillna(quarter_end)
+
+    fill_date = as_of_date if as_of_date is not None else quarter_end
+    df["exit_date"] = df["exit_date"].fillna(fill_date)
 
     df = df.sort_values("entry_date", ascending=True)
 
@@ -52,9 +67,8 @@ def holdings_gantt_chart(
     for _, row in df.iterrows():
         colour = _EXIT_COLOURS.get(row["exit_type"], "#aaa")
         ret = row.get("stock_return")
-        ret_str = f"{ret * 100:.1f}%" if pd.notna(ret) else "—"
+        ret_str = f"{ret * 100:.1f}%" if pd.notna(ret) else "open"
         duration_ms = (row["exit_date"] - row["entry_date"]).total_seconds() * 1000
-        # Ensure a visible minimum width (1 day) for same-day exits
         duration_ms = max(duration_ms, _MS_PER_DAY)
         fig.add_trace(
             go.Bar(
@@ -119,7 +133,15 @@ def pnl_waterfall_chart(trades: pd.DataFrame, initial_capital: float) -> go.Figu
     )
     df = df.sort_values("pnl", ascending=False)
 
-    labels = ["Start"] + df["co_name"].tolist() + ["Final"]
+    # Label open positions distinctly
+    labels_list = []
+    for _, r in df.iterrows():
+        name = r["co_name"]
+        if r["exit_type"] == "Open":
+            name += " (open)"
+        labels_list.append(name)
+
+    labels = ["Start"] + labels_list + ["Final"]
     values = [initial_capital] + df["pnl"].tolist() + [0]
     measures = ["absolute"] + ["relative"] * len(df) + ["total"]
 
@@ -130,16 +152,6 @@ def pnl_waterfall_chart(trades: pd.DataFrame, initial_capital: float) -> go.Figu
         else:
             sign = "+" if v >= 0 else ""
             text.append(f"{sign}₹{v / _CR:,.2f} Cr")
-
-    colours = []
-    for i, v in enumerate(values):
-        if measures[i] == "absolute":
-            colours.append("#1f77b4")
-        elif measures[i] == "total":
-            final_val = initial_capital + df["pnl"].sum()
-            colours.append("#2ca02c" if final_val >= initial_capital else "#d62728")
-        else:
-            colours.append("#2ca02c" if v >= 0 else "#d62728")
 
     fig = go.Figure(
         go.Waterfall(
