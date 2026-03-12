@@ -1,9 +1,13 @@
 """
-Get Portfolio — Forward-Looking Stock Selection
+Get Portfolio — Forward-Looking Stock Selection (single quarter)
 
 Runs the stock selection pipeline from strategy_config.yaml (or a custom config)
 WITHOUT backtesting. Outputs a CSV of selected stocks with portfolio weights
-for the coming quarter(s).
+for a single quarter.
+
+Exactly one quarter must be in scope after applying config bounds and the
+``--quarter`` flag. If the input data contains multiple quarters and no
+``--quarter`` is specified, the script will error out.
 
 Outputs are saved in a dedicated run folder under selected_stocks_data/ named
 after the config and timestamp (e.g. strategy_config_20250311_143022/). Each
@@ -15,12 +19,11 @@ daily portfolio and index series — supporting weekly re-runs and dashboard use
 
 Usage:
     cd src
-    python get_portfolio.py                                  # All quarters in input data
-    python get_portfolio.py --quarter 202602                  # Single quarter
-    python get_portfolio.py --config my_config.yaml -o out.csv
+    python get_portfolio.py --quarter 202602
+    python get_portfolio.py --quarter 202602 --config my_strategy.yaml -o out.csv
     python get_portfolio.py --validate-prices --quarter 202602
     python get_portfolio.py --with-levels --quarter 202602    # Levels + exits + daily series
-    python get_portfolio.py --with-levels --as-of 2026-03-06  # Explicit as-of override
+    python get_portfolio.py --with-levels --as-of 2026-03-06 --quarter 202602
 
 The script reuses the same strategy_config.yaml used for backtesting.
 """
@@ -88,15 +91,26 @@ def _resolve_tpsl_scheme(config):
     """Resolve which dimension scheme (volatility/mcap) drives TP/SL thresholds."""
     dim = config.tpsl_category_dimension
     if dim == 'selection':
-        return config.selection_dimension
-    if dim == 'weighting':
-        return config.weighting_dimension
-    if dim in ('volatility', 'mcap'):
-        return dim
-    raise ValueError(
-        f"tpsl_category_dimension must be 'selection', 'weighting', "
-        f"'volatility', or 'mcap', got '{dim}'"
-    )
+        tpsl_scheme = config.selection_dimension
+    elif dim == 'weighting':
+        tpsl_scheme = config.weighting_dimension
+    elif dim in ('volatility', 'mcap'):
+        tpsl_scheme = dim
+    else:
+        raise ValueError(
+            f"tpsl_category_dimension must be 'selection', 'weighting', "
+            f"'volatility', or 'mcap', got '{dim}'"
+        )
+
+    if tpsl_scheme not in (config.selection_dimension, config.weighting_dimension):
+        raise ValueError(
+            f"tpsl_category_dimension resolves to '{tpsl_scheme}', but neither "
+            f"selection_dimension ('{config.selection_dimension}') nor "
+            f"weighting_dimension ('{config.weighting_dimension}') uses this "
+            f"dimension. Cannot produce correct TP/SL category labels."
+        )
+
+    return tpsl_scheme
 
 
 def _add_tpsl_cat(selected_stocks, config, tpsl_scheme):
@@ -264,12 +278,16 @@ def _compute_levels_and_exits(selected_stocks, config, tpsl_scheme,
 # Daily portfolio + index series
 # ---------------------------------------------------------------------------
 
-def _build_daily_series(selected_stocks, config, price_data, index_data, as_of):
-    """Build daily portfolio value (and index) series through as_of.
+def _build_daily_series(selected_stocks, config, price_data, index_data,
+                        target_quarter, as_of):
+    """Build daily portfolio value (and index) series for a single quarter through as_of.
 
     Returns a detailed DataFrame with columns:
-        date, Total_Portfolio_Value, <stock_1>, ..., <stock_N>,
-        Cash_In_Hand, index_value
+        date, Total_Portfolio_Value, daily_pf_return, index_fund, total_stock_value,
+        Cash_In_Hand, cash_pct, <stock_1>, ..., <stock_N>, index_value, daily_index_return
+
+    Total_Portfolio_Value = total_stock_value + Cash_In_Hand (all stock holdings + cash).
+    index_fund starts at INITIAL_CAPITAL and tracks index performance for comparison.
     """
     valid = selected_stocks[selected_stocks['price_data_adequate'].eq(True)].copy()
     if valid.empty:
@@ -283,50 +301,61 @@ def _build_daily_series(selected_stocks, config, price_data, index_data, as_of):
 
     price_capped = price_data[price_data['date'] <= as_of].copy()
 
-    quarters = sorted(trades['quarter'].unique())
-    all_curves = []
-    current_capital = INITIAL_CAPITAL
+    trades_sized = calculate_position_sizes(trades, INITIAL_CAPITAL)
 
-    for q in quarters:
-        q_trades = trades[trades['quarter'] == q].copy()
-        if q_trades.empty:
-            continue
-
-        q_trades_sized = calculate_position_sizes(q_trades, current_capital)
-
-        try:
-            curve = generate_quarter_equity_curve(
-                q_trades_sized, price_capped, int(q), entry_price_window,
-                risk_free_rate_annual=config.cash_appreciation_rate,
-            )
-        except (ValueError, KeyError) as exc:
-            logger.warning("Equity curve failed for quarter %s: %s", q, exc)
-            continue
-
-        curve['quarter'] = q
-        all_curves.append(curve)
-        current_capital = curve['Total_Portfolio_Value'].iloc[-1]
-
-    if not all_curves:
-        logger.warning("Could not generate any equity curves.")
+    try:
+        daily_pf = generate_quarter_equity_curve(
+            trades_sized, price_capped, target_quarter, entry_price_window,
+            risk_free_rate_annual=config.cash_appreciation_rate,
+        )
+    except (ValueError, KeyError) as exc:
+        logger.warning("Equity curve failed for quarter %s: %s",
+                        target_quarter, exc)
         return None
 
-    daily_pf = pd.concat(all_curves).sort_index()
+    # Identify stock columns (exclude known meta columns)
+    meta_cols = {'Total_Portfolio_Value', 'Cash_In_Hand'}
+    stock_cols = [c for c in daily_pf.columns if c not in meta_cols]
 
-    # Add index value by direct join
+    daily_pf['total_stock_value'] = daily_pf[stock_cols].sum(axis=1)
+    total_pv = daily_pf['Total_Portfolio_Value']
+    daily_pf['cash_pct'] = np.where(
+        total_pv > 0,
+        100.0 * daily_pf['Cash_In_Hand'] / total_pv,
+        0.0,
+    )
+
+    # Add index value and index fund (same initial capital, tracks index for comparison)
     if index_data is not None and not index_data.empty:
         idx_capped = index_data[index_data['date'] <= as_of].copy()
         idx_series = idx_capped.set_index('date')['value']
         daily_pf['index_value'] = daily_pf.index.map(idx_series)
+        idx_valid = daily_pf['index_value'].dropna()
+        if not idx_valid.empty:
+            first_idx_value = idx_valid.iloc[0]
+            daily_pf['index_fund'] = np.where(
+                daily_pf['index_value'].notna(),
+                INITIAL_CAPITAL * (daily_pf['index_value'] / first_idx_value),
+                np.nan,
+            )
+        else:
+            daily_pf['index_fund'] = np.nan
+    else:
+        daily_pf['index_value'] = np.nan
+        daily_pf['index_fund'] = np.nan
 
-    # Arrange columns: date first (from index), then Total_Portfolio_Value,
-    # then per-stock columns, Cash_In_Hand, index_value.
-    meta_cols = {'Total_Portfolio_Value', 'Cash_In_Hand', 'quarter', 'index_value'}
+    daily_pf['daily_pf_return'] = daily_pf['Total_Portfolio_Value'].pct_change()
+    daily_pf['daily_index_return'] = daily_pf['index_value'].pct_change()
+
+    # Arrange columns: portfolio summary, per-stock, then index columns
+    meta_cols = {'Total_Portfolio_Value', 'Cash_In_Hand', 'index_value', 'index_fund',
+                 'total_stock_value', 'cash_pct', 'daily_pf_return', 'daily_index_return'}
     stock_cols = [c for c in daily_pf.columns if c not in meta_cols]
 
-    ordered = ['Total_Portfolio_Value'] + sorted(stock_cols) + ['Cash_In_Hand']
-    if 'index_value' in daily_pf.columns:
-        ordered.append('index_value')
+    ordered = (['Total_Portfolio_Value', 'daily_pf_return', 'index_fund',
+                'total_stock_value', 'Cash_In_Hand', 'cash_pct']
+               + sorted(stock_cols)
+               + ['index_value', 'daily_index_return'])
 
     result = daily_pf[ordered].copy()
     result.index.name = 'date'
@@ -335,10 +364,10 @@ def _build_daily_series(selected_stocks, config, price_data, index_data, as_of):
     return result
 
 
-def _resolve_quarters(config, input_data, cli_quarter):
-    """Determine first/last quarter and filter input data accordingly.
+def _resolve_quarter(config, input_data, cli_quarter):
+    """Determine the single target quarter and filter input data to it.
 
-    Returns (filtered_df, first_quarter, last_quarter).
+    Returns (filtered_df, quarter_int).
     """
     first_q = config.first_quarter
     last_q = config.last_quarter
@@ -354,21 +383,23 @@ def _resolve_quarters(config, input_data, cli_quarter):
     # Narrow to a single CLI quarter if specified
     if cli_quarter is not None:
         input_data = input_data[input_data['quarter'] == cli_quarter].copy()
-        first_q = cli_quarter
-        last_q = cli_quarter
 
     if input_data.empty:
         quarters_msg = f"quarter {cli_quarter}" if cli_quarter else "the specified range"
         logger.error("No input data found for %s. Check input file and quarter filters.", quarters_msg)
         sys.exit(1)
 
-    # Ensure bounds are set for downstream use
-    if first_q is None:
-        first_q = input_data['quarter'].min()
-    if last_q is None:
-        last_q = input_data['quarter'].max()
+    unique_quarters = input_data['quarter'].unique()
+    if len(unique_quarters) != 1:
+        logger.error(
+            "This script operates on a single quarter. Found %d quarters in "
+            "scope: %s. Use --quarter YYYYMM to select one.",
+            len(unique_quarters),
+            sorted(unique_quarters.tolist()),
+        )
+        sys.exit(1)
 
-    return input_data, first_q, last_q
+    return input_data, int(unique_quarters[0])
 
 
 def _merge_prob_column(selected_stocks, input_data):
@@ -464,11 +495,12 @@ def get_portfolio(
     as_of=None,
     quiet=False,
 ):
-    """Run forward-looking stock selection and save results.
+    """Run forward-looking stock selection for a single quarter and save results.
 
     Parameters:
         config_path: Path to strategy_config.yaml
-        quarter: Optional single quarter (YYYYMM int) to select for
+        quarter: Single quarter (YYYYMM int). Required unless input data
+            (after config bounds) contains exactly one quarter.
         output_path: Output CSV path. Auto-generated if None.
         validate_prices: If True, load price data and filter untradeable stocks
         with_levels: If True, compute entry/TP/SL/shares, exit monitoring, and
@@ -495,16 +527,22 @@ def get_portfolio(
         logger.error("--with-levels requires price_data_path in config.")
         sys.exit(1)
 
+    if validate_prices and not config.price_data_path:
+        logger.error("--validate-prices requires price_data_path in config.")
+        sys.exit(1)
+
+    if as_of is not None and not with_levels:
+        logger.warning("--as-of has no effect without --with-levels; ignoring.")
+
     # --- 2. Load input data ---
     logger.info("Loading input data from: %s", config.input_data_path)
     input_data = load_data(config.input_data_path)
     logger.info("Loaded %d rows across %d quarters",
                 len(input_data), input_data['quarter'].nunique())
 
-    # --- 3. Resolve quarters ---
-    input_data, first_q, last_q = _resolve_quarters(config, input_data, quarter)
-    logger.info("Quarters in scope: %d to %d (%d quarters)",
-                first_q, last_q, input_data['quarter'].nunique())
+    # --- 3. Resolve to a single quarter ---
+    input_data, target_quarter = _resolve_quarter(config, input_data, quarter)
+    logger.info("Target quarter: %d", target_quarter)
 
     # --- 4. Optional price validation ---
     price_data = None
@@ -516,7 +554,7 @@ def get_portfolio(
     if validate_prices:
         logger.info("Validating stock tradeability against price data...")
         input_data, data_issues = filter_tradeable_stocks(
-            input_data, price_data, first_q, last_q
+            input_data, price_data, target_quarter, target_quarter
         )
         if data_issues is not None and not data_issues.empty:
             logger.warning(
@@ -602,13 +640,14 @@ def get_portfolio(
         logger.info("Building daily portfolio/index series through %s...",
                      as_of_ts.date())
         daily_series = _build_daily_series(
-            selected_stocks, config, price_data, index_df, as_of_ts,
+            selected_stocks, config, price_data, index_df,
+            target_quarter, as_of_ts,
         )
 
         if daily_series is not None and not daily_series.empty:
             daily_series_path = os.path.join(
                 run_dir,
-                f"daily_series_{first_q}_{as_of_ts.strftime('%Y%m%d')}.csv",
+                f"daily_series_{target_quarter}_{as_of_ts.strftime('%Y%m%d')}.csv",
             )
             daily_series.to_csv(daily_series_path, index=False)
             logger.info("Daily series saved to: %s", daily_series_path)
@@ -632,18 +671,15 @@ def get_portfolio(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run forward-looking stock selection without backtesting",
+        description="Run forward-looking stock selection for a single quarter",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Select stocks for all quarters in input data
-  python get_portfolio.py
-
   # Select stocks for a specific quarter
   python get_portfolio.py --quarter 202602
 
   # Use a custom config and output path
-  python get_portfolio.py --config my_strategy.yaml -o portfolio.csv
+  python get_portfolio.py --quarter 202602 --config my_strategy.yaml -o portfolio.csv
 
   # Validate that selected stocks have tradeable price data
   python get_portfolio.py --validate-prices --quarter 202602
@@ -673,8 +709,8 @@ price settings are also consumed.
         type=int,
         metavar='YYYYMM',
         default=None,
-        help='Select stocks for a single quarter (e.g., 202602). '
-             'If omitted, runs for all quarters in input data.'
+        help='Target quarter (e.g., 202602). Required unless the input data '
+             '(after config bounds) contains exactly one quarter.'
     )
     parser.add_argument(
         '--output', '-o',
