@@ -64,12 +64,15 @@ def holdings_gantt_chart(
 
     fig = go.Figure()
 
+    has_sector = "sector" in df.columns
+
     for _, row in df.iterrows():
         colour = _EXIT_COLOURS.get(row["exit_type"], "#aaa")
         ret = row.get("stock_return")
         ret_str = f"{ret * 100:.1f}%" if pd.notna(ret) else "open"
         duration_ms = (row["exit_date"] - row["entry_date"]).total_seconds() * 1000
         duration_ms = max(duration_ms, _MS_PER_DAY)
+        sector_line = f"Sector: {row['sector']}<br>" if has_sector and pd.notna(row.get("sector")) else ""
         fig.add_trace(
             go.Bar(
                 x=[duration_ms],
@@ -81,6 +84,7 @@ def holdings_gantt_chart(
                 showlegend=False,
                 hovertemplate=(
                     f"<b>{row['co_name']}</b><br>"
+                    f"{sector_line}"
                     f"Entry: {row['entry_date'].strftime('%b %d')}<br>"
                     f"Exit: {row['exit_date'].strftime('%b %d')}<br>"
                     f"Return: {ret_str}<br>"

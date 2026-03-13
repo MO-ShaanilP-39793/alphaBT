@@ -16,3 +16,9 @@ from .aggregate import (
     pnl_waterfall_chart,
     return_distribution_histogram,
 )
+from .sector_analysis import (
+    sector_allocation_donut,
+    sector_performance_bar,
+    sector_win_rate_bar,
+    sector_exit_breakdown,
+)

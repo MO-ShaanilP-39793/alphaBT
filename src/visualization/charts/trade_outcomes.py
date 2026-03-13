@@ -111,30 +111,35 @@ def return_vs_holding_scatter(trades: pd.DataFrame) -> go.Figure:
     df = _add_exit_type(trades)
     df = df.dropna(subset=["stock_return", "holding_period"])
 
+    has_sector = "sector" in df.columns
+    sector_hover = "Sector: %{customdata[0]}<br>" if has_sector else ""
+
     fig = go.Figure()
 
     for exit_type in ["TP", "SL", "Time", "Regime", "Open"]:
         subset = df[df["exit_type"] == exit_type]
         if subset.empty:
             continue
-        fig.add_trace(
-            go.Scatter(
-                x=subset["holding_period"],
-                y=subset["stock_return"] * 100,
-                mode="markers",
-                name=exit_type,
-                marker=dict(
-                    size=9, color=_EXIT_COLOURS.get(exit_type, "#aaa"),
-                    line=dict(width=0.5, color="white"),
-                ),
-                text=subset["co_name"],
-                hovertemplate=(
-                    "<b>%{text}</b><br>"
-                    "Return: %{y:.2f}%<br>"
-                    "Holding: %{x} days<extra></extra>"
-                ),
-            )
+        trace_kwargs = dict(
+            x=subset["holding_period"],
+            y=subset["stock_return"] * 100,
+            mode="markers",
+            name=exit_type,
+            marker=dict(
+                size=9, color=_EXIT_COLOURS.get(exit_type, "#aaa"),
+                line=dict(width=0.5, color="white"),
+            ),
+            text=subset["co_name"],
+            hovertemplate=(
+                "<b>%{text}</b><br>"
+                + sector_hover
+                + "Return: %{y:.2f}%<br>"
+                "Holding: %{x} days<extra></extra>"
+            ),
         )
+        if has_sector:
+            trace_kwargs["customdata"] = subset[["sector"]].values
+        fig.add_trace(go.Scatter(**trace_kwargs))
 
     fig.update_layout(
         title="Stock Return vs Holding Period",
@@ -156,6 +161,8 @@ def trade_summary_table(trades: pd.DataFrame) -> pd.DataFrame:
     df = _add_exit_type(trades).copy()
 
     display_cols = ["co_name"]
+    if "sector" in df.columns:
+        display_cols.append("sector")
     if "cat" in df.columns:
         display_cols.append("cat")
     display_cols += [
@@ -171,6 +178,7 @@ def trade_summary_table(trades: pd.DataFrame) -> pd.DataFrame:
 
     rename_map = {
         "co_name": "Stock",
+        "sector": "Sector",
         "cat": "Category",
         "entry_price": "Entry ₹",
         "exit_price": "Exit ₹",

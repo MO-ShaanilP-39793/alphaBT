@@ -56,6 +56,12 @@ from visualization.charts.aggregate import (
     pnl_waterfall_chart,
     return_distribution_histogram,
 )
+from visualization.charts.sector_analysis import (
+    sector_allocation_donut,
+    sector_performance_bar,
+    sector_win_rate_bar,
+    sector_exit_breakdown,
+)
 from utils.quarter import get_quarter_dates
 from config.defaults import INITIAL_CAPITAL
 
@@ -165,10 +171,20 @@ def _render_sidebar(data: DashboardData):
         st.sidebar.metric(label, f"{q_return:+.2f}%")
         st.sidebar.markdown(f"Start: {_fmt_cr(start_val)}  →  End: {_fmt_cr(end_val)}")
 
+    # Sector filter (only when sector column exists)
+    sector_filter = []
+    if "sector" in q_trades.columns:
+        all_sectors = sorted(q_trades["sector"].dropna().unique().tolist())
+        if all_sectors:
+            sector_filter = st.sidebar.multiselect(
+                "Filter by Sector", all_sectors, default=[],
+                help="Leave empty to show all sectors",
+            )
+
     st.sidebar.markdown("---")
     st.sidebar.caption("Built with Plotly + Streamlit")
 
-    return selected
+    return selected, sector_filter
 
 
 # ── Tab: Portfolio Performance ───────────────────────────────────────────
@@ -263,6 +279,28 @@ def _tab_stock_drilldown(data: DashboardData, quarter: int):
             st.markdown(f"**{label}:** {value}")
 
 
+# ── Tab: Sector Analysis ─────────────────────────────────────────────────
+
+def _tab_sector_analysis(data: DashboardData, quarter: int):
+    q_trades = get_quarter_trades(data, quarter)
+
+    if "sector" not in q_trades.columns or q_trades["sector"].dropna().empty:
+        st.info("Sector data is not available for this run.")
+        return
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(sector_allocation_donut(q_trades), use_container_width=True)
+    with col2:
+        st.plotly_chart(sector_performance_bar(q_trades), use_container_width=True)
+
+    col3, col4 = st.columns(2)
+    with col3:
+        st.plotly_chart(sector_win_rate_bar(q_trades), use_container_width=True)
+    with col4:
+        st.plotly_chart(sector_exit_breakdown(q_trades), use_container_width=True)
+
+
 # ── Tab: Aggregate Insights ─────────────────────────────────────────────
 
 def _tab_aggregate(data: DashboardData, quarter: int):
@@ -305,11 +343,27 @@ def main():
     raw = _load_data(args.run_dir)
     data = _to_dashboard_data(raw)
 
-    quarter = _render_sidebar(data)
+    quarter, sector_filter = _render_sidebar(data)
 
-    tab_pf, tab_trades, tab_drill, tab_agg = st.tabs([
+    if sector_filter:
+        filtered_tr = data.trade_results[
+            data.trade_results["sector"].isin(sector_filter)
+        ]
+        data = DashboardData(
+            trade_results=filtered_tr,
+            daily_pf_values=data.daily_pf_values,
+            price_data=data.price_data,
+            index_data=data.index_data,
+            comparison_df=data.comparison_df,
+            config=data.config,
+            is_live_quarter=data.is_live_quarter,
+            as_of_date=data.as_of_date,
+        )
+
+    tab_pf, tab_trades, tab_sector, tab_drill, tab_agg = st.tabs([
         "Portfolio Performance",
         "Trade Outcomes",
+        "Sector Analysis",
         "Stock Drill-Down",
         "Aggregate Insights",
     ])
@@ -318,6 +372,8 @@ def main():
         _tab_portfolio(data, quarter)
     with tab_trades:
         _tab_trade_outcomes(data, quarter)
+    with tab_sector:
+        _tab_sector_analysis(data, quarter)
     with tab_drill:
         _tab_stock_drilldown(data, quarter)
     with tab_agg:

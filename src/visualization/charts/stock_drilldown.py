@@ -234,9 +234,14 @@ def stock_info_card(trade_row: pd.Series) -> dict:
         )
     )
 
-    return {
+    sector = trade_row.get("sector")
+    info = {
         "Stock": trade_row.get("co_name", "—"),
-        "Category": trade_row.get("cat", "—"),
+    }
+    if pd.notna(sector) and sector:
+        info["Sector"] = sector
+    info["Category"] = trade_row.get("cat", "—")
+    info.update({
         "Entry Date": _fmt_date(trade_row.get("entry_date")),
         "Entry Price": f"₹{entry_price:,.2f}" if pd.notna(entry_price) else "—",
         "TP Level": f"₹{tp_price:,.2f}" if tp_price else "—",
@@ -247,7 +252,9 @@ def stock_info_card(trade_row: pd.Series) -> dict:
         "Return": f"{stock_return * 100:.2f}%" if pd.notna(stock_return) else "—",
         "Holding": f"{int(trade_row.get('holding_period', 0))} days" if pd.notna(trade_row.get("holding_period")) else "—",
         "Weight": f"{trade_row.get('stock_weight', 0):.4f}" if pd.notna(trade_row.get("stock_weight")) else "—",
-    }
+    })
+
+    return info
 
 
 def _fmt_date(d) -> str:
