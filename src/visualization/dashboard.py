@@ -207,7 +207,7 @@ def _tab_portfolio(data: DashboardData, quarter: int):
     with col1:
         st.plotly_chart(
             portfolio_vs_index_chart(q_daily, comp),
-            use_container_width=True,
+            width="stretch",
         )
     with col2:
         pf_col = "portfolio_value" if "portfolio_value" in q_daily.columns else "Total_Portfolio_Value"
@@ -221,11 +221,11 @@ def _tab_portfolio(data: DashboardData, quarter: int):
 
     st.plotly_chart(
         cash_area_chart(q_daily, q_trades),
-        use_container_width=True,
+        width="stretch",
     )
     st.plotly_chart(
         invested_vs_cash_chart(q_daily),
-        use_container_width=True,
+        width="stretch",
     )
 
 
@@ -236,18 +236,18 @@ def _tab_trade_outcomes(data: DashboardData, quarter: int):
 
     col1, col2 = st.columns(2)
     with col1:
-        st.plotly_chart(exit_type_donut(q_trades), use_container_width=True)
+        st.plotly_chart(exit_type_donut(q_trades), width="stretch")
     with col2:
-        st.plotly_chart(exit_by_category_bar(q_trades), use_container_width=True)
+        st.plotly_chart(exit_by_category_bar(q_trades), width="stretch")
 
     st.plotly_chart(
         return_vs_holding_scatter(q_trades),
-        use_container_width=True,
+        width="stretch",
     )
 
     st.subheader("Trade Summary")
     table_df = trade_summary_table(q_trades)
-    st.dataframe(table_df, use_container_width=True, height=min(600, 35 * len(table_df) + 40))
+    st.dataframe(table_df, width="stretch", height=min(600, 35 * len(table_df) + 40))
 
 
 # ── Tab: Stock Drill-Down ────────────────────────────────────────────────
@@ -271,7 +271,7 @@ def _tab_stock_drilldown(data: DashboardData, quarter: int):
         fig = stock_candlestick_chart(
             selected_stock, row, data.price_data, q_start, q_end,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_info:
         info = stock_info_card(row)
@@ -290,15 +290,15 @@ def _tab_sector_analysis(data: DashboardData, quarter: int):
 
     col1, col2 = st.columns(2)
     with col1:
-        st.plotly_chart(sector_allocation_donut(q_trades), use_container_width=True)
+        st.plotly_chart(sector_allocation_donut(q_trades), width="stretch")
     with col2:
-        st.plotly_chart(sector_performance_bar(q_trades), use_container_width=True)
+        st.plotly_chart(sector_performance_bar(q_trades), width="stretch")
 
     col3, col4 = st.columns(2)
     with col3:
-        st.plotly_chart(sector_win_rate_bar(q_trades), use_container_width=True)
+        st.plotly_chart(sector_win_rate_bar(q_trades), width="stretch")
     with col4:
-        st.plotly_chart(sector_exit_breakdown(q_trades), use_container_width=True)
+        st.plotly_chart(sector_exit_breakdown(q_trades), width="stretch")
 
 
 # ── Tab: Aggregate Insights ─────────────────────────────────────────────
@@ -309,14 +309,14 @@ def _tab_aggregate(data: DashboardData, quarter: int):
 
     st.plotly_chart(
         holdings_gantt_chart(q_trades, q_start, q_end, as_of_date=data.as_of_date),
-        use_container_width=True,
+        width="stretch",
     )
 
     # Determine capital for this quarter (use config or default)
     capital = data.config.get("_quarter_capital", INITIAL_CAPITAL)
     st.plotly_chart(
         pnl_waterfall_chart(q_trades, capital),
-        use_container_width=True,
+        width="stretch",
     )
 
     # Try to infer TP/SL pcts for the histogram threshold lines
@@ -325,7 +325,7 @@ def _tab_aggregate(data: DashboardData, quarter: int):
 
     st.plotly_chart(
         return_distribution_histogram(q_trades, tp_pct=tp_pct, sl_pct=sl_pct),
-        use_container_width=True,
+        width="stretch",
     )
 
 
