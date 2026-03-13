@@ -174,6 +174,8 @@ def select_top_k_stocks(
             output_cols.append('cat')
         if sort_by == 'risk_adjusted_probability':
             output_cols.append('risk_adj_score')
+        if 'sector' in result_df.columns:
+            output_cols.append('sector')
         
         result_df = result_df[output_cols]
         result_df = result_df.reset_index(drop=True)
@@ -185,6 +187,8 @@ def select_top_k_stocks(
             output_cols.append('cat')
         if sort_by == 'risk_adjusted_probability':
             output_cols.append('risk_adj_score')
+        if 'sector' in stock_probabilities.columns:
+            output_cols.append('sector')
         return pd.DataFrame(columns=output_cols)
 
 
@@ -362,6 +366,8 @@ def select_and_weight_stocks(
             base_cols.append('cat_weight')
         if sort_by == 'risk_adjusted_probability':
             base_cols.append('risk_adj_score')
+        if 'sector' in result_df.columns:
+            base_cols.append('sector')
         
         result_df = result_df[base_cols]
         result_df = result_df.reset_index(drop=True)
@@ -373,6 +379,8 @@ def select_and_weight_stocks(
             base_cols.append('cat_weight')
         if sort_by == 'risk_adjusted_probability':
             base_cols.append('risk_adj_score')
+        if 'sector' in stock_probabilities.columns:
+            base_cols.append('sector')
         return pd.DataFrame(columns=base_cols)
 
 
