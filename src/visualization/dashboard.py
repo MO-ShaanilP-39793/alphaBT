@@ -43,7 +43,6 @@ from visualization.charts.portfolio import (
 from visualization.charts.trade_outcomes import (
     exit_type_donut,
     exit_by_category_bar,
-    return_vs_holding_scatter,
     trade_summary_table,
 )
 from visualization.charts.stock_drilldown import (
@@ -241,11 +240,6 @@ def _tab_trade_outcomes(data: DashboardData, quarter: int):
         st.plotly_chart(exit_type_donut(q_trades), width="stretch")
     with col2:
         st.plotly_chart(exit_by_category_bar(q_trades), width="stretch")
-
-    st.plotly_chart(
-        return_vs_holding_scatter(q_trades),
-        width="stretch",
-    )
 
     st.subheader("Trade Summary")
     table_df = trade_summary_table(q_trades)
