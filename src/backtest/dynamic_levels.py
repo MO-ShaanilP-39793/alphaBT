@@ -370,7 +370,12 @@ def get_volatility_adjustment_multiplier(index_df: pd.DataFrame, date: pd.Timest
     vol = calculate_index_volatility(index_df, date, lookback)
     
     if vol is None:
-        return 1.0
+        n_available = len(index_df[index_df['date'] <= date])
+        raise ValueError(
+            f"Index vol adjustment requires at least {lookback + 1} trading days of index data "
+            f"(lookback={lookback}). Only {n_available} days available as of {date.date()}. "
+            "Use more index history or disable index_exit.vol_adjustment."
+        )
     
     if vol >= high_vol_threshold:
         return high_vol_multiplier
