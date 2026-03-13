@@ -32,6 +32,7 @@ class DashboardData:
     price_data: pd.DataFrame
     index_data: Optional[pd.DataFrame] = None
     comparison_df: Optional[pd.DataFrame] = None
+    quarterly_alpha: Optional[pd.DataFrame] = None
     config: dict = field(default_factory=dict)
     is_live_quarter: bool = False
     as_of_date: Optional[pd.Timestamp] = None
@@ -138,6 +139,18 @@ def _load_from_backtest_dir(run_dir: str, config: dict) -> DashboardData:
     except Exception:
         pass
 
+    quarterly_alpha = None
+    try:
+        qa = pd.read_excel(report_path, sheet_name="quarterly_alpha")
+        qa["Quarter"] = pd.to_numeric(qa["Quarter"], errors="coerce")
+        quarterly_alpha = qa.dropna(subset=["Quarter"]).copy()
+        quarterly_alpha["Quarter"] = quarterly_alpha["Quarter"].astype(int)
+        for col in ("Portfolio_Return", "Benchmark_Return", "Outperformance"):
+            if col in quarterly_alpha.columns:
+                quarterly_alpha[col] = pd.to_numeric(quarterly_alpha[col], errors="coerce")
+    except Exception:
+        pass
+
     for col in ("entry_date", "exit_date"):
         if col in trade_results.columns:
             trade_results[col] = pd.to_datetime(trade_results[col])
@@ -153,6 +166,7 @@ def _load_from_backtest_dir(run_dir: str, config: dict) -> DashboardData:
         price_data=price_data,
         index_data=index_data,
         comparison_df=comparison_df,
+        quarterly_alpha=quarterly_alpha,
         config=config,
         is_live_quarter=False,
     )

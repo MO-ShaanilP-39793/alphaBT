@@ -93,6 +93,7 @@ def _load_data(run_dir: str) -> dict:
         "price_data": data.price_data,
         "index_data": data.index_data,
         "comparison_df": data.comparison_df,
+        "quarterly_alpha": data.quarterly_alpha,
         "config": data.config,
         "quarters": data.quarters,
         "is_live_quarter": data.is_live_quarter,
@@ -107,6 +108,7 @@ def _to_dashboard_data(raw: dict) -> DashboardData:
         price_data=raw["price_data"],
         index_data=raw["index_data"],
         comparison_df=raw["comparison_df"],
+        quarterly_alpha=raw.get("quarterly_alpha"),
         config=raw["config"],
         is_live_quarter=raw.get("is_live_quarter", False),
         as_of_date=raw.get("as_of_date"),
@@ -124,6 +126,27 @@ def _quarter_label(q: int) -> str:
 
 def _fmt_cr(v: float) -> str:
     return f"₹{v / _CR:,.1f} Cr"
+
+
+def _lookup_quarterly_return(data: DashboardData, quarter: int):
+    """Look up portfolio and benchmark returns from the quarterly_alpha table.
+
+    Returns (portfolio_return_pct, benchmark_return_pct) or (None, None) when
+    the table is unavailable (e.g. live-quarter / portfolio-only runs).
+    Values are returned as percentages (e.g. 5.0 for 5%).
+    """
+    qa = data.quarterly_alpha
+    if qa is None or qa.empty:
+        return None, None
+    row = qa.loc[qa["Quarter"] == quarter]
+    if row.empty:
+        return None, None
+    r = row.iloc[0]
+    pf = r.get("Portfolio_Return")
+    bm = r.get("Benchmark_Return")
+    pf_pct = pf * 100 if pd.notna(pf) else None
+    bm_pct = bm * 100 if pd.notna(bm) else None
+    return pf_pct, bm_pct
 
 
 # ── Sidebar ──────────────────────────────────────────────────────────────
@@ -163,7 +186,13 @@ def _render_sidebar(data: DashboardData):
     if pf_col in q_daily.columns and len(q_daily) >= 2:
         start_val = q_daily[pf_col].iloc[0]
         end_val = q_daily[pf_col].iloc[-1]
-        q_return = (end_val - start_val) / start_val * 100
+
+        qa_pf, _ = _lookup_quarterly_return(data, selected)
+        if qa_pf is not None:
+            q_return = qa_pf
+        else:
+            q_return = (end_val - start_val) / start_val * 100
+
         label = "Return (so far)" if data.is_live_quarter else "Quarter Return"
         st.sidebar.metric(label, f"{q_return:+.2f}%")
         st.sidebar.markdown(f"Start: {_fmt_cr(start_val)}  →  End: {_fmt_cr(end_val)}")
@@ -207,14 +236,21 @@ def _tab_portfolio(data: DashboardData, quarter: int):
             width="stretch",
         )
     with col2:
+        qa_pf, qa_bm = _lookup_quarterly_return(data, quarter)
+
         pf_col = "portfolio_value" if "portfolio_value" in q_daily.columns else "Total_Portfolio_Value"
         if pf_col in q_daily.columns and len(q_daily) >= 2:
-            pf_start = q_daily[pf_col].iloc[0]
-            pf_end = q_daily[pf_col].iloc[-1]
-            pf_ret = (pf_end - pf_start) / pf_start * 100
+            if qa_pf is not None:
+                pf_ret = qa_pf
+            else:
+                pf_start = q_daily[pf_col].iloc[0]
+                pf_end = q_daily[pf_col].iloc[-1]
+                pf_ret = (pf_end - pf_start) / pf_start * 100
             st.metric("Portfolio Return", f"{pf_ret:+.2f}%")
 
-        if comp is not None and "index_fund_value" in comp.columns and len(comp) >= 2:
+        if qa_bm is not None:
+            st.metric("Index Return", f"{qa_bm:+.2f}%")
+        elif comp is not None and "index_fund_value" in comp.columns and len(comp) >= 2:
             idx_start = comp["index_fund_value"].iloc[0]
             idx_end = comp["index_fund_value"].iloc[-1]
             idx_ret = (idx_end - idx_start) / idx_start * 100
@@ -347,6 +383,7 @@ def main():
             price_data=data.price_data,
             index_data=data.index_data,
             comparison_df=data.comparison_df,
+            quarterly_alpha=data.quarterly_alpha,
             config=data.config,
             is_live_quarter=data.is_live_quarter,
             as_of_date=data.as_of_date,
