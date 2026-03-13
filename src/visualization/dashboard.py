@@ -18,7 +18,6 @@ import argparse
 import sys
 import os
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -59,7 +58,6 @@ from visualization.charts.aggregate import (
 from visualization.charts.sector_analysis import (
     sector_allocation_donut,
     sector_performance_bar,
-    sector_win_rate_bar,
     sector_exit_breakdown,
 )
 from utils.quarter import get_quarter_dates
@@ -212,12 +210,16 @@ def _tab_portfolio(data: DashboardData, quarter: int):
     with col2:
         pf_col = "portfolio_value" if "portfolio_value" in q_daily.columns else "Total_Portfolio_Value"
         if pf_col in q_daily.columns and len(q_daily) >= 2:
-            daily_returns = q_daily[pf_col].pct_change().dropna()
-            vol = daily_returns.std() * np.sqrt(252) * 100
-            max_dd = ((q_daily[pf_col] / q_daily[pf_col].cummax()) - 1).min() * 100
-            st.metric("Annualised Volatility", f"{vol:.1f}%")
-            st.metric("Max Drawdown", f"{max_dd:.2f}%")
-            st.metric("Total Trades", len(q_trades))
+            pf_start = q_daily[pf_col].iloc[0]
+            pf_end = q_daily[pf_col].iloc[-1]
+            pf_ret = (pf_end - pf_start) / pf_start * 100
+            st.metric("Portfolio Return", f"{pf_ret:+.2f}%")
+
+        if comp is not None and "index_fund_value" in comp.columns and len(comp) >= 2:
+            idx_start = comp["index_fund_value"].iloc[0]
+            idx_end = comp["index_fund_value"].iloc[-1]
+            idx_ret = (idx_end - idx_start) / idx_start * 100
+            st.metric("Index Return", f"{idx_ret:+.2f}%")
 
     st.plotly_chart(
         cash_area_chart(q_daily, q_trades),
@@ -294,11 +296,7 @@ def _tab_sector_analysis(data: DashboardData, quarter: int):
     with col2:
         st.plotly_chart(sector_performance_bar(q_trades), width="stretch")
 
-    col3, col4 = st.columns(2)
-    with col3:
-        st.plotly_chart(sector_win_rate_bar(q_trades), width="stretch")
-    with col4:
-        st.plotly_chart(sector_exit_breakdown(q_trades), width="stretch")
+    st.plotly_chart(sector_exit_breakdown(q_trades), width="stretch")
 
 
 # ── Tab: Aggregate Insights ─────────────────────────────────────────────

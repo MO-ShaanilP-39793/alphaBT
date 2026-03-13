@@ -50,7 +50,7 @@ def sector_allocation_donut(trades: pd.DataFrame) -> go.Figure:
     )
     fig.update_layout(
         title="Sector Allocation (by Weight)",
-        height=400, margin=dict(l=20, r=20, t=50, b=20),
+        height=450, margin=dict(l=20, r=20, t=50, b=80),
     )
     return fig
 
