@@ -42,6 +42,101 @@ class DashboardData:
         return sorted(self.trade_results["quarter"].unique().tolist())
 
 
+@dataclass
+class CrossQuarterData:
+    """Pre-computed artefacts for the cross-quarter dashboard mode."""
+
+    portfolio_metrics: dict
+    benchmark_metrics: Optional[dict]
+    churn_df: pd.DataFrame
+    monthly_returns: pd.DataFrame
+    calendar_year_df: pd.DataFrame
+    drawdown_series: pd.DataFrame
+    cash_by_quarter: Optional[pd.DataFrame]
+
+
+def compute_cross_quarter_data(data: DashboardData) -> CrossQuarterData:
+    """Derive all cross-quarter analytics from the already-loaded data.
+
+    Reuses functions from ``reporting.metrics`` and ``reporting.analytics``
+    so the numbers match the Excel report exactly.
+    """
+    from reporting.metrics import (
+        compute_portfolio_metrics,
+        compute_benchmark_metrics,
+        compute_drawdown_series,
+        compute_cash_metrics,
+    )
+    from reporting.analytics import (
+        compute_churn_analysis,
+        compute_calendar_year_performance,
+        compute_monthly_returns_from_daily,
+    )
+
+    daily_pf = data.daily_pf_values.copy()
+    daily_pf["date"] = pd.to_datetime(daily_pf["date"])
+
+    pf_col = "portfolio_value" if "portfolio_value" in daily_pf.columns else "Total_Portfolio_Value"
+    if pf_col != "portfolio_value":
+        daily_pf = daily_pf.rename(columns={pf_col: "portfolio_value"})
+
+    if "quarter" not in daily_pf.columns:
+        daily_pf["quarter"] = 0
+
+    # --- Portfolio-level summary metrics ---
+    portfolio_metrics = compute_portfolio_metrics(daily_pf)
+
+    # --- Benchmark metrics (optional) ---
+    benchmark_metrics = None
+    if data.comparison_df is not None and not data.comparison_df.empty:
+        try:
+            benchmark_metrics = compute_benchmark_metrics(data.comparison_df)
+        except Exception:
+            pass
+
+    # --- Drawdown series ---
+    drawdown_series = compute_drawdown_series(daily_pf)
+
+    # --- Churn analysis ---
+    churn_df = compute_churn_analysis(data.trade_results)
+
+    # --- Monthly returns (from daily portfolio values) ---
+    daily_pf_sorted = daily_pf.sort_values("date").set_index("date")
+    daily_pf_sorted["pf_return"] = daily_pf_sorted["portfolio_value"].pct_change()
+
+    returns_cols = {"Portfolio": daily_pf_sorted["pf_return"]}
+    if data.comparison_df is not None and "index_fund_value" in data.comparison_df.columns:
+        comp = data.comparison_df.copy()
+        comp["date"] = pd.to_datetime(comp["date"])
+        comp = comp.sort_values("date").set_index("date")
+        comp["idx_return"] = comp["index_fund_value"].pct_change()
+        returns_cols["Benchmark"] = comp["idx_return"]
+
+    returns_df = pd.DataFrame(returns_cols).dropna(how="all")
+    returns_df.index.name = "Date"
+
+    monthly_returns = compute_monthly_returns_from_daily(returns_df, input_frequency="daily")
+
+    # --- Calendar year returns ---
+    calendar_year_df = compute_calendar_year_performance(returns_df, input_frequency="daily")
+
+    # --- Cash metrics by quarter ---
+    cash_by_quarter = None
+    cash_result = compute_cash_metrics(daily_pf)
+    if cash_result is not None:
+        cash_by_quarter = cash_result["cash_by_quarter"]
+
+    return CrossQuarterData(
+        portfolio_metrics=portfolio_metrics,
+        benchmark_metrics=benchmark_metrics,
+        churn_df=churn_df,
+        monthly_returns=monthly_returns,
+        calendar_year_df=calendar_year_df,
+        drawdown_series=drawdown_series,
+        cash_by_quarter=cash_by_quarter,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

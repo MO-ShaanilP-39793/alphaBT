@@ -30,10 +30,12 @@ if _SRC_DIR not in sys.path:
 
 from visualization.data_loader import (
     DashboardData,
+    CrossQuarterData,
     load_from_run_dir,
     get_quarter_trades,
     get_quarter_daily,
     classify_exit,
+    compute_cross_quarter_data,
 )
 from visualization.charts.portfolio import (
     portfolio_vs_index_chart,
@@ -58,6 +60,16 @@ from visualization.charts.sector_analysis import (
     sector_allocation_donut,
     sector_performance_bar,
     sector_exit_breakdown,
+)
+from visualization.charts.cross_quarter import (
+    equity_curve_chart,
+    drawdown_chart,
+    qoq_performance_chart,
+    calendar_year_chart,
+    monthly_returns_heatmap,
+    cash_trend_chart,
+    churn_chart,
+    return_distribution_charts,
 )
 from utils.quarter import get_quarter_dates
 from config.defaults import INITIAL_CAPITAL
@@ -161,56 +173,74 @@ def _render_sidebar(data: DashboardData):
 
     st.sidebar.markdown("---")
 
-    quarters = data.quarters
-    selected = st.sidebar.selectbox(
-        "Select Quarter",
-        quarters,
-        format_func=_quarter_label,
+    mode = st.sidebar.radio(
+        "Dashboard Mode",
+        ["Per Quarter", "Cross Quarter"],
+        horizontal=True,
     )
 
-    q_trades = get_quarter_trades(data, selected)
-    q_daily = get_quarter_daily(data, selected)
-
-    # Summary metrics
-    n_stocks = len(q_trades)
-    tp_count = int(q_trades["TP_triggered"].sum()) if "TP_triggered" in q_trades.columns else 0
-    sl_count = int(q_trades["SL_triggered"].sum()) if "SL_triggered" in q_trades.columns else 0
-    open_count = int((q_trades["exit_date"].isna()).sum()) if "exit_date" in q_trades.columns else 0
-
-    st.sidebar.markdown(f"**Stocks:** {n_stocks}")
-    st.sidebar.markdown(f"**TP Hits:** {tp_count}  |  **SL Hits:** {sl_count}")
-    if open_count > 0:
-        st.sidebar.markdown(f"**Still Open:** {open_count}")
-
-    pf_col = "portfolio_value" if "portfolio_value" in q_daily.columns else "Total_Portfolio_Value"
-    if pf_col in q_daily.columns and len(q_daily) >= 2:
-        start_val = q_daily[pf_col].iloc[0]
-        end_val = q_daily[pf_col].iloc[-1]
-
-        qa_pf, _ = _lookup_quarterly_return(data, selected)
-        if qa_pf is not None:
-            q_return = qa_pf
-        else:
-            q_return = (end_val - start_val) / start_val * 100
-
-        label = "Return (so far)" if data.is_live_quarter else "Quarter Return"
-        st.sidebar.metric(label, f"{q_return:+.2f}%")
-        st.sidebar.markdown(f"Start: {_fmt_cr(start_val)}  →  End: {_fmt_cr(end_val)}")
-
-    # Sector filter (only when sector column exists)
+    selected = None
     sector_filter = []
-    if "sector" in q_trades.columns:
-        all_sectors = sorted(q_trades["sector"].dropna().unique().tolist())
-        if all_sectors:
-            sector_filter = st.sidebar.multiselect(
-                "Filter by Sector", all_sectors, default=[],
-                help="Leave empty to show all sectors",
+
+    if mode == "Per Quarter":
+        quarters = data.quarters
+        selected = st.sidebar.selectbox(
+            "Select Quarter",
+            quarters,
+            format_func=_quarter_label,
+        )
+
+        q_trades = get_quarter_trades(data, selected)
+        q_daily = get_quarter_daily(data, selected)
+
+        n_stocks = len(q_trades)
+        tp_count = int(q_trades["TP_triggered"].sum()) if "TP_triggered" in q_trades.columns else 0
+        sl_count = int(q_trades["SL_triggered"].sum()) if "SL_triggered" in q_trades.columns else 0
+        open_count = int((q_trades["exit_date"].isna()).sum()) if "exit_date" in q_trades.columns else 0
+
+        st.sidebar.markdown(f"**Stocks:** {n_stocks}")
+        st.sidebar.markdown(f"**TP Hits:** {tp_count}  |  **SL Hits:** {sl_count}")
+        if open_count > 0:
+            st.sidebar.markdown(f"**Still Open:** {open_count}")
+
+        pf_col = "portfolio_value" if "portfolio_value" in q_daily.columns else "Total_Portfolio_Value"
+        if pf_col in q_daily.columns and len(q_daily) >= 2:
+            start_val = q_daily[pf_col].iloc[0]
+            end_val = q_daily[pf_col].iloc[-1]
+
+            qa_pf, _ = _lookup_quarterly_return(data, selected)
+            if qa_pf is not None:
+                q_return = qa_pf
+            else:
+                q_return = (end_val - start_val) / start_val * 100
+
+            label = "Return (so far)" if data.is_live_quarter else "Quarter Return"
+            st.sidebar.metric(label, f"{q_return:+.2f}%")
+            st.sidebar.markdown(f"Start: {_fmt_cr(start_val)}  →  End: {_fmt_cr(end_val)}")
+
+        if "sector" in q_trades.columns:
+            all_sectors = sorted(q_trades["sector"].dropna().unique().tolist())
+            if all_sectors:
+                sector_filter = st.sidebar.multiselect(
+                    "Filter by Sector", all_sectors, default=[],
+                    help="Leave empty to show all sectors",
+                )
+    else:
+        # Cross Quarter mode — show backtest date range summary
+        daily_pf = data.daily_pf_values
+        if "date" in daily_pf.columns and len(daily_pf) > 0:
+            dates = pd.to_datetime(daily_pf["date"])
+            st.sidebar.markdown(
+                f"**Period:** {dates.min().strftime('%Y-%m-%d')} → "
+                f"{dates.max().strftime('%Y-%m-%d')}"
             )
+        st.sidebar.markdown(f"**Quarters:** {len(data.quarters)}")
+        st.sidebar.markdown(f"**Total Trades:** {len(data.trade_results)}")
 
     st.sidebar.markdown("---")
     st.sidebar.caption("Built with Plotly + Streamlit")
 
-    return selected, sector_filter
+    return mode, selected, sector_filter
 
 
 # ── Tab: Portfolio Performance ───────────────────────────────────────────
@@ -357,6 +387,96 @@ def _tab_aggregate(data: DashboardData, quarter: int):
     )
 
 
+# ── Cross-Quarter Tabs ───────────────────────────────────────────────────
+
+@st.cache_data(show_spinner="Computing cross-quarter analytics …")
+def _cached_cross_quarter_data(raw: dict) -> CrossQuarterData:
+    data = _to_dashboard_data(raw)
+    return compute_cross_quarter_data(data)
+
+
+def _tab_xq_overview(data: DashboardData, xq: CrossQuarterData):
+    """Tab 1: Summary metrics, equity curve, drawdown."""
+    pm = xq.portfolio_metrics
+    bm = xq.benchmark_metrics
+
+    st.subheader("Summary Metrics")
+    cols = st.columns(4)
+    _metrics = [
+        ("CAGR", f"{pm.get('cagr_pct', 0):+.2f}%"),
+        ("Sharpe (ex Rf)", f"{pm.get('sharpe_ratio_ex_Rf', 0):.3f}"),
+        ("Sortino", f"{pm.get('sortino_ratio', 0):.3f}"),
+        ("Max Drawdown", f"{pm.get('max_drawdown_pct', 0):.2f}%"),
+    ]
+    for col, (label, val) in zip(cols, _metrics):
+        col.metric(label, val)
+
+    cols2 = st.columns(4)
+    _metrics2 = [
+        ("Total Return", f"{pm.get('total_return_pct', 0):+.2f}%"),
+        ("Calmar", f"{pm.get('calmar_ratio', 0):.3f}"),
+        ("VaR 95%", f"{pm.get('var_95_pct', 0):.2f}%"),
+        ("Positive Days", f"{pm.get('positive_days_pct', 0):.1f}%"),
+    ]
+    for col, (label, val) in zip(cols2, _metrics2):
+        col.metric(label, val)
+
+    if bm is not None:
+        st.markdown("**Benchmark Relative**")
+        cols3 = st.columns(4)
+        _bm_metrics = [
+            ("Alpha", f"{bm.get('alpha_pct', 0):+.2f}%"),
+            ("Beta", f"{bm.get('beta', 0):.3f}"),
+            ("Info Ratio", f"{bm.get('information_ratio', 0):.3f}"),
+            ("Up / Down Capture",
+             f"{bm.get('up_capture_pct', 0):.0f}% / {bm.get('down_capture_pct', 0):.0f}%"),
+        ]
+        for col, (label, val) in zip(cols3, _bm_metrics):
+            col.metric(label, val)
+
+    st.markdown("---")
+    st.plotly_chart(
+        equity_curve_chart(data.daily_pf_values, data.comparison_df),
+        use_container_width=True,
+    )
+    st.plotly_chart(
+        drawdown_chart(xq.drawdown_series),
+        use_container_width=True,
+    )
+
+
+def _tab_xq_performance(data: DashboardData, xq: CrossQuarterData):
+    """Tab 2: QoQ bar chart, calendar year performance, monthly heatmap."""
+    st.plotly_chart(
+        qoq_performance_chart(data.quarterly_alpha),
+        use_container_width=True,
+    )
+    st.plotly_chart(
+        calendar_year_chart(xq.calendar_year_df),
+        use_container_width=True,
+    )
+    st.plotly_chart(
+        monthly_returns_heatmap(xq.monthly_returns),
+        use_container_width=True,
+    )
+
+
+def _tab_xq_dynamics(xq: CrossQuarterData):
+    """Tab 3: Cash trend, churn, return distribution."""
+    st.plotly_chart(
+        cash_trend_chart(xq.cash_by_quarter),
+        use_container_width=True,
+    )
+    st.plotly_chart(
+        churn_chart(xq.churn_df),
+        use_container_width=True,
+    )
+    st.plotly_chart(
+        return_distribution_charts(xq.monthly_returns),
+        use_container_width=True,
+    )
+
+
 # ── Main ─────────────────────────────────────────────────────────────────
 
 def main():
@@ -365,48 +485,64 @@ def main():
         "--run-dir", required=True,
         help="Path to a backtest run directory or get_portfolio --with-levels output folder",
     )
-    # Streamlit passes its own args; parse only known ones.
     args, _ = parser.parse_known_args()
 
     raw = _load_data(args.run_dir)
     data = _to_dashboard_data(raw)
 
-    quarter, sector_filter = _render_sidebar(data)
+    mode, quarter, sector_filter = _render_sidebar(data)
 
-    if sector_filter:
-        filtered_tr = data.trade_results[
-            data.trade_results["sector"].isin(sector_filter)
-        ]
-        data = DashboardData(
-            trade_results=filtered_tr,
-            daily_pf_values=data.daily_pf_values,
-            price_data=data.price_data,
-            index_data=data.index_data,
-            comparison_df=data.comparison_df,
-            quarterly_alpha=data.quarterly_alpha,
-            config=data.config,
-            is_live_quarter=data.is_live_quarter,
-            as_of_date=data.as_of_date,
-        )
+    if mode == "Cross Quarter":
+        xq = _cached_cross_quarter_data(raw)
 
-    tab_pf, tab_trades, tab_sector, tab_drill, tab_agg = st.tabs([
-        "Portfolio Performance",
-        "Trade Outcomes",
-        "Sector Analysis",
-        "Stock Drill-Down",
-        "Aggregate Insights",
-    ])
+        tab_overview, tab_perf, tab_dynamics = st.tabs([
+            "Overview",
+            "Performance Analysis",
+            "Portfolio Dynamics",
+        ])
 
-    with tab_pf:
-        _tab_portfolio(data, quarter)
-    with tab_trades:
-        _tab_trade_outcomes(data, quarter)
-    with tab_sector:
-        _tab_sector_analysis(data, quarter)
-    with tab_drill:
-        _tab_stock_drilldown(data, quarter)
-    with tab_agg:
-        _tab_aggregate(data, quarter)
+        with tab_overview:
+            _tab_xq_overview(data, xq)
+        with tab_perf:
+            _tab_xq_performance(data, xq)
+        with tab_dynamics:
+            _tab_xq_dynamics(xq)
+
+    else:
+        if sector_filter:
+            filtered_tr = data.trade_results[
+                data.trade_results["sector"].isin(sector_filter)
+            ]
+            data = DashboardData(
+                trade_results=filtered_tr,
+                daily_pf_values=data.daily_pf_values,
+                price_data=data.price_data,
+                index_data=data.index_data,
+                comparison_df=data.comparison_df,
+                quarterly_alpha=data.quarterly_alpha,
+                config=data.config,
+                is_live_quarter=data.is_live_quarter,
+                as_of_date=data.as_of_date,
+            )
+
+        tab_pf, tab_trades, tab_sector, tab_drill, tab_agg = st.tabs([
+            "Portfolio Performance",
+            "Trade Outcomes",
+            "Sector Analysis",
+            "Stock Drill-Down",
+            "Aggregate Insights",
+        ])
+
+        with tab_pf:
+            _tab_portfolio(data, quarter)
+        with tab_trades:
+            _tab_trade_outcomes(data, quarter)
+        with tab_sector:
+            _tab_sector_analysis(data, quarter)
+        with tab_drill:
+            _tab_stock_drilldown(data, quarter)
+        with tab_agg:
+            _tab_aggregate(data, quarter)
 
 
 if __name__ == "__main__":
