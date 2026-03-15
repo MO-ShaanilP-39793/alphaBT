@@ -69,16 +69,14 @@ Calculates classic pivot points with support and resistance levels.
 ```
 Pivot = (High + Low + Close) / 3
 
-R1 = 2 × Pivot - Low
-R2 = Pivot + (High - Low)
-R3 = High + 2 × (Pivot - Low)
-
-S1 = 2 × Pivot - High
-S2 = Pivot - (High - Low)
-S3 = Low - 2 × (High - Pivot)
+R1    = 2 × Pivot - Low           S1    = 2 × Pivot - High
+R1_R2 = (R1 + R2) / 2             S1_S2 = (S1 + S2) / 2
+R2    = Pivot + (High - Low)      S2    = Pivot - (High - Low)
+R2_R3 = (R2 + R3) / 2             S2_S3 = (S2 + S3) / 2
+R3    = High + 2 × (Pivot - Low)  S3    = Low - 2 × (High - Pivot)
 ```
 
-**Returns:** Dictionary with keys `['pivot', 'R1', 'R2', 'R3', 'S1', 'S2', 'S3', 'period_high', 'period_low', 'period_close']`
+**Returns:** Dictionary with keys `['pivot', 'R1', 'R1_R2', 'R2', 'R2_R3', 'R3', 'S1', 'S1_S2', 'S2', 'S2_S3', 'S3', 'period_high', 'period_low', 'period_close']`
 
 **Example:**
 ```python
@@ -93,6 +91,9 @@ print(f"S1: ₹{pivots['S1']:.2f} | S2: ₹{pivots['S2']:.2f}")
 #### `calculate_pivot_thresholds(price_df, co_name, entry_price, end_date, tp_level='R1', sl_level='S1', lookback_days=60)`
 
 Gets TP/SL prices from pivot levels.
+
+- **tp_level**: `'R1'`, `'R1_R2'`, `'R2'`, `'R2_R3'`, or `'R3'` (midpoints R1_R2, R2_R3 are the average of adjacent levels)
+- **sl_level**: `'S1'`, `'S1_S2'`, `'S2'`, `'S2_S3'`, or `'S3'`
 
 **Returns:** Tuple of `(tp_price, sl_price, pivots_dict)`
 

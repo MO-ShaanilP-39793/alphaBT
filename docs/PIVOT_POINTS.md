@@ -49,16 +49,20 @@ Price
 
 > Pivot Points answer: "Based on yesterday's trading, where are the key levels today?"
 
-The central **Pivot Point (P)** represents the "fair value" or equilibrium price. Levels above are resistance (R1, R2, R3), levels below are support (S1, S2, S3).
+The central **Pivot Point (P)** represents the "fair value" or equilibrium price. Levels above are resistance (R1, R2, R3), levels below are support (S1, S2, S3). We also support **midpoint levels** (R1_R2, R2_R3, S1_S2, S2_S3) — the average of two adjacent levels — for finer TP/SL placement.
 
 ```
-        R3  ─────  Strong Resistance
-        R2  ─────  Moderate Resistance  
-        R1  ─────  First Resistance
-        P   ═════  PIVOT (equilibrium)
-        S1  ─────  First Support
-        S2  ─────  Moderate Support
-        S3  ─────  Strong Support
+        R3    ─────  Strong Resistance
+        R2_R3 ─────  Midpoint (R2–R3)
+        R2    ─────  Moderate Resistance  
+        R1_R2 ─────  Midpoint (R1–R2)
+        R1    ─────  First Resistance
+        P     ═════  PIVOT (equilibrium)
+        S1    ─────  First Support
+        S1_S2 ─────  Midpoint (S1–S2)
+        S2    ─────  Moderate Support
+        S2_S3 ─────  Midpoint (S2–S3)
+        S3    ─────  Strong Support
 ```
 
 ### Why Pivot Points Work
@@ -85,7 +89,9 @@ This is the average of the three key prices—the "center of gravity" of the pre
 | Level | Formula | Interpretation |
 |-------|---------|----------------|
 | **R1** | 2 × P - Low | First resistance; most likely to be tested |
+| **R1_R2** | (R1 + R2) / 2 | Midpoint between R1 and R2 |
 | **R2** | P + (High - Low) | Second resistance; adds the full range above pivot |
+| **R2_R3** | (R2 + R3) / 2 | Midpoint between R2 and R3 |
 | **R3** | High + 2 × (P - Low) | Third resistance; extreme bullish target |
 
 ### Step 3: Calculate Support Levels
@@ -93,7 +99,9 @@ This is the average of the three key prices—the "center of gravity" of the pre
 | Level | Formula | Interpretation |
 |-------|---------|----------------|
 | **S1** | 2 × P - High | First support; most likely to hold |
+| **S1_S2** | (S1 + S2) / 2 | Midpoint between S1 and S2 |
 | **S2** | P - (High - Low) | Second support; subtracts full range from pivot |
+| **S2_S3** | (S2 + S3) / 2 | Midpoint between S2 and S3 |
 | **S3** | Low - 2 × (High - P) | Third support; extreme bearish level |
 
 ### Formula Summary
@@ -103,9 +111,11 @@ Given: H = High, L = Low, C = Close
 
 P  = (H + L + C) / 3
 
-R1 = 2P - L       S1 = 2P - H
-R2 = P + (H - L)  S2 = P - (H - L)
-R3 = H + 2(P - L) S3 = L - 2(H - P)
+R1    = 2P - L           S1    = 2P - H
+R1_R2 = (R1 + R2) / 2    S1_S2 = (S1 + S2) / 2
+R2    = P + (H - L)      S2    = P - (H - L)
+R2_R3 = (R2 + R3) / 2    S2_S3 = (S2 + S3) / 2
+R3    = H + 2(P - L)     S3    = L - 2(H - P)
 ```
 
 ---
@@ -163,19 +173,19 @@ S3 = 480 - 2 × (520 - 503.33) = 480 - 33.33 = ₹446.67
 ```
 Price
   ↑
-₹567 ─── R3 ─────────────────── Extreme bullish
-         
-₹543 ─── R2 ─────────────────── Strong resistance
-         
-₹527 ─── R1 ─────────────────── First resistance
+₹567 ─── R3    ─────────────────── Extreme bullish
+₹555 ─── R2_R3 ─────────────────── Midpoint (R2–R3)
+₹543 ─── R2    ─────────────────── Strong resistance
+₹535 ─── R1_R2 ─────────────────── Midpoint (R1–R2)
+₹527 ─── R1    ─────────────────── First resistance
          
 ₹503 ═══ P ══════════════════ PIVOT (equilibrium)
          
-₹487 ─── S1 ─────────────────── First support
-         
-₹463 ─── S2 ─────────────────── Strong support
-         
-₹447 ─── S3 ─────────────────── Extreme bearish
+₹487 ─── S1    ─────────────────── First support
+₹475 ─── S1_S2 ─────────────────── Midpoint (S1–S2)
+₹463 ─── S2    ─────────────────── Strong support
+₹455 ─── S2_S3 ─────────────────── Midpoint (S2–S3)
+₹447 ─── S3    ─────────────────── Extreme bearish
   ↓
 ```
 
@@ -183,21 +193,32 @@ Price
 
 ## Using Pivot Points for TP/SL
 
+### Configurable TP/SL Levels
+
+Take-profit and stop-loss can be set to any of the calculated levels (including midpoints):
+
+| Use | Resistance levels (TP for longs) | Support levels (SL for longs) |
+|-----|----------------------------------|-------------------------------|
+| **Options** | `R1`, `R1_R2`, `R2`, `R2_R3`, `R3` | `S1`, `S1_S2`, `S2`, `S2_S3`, `S3` |
+
+- **R1_R2** / **S1_S2** — Midpoint between first and second level; target between conservative and moderate.
+- **R2_R3** / **S2_S3** — Midpoint between second and third level; target between moderate and extreme.
+
 ### For Long Positions (Buying)
 
 | Element | Level to Use | Rationale |
 |---------|--------------|-----------|
 | **Entry** | Near P or S1 | Buy at support/equilibrium |
-| **Stop Loss** | Below S1 or S2 | Exit if support breaks |
-| **Take Profit** | R1 or R2 | Target resistance levels |
+| **Stop Loss** | S1, S1_S2, S2, S2_S3, or S3 | Exit if support breaks (configurable) |
+| **Take Profit** | R1, R1_R2, R2, R2_R3, or R3 | Target resistance (configurable) |
 
 ### For Short Positions (Selling)
 
 | Element | Level to Use | Rationale |
 |---------|--------------|-----------|
 | **Entry** | Near P or R1 | Sell at resistance/equilibrium |
-| **Stop Loss** | Above R1 or R2 | Exit if resistance breaks |
-| **Take Profit** | S1 or S2 | Target support levels |
+| **Stop Loss** | R1, R1_R2, R2, R2_R3, or R3 | Exit if resistance breaks (configurable) |
+| **Take Profit** | S1, S1_S2, S2, S2_S3, or S3 | Target support (configurable) |
 
 ### Example Trade Setup
 
@@ -238,7 +259,21 @@ def calculate_pivot_points(price_df, co_name, end_date, lookback_days=60):
     s1 = 2 * pivot - high
     s2 = pivot - (high - low)
     s3 = low - 2 * (high - pivot)
+    
+    # Midpoint levels (mean of adjacent levels)
+    r1_r2 = (r1 + r2) / 2
+    r2_r3 = (r2 + r3) / 2
+    s1_s2 = (s1 + s2) / 2
+    s2_s3 = (s2 + s3) / 2
+    
+    # Returns: pivot, R1, R1_R2, R2, R2_R3, R3, S1, S1_S2, S2, S2_S3, S3, period_high, period_low, period_close
 ```
+
+`calculate_pivot_thresholds()` accepts:
+- **tp_level**: `'R1'`, `'R1_R2'`, `'R2'`, `'R2_R3'`, or `'R3'`
+- **sl_level**: `'S1'`, `'S1_S2'`, `'S2'`, `'S2_S3'`, or `'S3'`
+
+Configure these in `strategy_config.yaml` under `pivot_config`.
 
 ### Why Use a Longer Lookback?
 
@@ -293,12 +328,16 @@ Based on historical analysis, approximately:
 | Level | Probability of Being Reached |
 |-------|------------------------------|
 | R1/S1 | ~70-80% |
+| R1_R2 / S1_S2 | Between R1/S1 and R2/S2 (midpoint) |
 | R2/S2 | ~40-50% |
+| R2_R3 / S2_S3 | Between R2/S2 and R3/S3 (midpoint) |
 | R3/S3 | ~15-25% |
 
 This is why:
 - **R1/S1** are used for conservative targets
+- **R1_R2/S1_S2** give a target between conservative and moderate
 - **R2/S2** are used for moderate targets
+- **R2_R3/S2_S3** give a target between moderate and extreme
 - **R3/S3** represent extreme moves
 
 ### How Price Behaves at Pivot Levels
@@ -348,8 +387,8 @@ If the calculated resistance (R1) is below our entry price, we need to use a hig
 
 ```python
 if tp_price <= entry_price:
-    # Try R2, then R3
-    for level in ['R2', 'R3']:
+    # Try next levels: R1_R2, R2, R2_R3, R3
+    for level in ['R1_R2', 'R2', 'R2_R3', 'R3']:
         if pivots[level] > entry_price:
             tp_price = pivots[level]
             break
@@ -364,8 +403,8 @@ Similarly for support levels:
 
 ```python
 if sl_price >= entry_price:
-    # Try S2, then S3
-    for level in ['S2', 'S3']:
+    # Try next levels: S1_S2, S2, S2_S3, S3
+    for level in ['S1_S2', 'S2', 'S2_S3', 'S3']:
         if pivots[level] < entry_price:
             sl_price = pivots[level]
             break
@@ -384,7 +423,7 @@ if sl_price >= entry_price:
 
 3. **Levels are self-fulfilling** — They work partly because many traders use them
 
-4. **R1/S1 most likely to be reached** — Use for conservative targets; R3/S3 are extreme
+4. **R1/S1 most likely to be reached** — Use for conservative targets; R1_R2/S1_S2 for in-between; R3/S3 are extreme
 
 5. **Longer lookback = stronger levels** — 60-day pivots are more significant than daily pivots for quarterly strategies
 
@@ -398,4 +437,4 @@ if sl_price >= entry_price:
 
 - Implementation: `src/dynamic_levels.py` → `calculate_pivot_points()`, `calculate_pivot_thresholds()`
 - Usage: `src/backtest/tpsl.py` → `calculate_dynamic_thresholds()` (pivot mode)
-- Configuration: `src/strategy_config.yaml` → `pivot_config` section
+- Configuration: `src/strategy_config.yaml` → `pivot_config` section (`tp_level`: R1, R1_R2, R2, R2_R3, R3; `sl_level`: S1, S1_S2, S2, S2_S3, S3)

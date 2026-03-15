@@ -538,23 +538,24 @@ pivot_config:
 | Parameter | Type | Valid Values | Description |
 |-----------|------|--------------|-------------|
 | `lookback_days` | Integer | 20-120 | Days of price history for pivot calc |
-| `tp_level` | String | `'R1'`, `'R2'`, `'R3'` | Resistance level for TP |
-| `sl_level` | String | `'S1'`, `'S2'`, `'S3'` | Support level for SL |
+| `tp_level` | String | `'R1'`, `'R1_R2'`, `'R2'`, `'R2_R3'`, `'R3'` | Resistance level for TP |
+| `sl_level` | String | `'S1'`, `'S1_S2'`, `'S2'`, `'S2_S3'`, `'S3'` | Support level for SL |
 
-**Pivot formulas** (classic):
+**Pivot formulas** (classic + midpoints):
 ```
 Pivot Point (P) = (High + Low + Close) / 3
-R1 = (2 × P) - Low
-R2 = P + (High - Low)
-R3 = High + 2 × (P - Low)
-S1 = (2 × P) - High
-S2 = P - (High - Low)
-S3 = Low - 2 × (High - P)
+R1    = (2 × P) - Low           S1    = (2 × P) - High
+R1_R2 = (R1 + R2) / 2           S1_S2 = (S1 + S2) / 2
+R2    = P + (High - Low)        S2    = P - (High - Low)
+R2_R3 = (R2 + R3) / 2           S2_S3 = (S2 + S3) / 2
+R3    = High + 2 × (P - Low)     S3    = Low - 2 × (High - P)
 ```
 
 **Level selection**:
 - R1/S1 = closest resistance/support (conservative)
+- R1_R2/S1_S2 = midpoint between first and second level
 - R2/S2 = mid-range (moderate)
+- R2_R3/S2_S3 = midpoint between second and third level
 - R3/S3 = extended (aggressive)
 
 See [dynamic_levels_reference.md](dynamic_levels_reference.md) for theory.
@@ -850,10 +851,10 @@ pivot_tpsl:
     high: 120
   tp_level:
     type: categorical
-    choices: ['R1', 'R2', 'R3']
+    choices: ['R1', 'R1_R2', 'R2', 'R2_R3', 'R3']
   sl_level:
     type: categorical
-    choices: ['S1', 'S2', 'S3']
+    choices: ['S1', 'S1_S2', 'S2', 'S2_S3', 'S3']
 ```
 
 Sampled only when `tpsl_mode` trial value is `'pivot'`.

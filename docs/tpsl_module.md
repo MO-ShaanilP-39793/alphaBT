@@ -71,7 +71,7 @@ TP and SL thresholds are computed independently via `calculate_dynamic_threshold
 - **Tiered mode**: `tp_price = entry_price × (1 + tp_pct)`, `sl_price = entry_price × (1 - sl_pct)`
 - **Flat mode**: Same formula, but a single percentage for all stocks
 - **ATR mode**: `tp_price = entry + (multiplier × ATR)`, `sl_price = entry - (multiplier × ATR)`
-- **Pivot mode**: TP = resistance level (R1/R2/R3), SL = support level (S1/S2/S3)
+- **Pivot mode**: TP = resistance level (R1, R1_R2, R2, R2_R3, R3), SL = support level (S1, S1_S2, S2, S2_S3, S3)
 
 If ATR or pivot calculation fails (insufficient data), the module automatically falls back to **flat** mode.
 
@@ -156,8 +156,8 @@ tp_mode: 'pivot'
 sl_mode: 'pivot'
 pivot_config:
   lookback_days: 60
-  tp_level: 'R1'
-  sl_level: 'S1'
+  tp_level: 'R1'   # R1, R1_R2, R2, R2_R3, or R3
+  sl_level: 'S1'   # S1, S1_S2, S2, S2_S3, or S3
 ```
 
 ### Mixed Modes

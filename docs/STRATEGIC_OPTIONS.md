@@ -468,18 +468,18 @@ pivot_config:
 
 **What are Pivots?** Classic technical analysis levels calculated from historical High/Low/Close:
 - **Pivot Point (P)** = (High + Low + Close) / 3
-- **Resistance levels**: R1, R2, R3 (above pivot)
-- **Support levels**: S1, S2, S3 (below pivot)
+- **Resistance levels**: R1, R1_R2, R2, R2_R3, R3 (above pivot; R1_R2 and R2_R3 are midpoints)
+- **Support levels**: S1, S1_S2, S2, S2_S3, S3 (below pivot; S1_S2 and S2_S3 are midpoints)
 
 **How it works**:
 1. At entry, calculate pivot levels using `lookback_days` historical data
-2. Use specified resistance level as TP (e.g., R1, R2, R3)
-3. Use specified support level as SL (e.g., S1, S2, S3)
+2. Use specified resistance level as TP (e.g., R1, R1_R2, R2, R2_R3, R3)
+3. Use specified support level as SL (e.g., S1, S1_S2, S2, S2_S3, S3)
 
 **Advantages**:
 - ✅ Based on **support/resistance** theory (where buyers/sellers congregate)
 - ✅ No category labels needed
-- ✅ Multiple levels (R1/R2/R3) let you tune aggressiveness
+- ✅ Multiple levels (R1/R1_R2/R2/R2_R3/R3 and S1/S1_S2/S2/S2_S3/S3) let you tune aggressiveness
 
 **Disadvantages**:
 - ❌ Assumes technical analysis validity (not all quants agree)
@@ -489,7 +489,7 @@ pivot_config:
 **When to use**:
 - You believe in technical analysis / support-resistance
 - You want TP/SL levels grounded in historical price action
-- You're backtesting multiple pivot strategies (e.g., R1 vs R2 vs R3)
+- You're backtesting multiple pivot strategies (e.g., R1 vs R1_R2 vs R2 vs R3)
 
 **Further reading**: See [dynamic_levels_reference.md](dynamic_levels_reference.md) for formulas and theory.
 

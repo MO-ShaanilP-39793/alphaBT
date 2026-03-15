@@ -280,13 +280,17 @@ Why these levels exist:
 > Pivot Points answer: "Based on recent trading, where are the key levels?"
 
 ```
-        R3  ─────  Strong Resistance
-        R2  ─────  Moderate Resistance  
-        R1  ─────  First Resistance
-        P   ═════  PIVOT (equilibrium)
-        S1  ─────  First Support
-        S2  ─────  Moderate Support
-        S3  ─────  Strong Support
+        R3    ─────  Strong Resistance
+        R2_R3 ─────  Midpoint (R2–R3)
+        R2    ─────  Moderate Resistance  
+        R1_R2 ─────  Midpoint (R1–R2)
+        R1    ─────  First Resistance
+        P     ═════  PIVOT (equilibrium)
+        S1    ─────  First Support
+        S1_S2 ─────  Midpoint (S1–S2)
+        S2    ─────  Moderate Support
+        S2_S3 ─────  Midpoint (S2–S3)
+        S3    ─────  Strong Support
 ```
 
 Why they work:
@@ -304,9 +308,11 @@ Given: H = High, L = Low, C = Close
 
 P  = (H + L + C) / 3
 
-R1 = 2P - L       S1 = 2P - H
-R2 = P + (H - L)  S2 = P - (H - L)
-R3 = H + 2(P - L) S3 = L - 2(H - P)
+R1    = 2P - L           S1    = 2P - H
+R1_R2 = (R1 + R2) / 2    S1_S2 = (S1 + S2) / 2
+R2    = P + (H - L)      S2    = P - (H - L)
+R2_R3 = (R2 + R3) / 2    S2_S3 = (S2 + S3) / 2
+R3    = H + 2(P - L)     S3    = L - 2(H - P)
 ```
 
 #### Step-by-Step Example
@@ -342,7 +348,9 @@ Based on historical analysis, approximately:
 | Level | Probability |
 |-------|-------------|
 | R1/S1 | ~70-80% |
+| R1_R2 / S1_S2 | Midpoint between R1/S1 and R2/S2 |
 | R2/S2 | ~40-50% |
+| R2_R3 / S2_S3 | Midpoint between R2/S2 and R3/S3 |
 | R3/S3 | ~15-25% |
 
 ---
@@ -354,8 +362,8 @@ Based on historical analysis, approximately:
 | Element | Level to Use | Rationale |
 |---------|--------------|-----------|
 | **Entry** | Near P or S1 | Buy at support/equilibrium |
-| **Stop Loss** | Below S1 or S2 | Exit if support breaks |
-| **Take Profit** | R1 or R2 | Target resistance levels |
+| **Stop Loss** | S1, S1_S2, S2, S2_S3, or S3 | Exit if support breaks (configurable) |
+| **Take Profit** | R1, R1_R2, R2, R2_R3, or R3 | Target resistance (configurable) |
 
 #### Example Trade Setup
 
@@ -377,7 +385,7 @@ def calculate_pivot_points(price_df, co_name, end_date, lookback_days=60):
     close = stock_data['close'].iloc[-1] # Most recent close
     
     pivot = (high + low + close) / 3
-    # ... R1-R3, S1-S3 from classic formulas
+    # ... R1-R3, S1-S3 from classic formulas; R1_R2, R2_R3, S1_S2, S2_S3 = midpoints
 ```
 
 | Lookback | Best For |
@@ -409,8 +417,8 @@ Our implementation includes logic for when pivot levels don't make sense relativ
 **TP below entry:**
 ```python
 if tp_price <= entry_price:
-    # Try R2, then R3
-    for level in ['R2', 'R3']:
+    # Try next levels: R1_R2, R2, R2_R3, R3
+    for level in ['R1_R2', 'R2', 'R2_R3', 'R3']:
         if pivots[level] > entry_price:
             tp_price = pivots[level]
             break
@@ -422,8 +430,8 @@ if tp_price <= entry_price:
 **SL above entry:**
 ```python
 if sl_price >= entry_price:
-    # Try S2, then S3
-    for level in ['S2', 'S3']:
+    # Try next levels: S1_S2, S2, S2_S3, S3
+    for level in ['S1_S2', 'S2', 'S2_S3', 'S3']:
         if pivots[level] < entry_price:
             sl_price = pivots[level]
             break
@@ -440,7 +448,7 @@ if sl_price >= entry_price:
 
 Calculates classic pivot points with support and resistance levels.
 
-**Returns:** Dictionary with keys `['pivot', 'R1', 'R2', 'R3', 'S1', 'S2', 'S3', 'period_high', 'period_low', 'period_close']`
+**Returns:** Dictionary with keys `['pivot', 'R1', 'R1_R2', 'R2', 'R2_R3', 'R3', 'S1', 'S1_S2', 'S2', 'S2_S3', 'S3', 'period_high', 'period_low', 'period_close']`
 
 ```python
 from backtest.dynamic_levels import calculate_pivot_points
@@ -456,6 +464,9 @@ print(f"S1: ₹{pivots['S1']:.2f} | S2: ₹{pivots['S2']:.2f}")
 #### `calculate_pivot_thresholds(price_df, co_name, entry_price, end_date, tp_level='R1', sl_level='S1', lookback_days=60)`
 
 Gets TP/SL prices from pivot levels with automatic adjustment if the selected level is invalid.
+
+- **tp_level**: `'R1'`, `'R1_R2'`, `'R2'`, `'R2_R3'`, or `'R3'`
+- **sl_level**: `'S1'`, `'S1_S2'`, `'S2'`, `'S2_S3'`, or `'S3'`
 
 **Returns:** Tuple of `(tp_price, sl_price, pivots_dict)`
 
