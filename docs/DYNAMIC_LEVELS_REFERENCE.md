@@ -596,4 +596,6 @@ See [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md) for the full parame
 - Consumer: `src/backtest/tpsl.py` → `calculate_dynamic_thresholds()`
 - Config: `src/strategy_config.yaml`
 - Wilder, J. W. (1978). *New Concepts in Technical Trading Systems*
-- Potential improvements: [ATR_potential_improvements.md](ATR_potential_improvements.md)
+- Potential improvements: [ATR_POTENTIAL_IMPROVEMENTS.md](ATR_POTENTIAL_IMPROVEMENTS.md)
+
+*Last updated: March 2026*

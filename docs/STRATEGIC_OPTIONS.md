@@ -447,7 +447,7 @@ atr_config:
 - You want technical-analysis-backed thresholds
 - You're willing to optimize ATR parameters (period 7-21, multipliers 1.5-3.5)
 
-**Further reading**: See [dynamic_levels_reference.md](dynamic_levels_reference.md) for ATR calculation details and intuition.
+**Further reading**: See [DYNAMIC_LEVELS_REFERENCE.md](DYNAMIC_LEVELS_REFERENCE.md) for ATR calculation details and intuition.
 
 ---
 
@@ -491,7 +491,7 @@ pivot_config:
 - You want TP/SL levels grounded in historical price action
 - You're backtesting multiple pivot strategies (e.g., R1 vs R1_R2 vs R2 vs R3)
 
-**Further reading**: See [dynamic_levels_reference.md](dynamic_levels_reference.md) for formulas and theory.
+**Further reading**: See [DYNAMIC_LEVELS_REFERENCE.md](DYNAMIC_LEVELS_REFERENCE.md) for formulas and theory.
 
 ---
 
@@ -713,4 +713,4 @@ START: Do you have category labels?
 
 ---
 
-*Last updated: February 2026*
+*Last updated: March 2026*

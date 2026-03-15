@@ -520,7 +520,7 @@ atr_config:
 - Longer period (14-21) = smoother, less noisy
 - Higher multipliers = wider bands, fewer exits
 
-See [dynamic_levels_reference.md](dynamic_levels_reference.md) for details.
+See [DYNAMIC_LEVELS_REFERENCE.md](DYNAMIC_LEVELS_REFERENCE.md) for details.
 
 ---
 
@@ -558,7 +558,7 @@ R3    = High + 2 × (P - Low)     S3    = Low - 2 × (High - P)
 - R2_R3/S2_S3 = midpoint between second and third level
 - R3/S3 = extended (aggressive)
 
-See [dynamic_levels_reference.md](dynamic_levels_reference.md) for theory.
+See [DYNAMIC_LEVELS_REFERENCE.md](DYNAMIC_LEVELS_REFERENCE.md) for theory.
 
 ---
 
@@ -1269,4 +1269,4 @@ Every backtest saves a copy of the configuration used:
 
 ---
 
-*Last updated: February 2026*
+*Last updated: March 2026*

@@ -270,7 +270,7 @@ See [OUTPUTS_AND_METRICS.md](OUTPUTS_AND_METRICS.md) for:
 ### Reference Documentation
 
 For deeper technical details, see the `docs/` folder:
-- [dynamic_levels_reference.md](dynamic_levels_reference.md) – ATR, Pivot Points, and dynamic TP/SL level calculations
+- [DYNAMIC_LEVELS_REFERENCE.md](DYNAMIC_LEVELS_REFERENCE.md) – ATR, Pivot Points, and dynamic TP/SL level calculations
 - [OUTPUTS_AND_METRICS.md](OUTPUTS_AND_METRICS.md) – Beta, Tracking Error, Information Ratio formulas and all metrics explained
 
 ### Important Conventions
@@ -316,4 +316,4 @@ Copy these to `strategy_config.yaml` / `tuning_config.yaml` and customize for yo
 
 ---
 
-*Last updated: February 2026*
+*Last updated: March 2026*

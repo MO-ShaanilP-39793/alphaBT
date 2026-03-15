@@ -136,7 +136,7 @@ flat_config:
 
 ### ATR Mode
 
-Dynamic thresholds based on each stock's recent price volatility. See [dynamic_levels_reference.md](dynamic_levels_reference.md) for the full ATR explanation.
+Dynamic thresholds based on each stock's recent price volatility. See [DYNAMIC_LEVELS_REFERENCE.md](DYNAMIC_LEVELS_REFERENCE.md) for the full ATR explanation.
 
 ```yaml
 tp_mode: 'atr'
@@ -149,7 +149,7 @@ atr_config:
 
 ### Pivot Mode
 
-Thresholds based on support/resistance levels. See [dynamic_levels_reference.md](dynamic_levels_reference.md) for the full pivot point explanation.
+Thresholds based on support/resistance levels. See [DYNAMIC_LEVELS_REFERENCE.md](DYNAMIC_LEVELS_REFERENCE.md) for the full pivot point explanation.
 
 ```yaml
 tp_mode: 'pivot'
@@ -301,7 +301,9 @@ Key config keys consumed by this module:
 
 ## Related Documentation
 
-- [dynamic_levels_reference.md](dynamic_levels_reference.md) — ATR and pivot point theory + `dynamic_levels.py` API
+- [DYNAMIC_LEVELS_REFERENCE.md](DYNAMIC_LEVELS_REFERENCE.md) — ATR and pivot point theory + `dynamic_levels.py` API
 - [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md) — Full YAML parameter reference
 - [TUNING_GUIDE.md](TUNING_GUIDE.md) — Optuna optimization of TP/SL parameters
 - [STRATEGIC_OPTIONS.md](STRATEGIC_OPTIONS.md) — Strategy selection guidance
+
+*Last updated: March 2026*

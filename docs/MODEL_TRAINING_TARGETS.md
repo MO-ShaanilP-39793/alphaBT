@@ -87,3 +87,5 @@ This metric looks at the price at the end of the trading day.
 | **Execution** | Assumes **Limit Orders** (Take Profit) | Assumes **EOD / Market Orders** |
 | **Noise** | Higher (includes wicks/noise) | Lower (confirmed prices) |
 | **Difficulty** | Harder to realize in practice | Easier to realize in practice |
+
+*Last updated: March 2026*

@@ -127,3 +127,5 @@ Example header:
 
 - [TUNING_GUIDE.md](TUNING_GUIDE.md) — Setting up and running Optuna optimization
 - [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md) — Full YAML parameter reference
+
+*Last updated: March 2026*

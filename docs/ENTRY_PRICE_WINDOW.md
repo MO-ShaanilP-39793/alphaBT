@@ -65,7 +65,7 @@ So the daily equity curve does not show intra-window price moves; it reflects th
 
 ## 3. Link to Target Construction
 
-The ML target methodology is described in [model_training_targets.md](model_training_targets.md). The important link is:
+The ML target methodology is described in [MODEL_TRAINING_TARGETS.md](MODEL_TRAINING_TARGETS.md). The important link is:
 
 - **`entry`** in the target pipeline is defined as the **average closing price of the first 3 trading days of the quarter** — the same as backtest when `entry_price_window = 3`.
 - Performance metrics are **from that entry level**: e.g. `(high5 − entry)/entry`, `(close5 − entry)/entry`, and their Sharpe versions. Targets are binary labels from **within-quarter percentile rank** of those metrics (e.g. top 20% or 40%).
@@ -113,13 +113,15 @@ The default of 3 days matches the target definition and is a reasonable balance.
 
 - **Entry price window**: Number of trading days at quarter start over which entry price = mean(close). Default 3.
 - **Implementation**: One average price and one logical entry date (middle of window); TP/SL from the day after the window; entry-phase valuation in the equity curve as in [`simulation.py`](../src/backtest/simulation.py).
-- **Target link**: Same 3-day “entry” as in [model_training_targets.md](model_training_targets.md); backtest/live must use the same convention.
+- **Target link**: Same 3-day “entry” as in [MODEL_TRAINING_TARGETS.md](MODEL_TRAINING_TARGETS.md); backtest/live must use the same convention.
 - **Rationale**: Quarterly signal and quarter-horizon target; 3-day average reduces short-term noise, aligns with the target, and fits the low-frequency, post-result design.
 
 **See also:**
 
-- [model_training_targets.md](model_training_targets.md) — Target creation and the definition of `entry`.
+- [MODEL_TRAINING_TARGETS.md](MODEL_TRAINING_TARGETS.md) — Target creation and the definition of `entry`.
 - [QUARTERLY_RESULTS_AND_SIGNAL_TIMING.md](QUARTERLY_RESULTS_AND_SIGNAL_TIMING.md) — SEBI timing, post-result entry, and entry-window sensitivity as future work.
 - [`src/backtest/tpsl.py`](../src/backtest/tpsl.py) — `_resolve_entry()`, `process_trade()`, and monitoring start.
 - [`src/backtest/simulation.py`](../src/backtest/simulation.py) — Entry-phase valuation in the equity curve.
 - [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md) — `entry_price_window` in the YAML reference.
+
+*Last updated: March 2026*

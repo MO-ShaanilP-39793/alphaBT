@@ -233,12 +233,14 @@ Longer periods = Smoother, less reactive to short-term spikes
 
 5. **ATR adapts to each stock** — A ₹50 stock and a ₹5000 stock get appropriately sized thresholds
 
-6. **ATR changes over time** — Recalculating periodically can improve adaptiveness (see `atr_threshold_analysis.md`)
+6. **ATR changes over time** — Recalculating periodically can improve adaptiveness (see [ATR_POTENTIAL_IMPROVEMENTS.md](ATR_POTENTIAL_IMPROVEMENTS.md))
 
 ---
 
 ## References
 
 - Wilder, J. W. (1978). *New Concepts in Technical Trading Systems*
-- Implementation: `src/dynamic_levels.py` → `calculate_atr()`
+- Implementation: `src/backtest/dynamic_levels.py` → `calculate_atr()`
 - Usage: `src/backtest/tpsl.py` → `calculate_dynamic_thresholds()`
+
+*Last updated: March 2026*

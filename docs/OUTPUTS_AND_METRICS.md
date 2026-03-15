@@ -21,7 +21,7 @@ Complete guide to understanding alphaBT backtest results, reports, and performan
 Every backtest creates a timestamped folder in `backtesting_results/`:
 
 ```
-bacektesting_results/
+backtesting_results/
   run_20260211_094957/          ← Timestamp: YYYYMMDD_HHMMSS
     ├── config_used.yaml        ← Full configuration (traceability)
     ├── backtest_log.txt        ← Complete execution log
@@ -694,4 +694,4 @@ After a backtest, systematically review:
 
 ---
 
-*Last updated: February 2026*
+*Last updated: March 2026*

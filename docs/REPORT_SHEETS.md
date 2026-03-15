@@ -513,3 +513,5 @@ this is a latent bug if the constant is ever changed.
 
 - [OUTPUTS_AND_METRICS.md](OUTPUTS_AND_METRICS.md) — High-level output overview and metric definitions
 - [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md) — Config keys controlling report generation (`generate_report`, `report_sub_periods`)
+
+*Last updated: March 2026*

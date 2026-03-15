@@ -202,3 +202,5 @@ The current static threshold implementation is simpler but doesn't adapt to chan
 - Avoids over-complication
 
 This enhancement would be particularly valuable for the quarterly holding periods used in this strategy, where volatility can change significantly over 2-3 months.
+
+*Last updated: March 2026*

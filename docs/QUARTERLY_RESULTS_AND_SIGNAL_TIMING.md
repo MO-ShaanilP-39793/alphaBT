@@ -59,7 +59,7 @@ This is the strongest version of the objection. The rest of this document examin
 
 ## 3. Target Creation Perspective
 
-The ML target methodology is documented in [model_training_targets.md](model_training_targets.md). The key definitions:
+The ML target methodology is documented in [MODEL_TRAINING_TARGETS.md](MODEL_TRAINING_TARGETS.md). The key definitions:
 
 - **`entry`** = average close of the first 3 trading days of the quarter (matching `entry_price_window`).
 - **Target label** = binary (0/1) based on whether a stock's `(high5 − entry) / entry` or `(close5 − entry) / entry` falls above a percentile threshold (top 20% or top 40%) **within that quarter**.
@@ -187,3 +187,5 @@ The following are concrete, testable questions that could resolve the theoretica
 ---
 
 *This document discusses a design consideration in the alphaBT framework. The question of whether quarterly result signals are "priced in" is ultimately empirical — the discussion above frames the arguments on both sides and identifies concrete experiments to test them.*
+
+*Last updated: March 2026*

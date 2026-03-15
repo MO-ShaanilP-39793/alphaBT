@@ -209,3 +209,5 @@ See also:
 - [`backtest/simulation.py`](../src/backtest/simulation.py) — cash compounding implementation
 - [`config/defaults.py`](../src/config/defaults.py) — global constants
 - [`strategy_config_template.yaml`](../src/strategy_config_template.yaml) — full parameter reference
+
+*Last updated: March 2026*

@@ -29,7 +29,8 @@
 | Document | Description |
 |----------|-------------|
 | [TUNING_GUIDE.md](TUNING_GUIDE.md) | Setting up and running Optuna hyperparameter optimization |
-| [export_config.md](export_config.md) | CLI reference for extracting optimized configs from Optuna studies |
+| [EXIT_STRATEGY_TUNING_METHODOLOGY.md](EXIT_STRATEGY_TUNING_METHODOLOGY.md) | ATR exit tuning — optimization windows, stability analysis, overfitting, and deployment cadence |
+| [EXPORT_CONFIG.md](EXPORT_CONFIG.md) | CLI reference for extracting optimized configs from Optuna studies |
 
 ## Outputs & Reporting
 
@@ -48,9 +49,9 @@
 
 | Document | Description |
 |----------|-------------|
-| [tpsl_module.md](tpsl_module.md) | `backtest/tpsl.py` — trade simulation, TP/SL modes, API reference |
-| [dynamic_levels_reference.md](dynamic_levels_reference.md) | `backtest/dynamic_levels.py` — ATR, pivot points, index functions |
-| [model_training_targets.md](model_training_targets.md) | ML target creation methodology |
+| [TPSL_MODULE.md](TPSL_MODULE.md) | `backtest/tpsl.py` — trade simulation, TP/SL modes, API reference |
+| [DYNAMIC_LEVELS_REFERENCE.md](DYNAMIC_LEVELS_REFERENCE.md) | `backtest/dynamic_levels.py` — ATR, pivot points, index functions |
+| [MODEL_TRAINING_TARGETS.md](MODEL_TRAINING_TARGETS.md) | ML target creation methodology |
 
 ## Discussion Papers
 
@@ -64,9 +65,13 @@
 | Document | Description |
 |----------|-------------|
 | [CASH_APPRECIATION.md](CASH_APPRECIATION.md) | Practitioner's guide to realising the cash appreciation assumption — instruments, operations, and gap analysis |
+| [ATR.md](ATR.md) | Average True Range explained — definition, calculation, and how it drives TP/SL thresholds |
+| [PIVOT_POINTS.md](PIVOT_POINTS.md) | Pivot points explained — support/resistance formulas, examples, and TP/SL usage |
 
 ## Proposals
 
 | Document | Description |
 |----------|-------------|
-| [ATR_potential_improvements.md](ATR_potential_improvements.md) | Trailing stop loss proposal (**not implemented**) |
+| [ATR_POTENTIAL_IMPROVEMENTS.md](ATR_POTENTIAL_IMPROVEMENTS.md) | Trailing stop loss proposal (**not implemented**) |
+
+*Last updated: March 2026*

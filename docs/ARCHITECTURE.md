@@ -311,3 +311,5 @@ See [OUTPUTS_AND_METRICS.md](OUTPUTS_AND_METRICS.md) for details on each output 
 - No relative imports at top level
 - Each package's `__init__.py` re-exports public functions
 - Column rename: `category` → `cat` happens during pipeline (in selection or pre-validation)
+
+*Last updated: March 2026*
