@@ -365,6 +365,39 @@ def _load_from_portfolio_dir(run_dir: str, config: dict) -> DashboardData:
 # Public API
 # ---------------------------------------------------------------------------
 
+def _summarise_strategy(config: dict) -> str:
+    """Build a short human-readable strategy label from config keys."""
+    # Try explicit name first
+    explicit = config.get("strategy_config", config.get("strategy", ""))
+    if isinstance(explicit, str) and explicit:
+        return explicit
+    if isinstance(explicit, dict) and explicit.get("name"):
+        return explicit["name"]
+
+    parts: list[str] = []
+
+    tp = config.get("tp_mode", "")
+    sl = config.get("sl_mode", "")
+    if tp and sl:
+        if tp == sl:
+            parts.append(f"{tp} TP/SL")
+        else:
+            parts.append(f"{tp} TP / {sl} SL")
+    elif tp:
+        parts.append(f"{tp} TP")
+    elif sl:
+        parts.append(f"{sl} SL")
+
+    sel = config.get("selection_type", "")
+    if sel == "top_k":
+        k = (config.get("top_k_config") or {}).get("k", "")
+        parts.append(f"top-{k}" if k else "top_k")
+    elif sel:
+        parts.append(sel)
+
+    return " | ".join(parts) if parts else ""
+
+
 def probe_run_dir(run_dir: str) -> Optional[dict]:
     """Return lightweight metadata for a run directory without loading data.
 
@@ -393,13 +426,7 @@ def probe_run_dir(run_dir: str) -> Optional[dict]:
     else:
         return None
 
-    strategy = config.get("strategy_config", config.get("strategy", ""))
-    if isinstance(strategy, str):
-        strategy_name = strategy
-    elif isinstance(strategy, dict):
-        strategy_name = strategy.get("name", "")
-    else:
-        strategy_name = str(strategy)
+    strategy_name = _summarise_strategy(config)
 
     dir_name = os.path.basename(run_dir)
     mtime = os.path.getmtime(config_path)
