@@ -175,7 +175,7 @@ def _render_sidebar(data: DashboardData):
 
     mode = st.sidebar.radio(
         "Dashboard Mode",
-        ["Per Quarter", "Cross Quarter"],
+        ["Per Quarter", "Since Inception"],
         horizontal=True,
     )
 
@@ -226,7 +226,7 @@ def _render_sidebar(data: DashboardData):
                     help="Leave empty to show all sectors",
                 )
     else:
-        # Cross Quarter mode — show backtest date range summary
+        # Since Inception mode — show backtest date range summary
         daily_pf = data.daily_pf_values
         if "date" in daily_pf.columns and len(daily_pf) > 0:
             dates = pd.to_datetime(daily_pf["date"])
@@ -389,7 +389,7 @@ def _tab_aggregate(data: DashboardData, quarter: int):
 
 # ── Cross-Quarter Tabs ───────────────────────────────────────────────────
 
-@st.cache_data(show_spinner="Computing cross-quarter analytics …")
+@st.cache_data(show_spinner="Computing since-inception analytics …")
 def _cached_cross_quarter_data(raw: dict) -> CrossQuarterData:
     data = _to_dashboard_data(raw)
     return compute_cross_quarter_data(data)
@@ -492,7 +492,7 @@ def main():
 
     mode, quarter, sector_filter = _render_sidebar(data)
 
-    if mode == "Cross Quarter":
+    if mode == "Since Inception":
         xq = _cached_cross_quarter_data(raw)
 
         tab_overview, tab_perf, tab_dynamics = st.tabs([
