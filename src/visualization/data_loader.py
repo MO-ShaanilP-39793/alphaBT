@@ -48,12 +48,18 @@ class CrossQuarterData:
 
     portfolio_metrics: dict
     benchmark_metrics: Optional[dict]
+    periodic_returns: pd.DataFrame
     churn_df: pd.DataFrame
     monthly_returns: pd.DataFrame
     calendar_year_df: pd.DataFrame
     drawdown_series: pd.DataFrame
     index_drawdown_series: Optional[pd.DataFrame]
     cash_by_quarter: Optional[pd.DataFrame]
+    rolling_3m: pd.DataFrame
+    rolling_6m: pd.DataFrame
+    rolling_1y: pd.DataFrame
+    rolling_3y: pd.DataFrame
+    rolling_5y: pd.DataFrame
 
 
 def compute_cross_quarter_data(data: DashboardData) -> CrossQuarterData:
@@ -72,6 +78,8 @@ def compute_cross_quarter_data(data: DashboardData) -> CrossQuarterData:
         compute_churn_analysis,
         compute_calendar_year_performance,
         compute_monthly_returns_from_daily,
+        compute_portfolio_performance,
+        compute_rolling_performance,
     )
 
     daily_pf = data.daily_pf_values.copy()
@@ -128,6 +136,16 @@ def compute_cross_quarter_data(data: DashboardData) -> CrossQuarterData:
     # --- Calendar year returns ---
     calendar_year_df = compute_calendar_year_performance(returns_df, input_frequency="daily")
 
+    # --- Periodic returns (AReturns, ARisk, Ret/Risk, DDown for each column) ---
+    periodic_returns = compute_portfolio_performance(returns_df, input_frequency="daily")
+
+    # --- Rolling returns ---
+    rolling_3m = compute_rolling_performance(returns_df, "daily", 3, "monthly", annualize=False)
+    rolling_6m = compute_rolling_performance(returns_df, "daily", 6, "monthly", annualize=False)
+    rolling_1y = compute_rolling_performance(returns_df, "daily", 1, "yearly", annualize=True)
+    rolling_3y = compute_rolling_performance(returns_df, "daily", 3, "yearly", annualize=True)
+    rolling_5y = compute_rolling_performance(returns_df, "daily", 5, "yearly", annualize=True)
+
     # --- Cash metrics by quarter ---
     cash_by_quarter = None
     cash_result = compute_cash_metrics(daily_pf)
@@ -137,12 +155,18 @@ def compute_cross_quarter_data(data: DashboardData) -> CrossQuarterData:
     return CrossQuarterData(
         portfolio_metrics=portfolio_metrics,
         benchmark_metrics=benchmark_metrics,
+        periodic_returns=periodic_returns,
         churn_df=churn_df,
         monthly_returns=monthly_returns,
         calendar_year_df=calendar_year_df,
         drawdown_series=drawdown_series,
         index_drawdown_series=index_drawdown_series,
         cash_by_quarter=cash_by_quarter,
+        rolling_3m=rolling_3m,
+        rolling_6m=rolling_6m,
+        rolling_1y=rolling_1y,
+        rolling_3y=rolling_3y,
+        rolling_5y=rolling_5y,
     )
 
 

@@ -57,7 +57,7 @@ def equity_curve_chart(
         fig.add_trace(
             go.Scatter(
                 x=idx_dates, y=idx_val, name="Index Fund",
-                line=dict(color="#ff7f0e", width=2, dash="dot"),
+                line=dict(color="#ff7f0e", width=2),
                 hovertemplate="%{x|%b %Y}<br>Index: %{customdata}<extra></extra>",
                 customdata=[_fmt_cr(v) for v in idx_val],
             ),
@@ -104,7 +104,7 @@ def drawdown_chart(
         fig.add_trace(
             go.Scatter(
                 x=idx_dates, y=idx_dd_pct, fill="tozeroy", name="Index",
-                line=dict(color="#ff7f0e", width=1.2, dash="dot"),
+                line=dict(color="#ff7f0e", width=1.2),
                 fillcolor="rgba(255,127,14,0.12)",
                 hovertemplate="%{x|%b %Y}<br>Index DD: %{y:.2f}%<extra></extra>",
             )
@@ -113,8 +113,8 @@ def drawdown_chart(
     fig.add_trace(
         go.Scatter(
             x=dates, y=dd_pct, fill="tozeroy", name="Portfolio",
-            line=dict(color="#d62728", width=1.5),
-            fillcolor="rgba(214,39,40,0.25)",
+            line=dict(color="#1f77b4", width=1.5),
+            fillcolor="rgba(31,119,180,0.25)",
             hovertemplate="%{x|%b %Y}<br>Portfolio DD: %{y:.2f}%<extra></extra>",
         )
     )
@@ -248,6 +248,7 @@ def monthly_returns_heatmap(monthly_returns: pd.DataFrame) -> go.Figure:
     """
     col = "Portfolio" if "Portfolio" in monthly_returns.columns else monthly_returns.columns[0]
     df = monthly_returns[[col]].copy()
+    df[col] = df[col] * 100
     df.index = pd.to_datetime(df.index)
     df["year"] = df.index.year
     df["month"] = df.index.month
@@ -260,7 +261,7 @@ def monthly_returns_heatmap(monthly_returns: pd.DataFrame) -> go.Figure:
             z=pivot.values,
             x=_MONTH_LABELS,
             y=[str(y) for y in pivot.index],
-            colorscale=[[0, "#d62728"], [0.5, "#f7f7f7"], [1, "#2ca02c"]],
+            colorscale=[[0, "#d62728"], [0.5, "#f7f7f7"], [1, "#1f77b4"]],
             zmid=0,
             text=np.where(np.isnan(pivot.values), "", np.vectorize(lambda v: f"{v:+.1f}%")(pivot.values)),
             texttemplate="%{text}",
@@ -445,5 +446,83 @@ def return_distribution_charts(monthly_returns: pd.DataFrame) -> go.Figure:
         height=420, barmode="overlay",
         margin=dict(l=50, r=20, t=50, b=30),
         legend=dict(orientation="h", y=1.08, x=0.5, xanchor="center"),
+    )
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# 9. Rolling returns summary table
+# ---------------------------------------------------------------------------
+
+_ROLLING_STAT_LABELS = {
+    "count": "Obs",
+    "mean": "Mean",
+    "min": "Min",
+    "25%": "25th",
+    "50%": "Median",
+    "75%": "75th",
+    "max": "Max",
+    "<0%P": "P(<0%)",
+    "0-10%P": "P(0-10%)",
+    "10-20%P": "P(10-20%)",
+    ">20%P": "P(>20%)",
+}
+
+
+def rolling_returns_table(rolling_df: pd.DataFrame, title: str) -> go.Figure:
+    """Formatted Plotly table for rolling return statistics.
+
+    ``rolling_df`` is the transposed output of ``compute_rolling_performance``
+    with rows = [Portfolio, Benchmark] and columns = stat names.  Values
+    (except ``count``) are already in percent.
+    """
+    if rolling_df.empty:
+        fig = go.Figure()
+        fig.add_annotation(text=f"Not enough data for {title}", showarrow=False)
+        fig.update_layout(height=200)
+        return fig
+
+    stat_cols = [c for c in rolling_df.columns if c in _ROLLING_STAT_LABELS]
+    headers = [""] + [_ROLLING_STAT_LABELS[c] for c in stat_cols]
+    row_labels = list(rolling_df.index)
+
+    cell_values = [row_labels]
+    for col in stat_cols:
+        formatted = []
+        for v in rolling_df[col]:
+            if pd.isna(v):
+                formatted.append("")
+            elif col == "count":
+                formatted.append(f"{v:.0f}")
+            elif col.endswith("P"):
+                formatted.append(f"{v:.1f}%")
+            else:
+                formatted.append(f"{v:+.2f}%")
+        cell_values.append(formatted)
+
+    fig = go.Figure(
+        go.Table(
+            header=dict(
+                values=headers,
+                fill_color="#f0f2f6",
+                font=dict(size=12, color="#333"),
+                align=["left"] + ["center"] * len(stat_cols),
+                line_color="#ddd",
+            ),
+            cells=dict(
+                values=cell_values,
+                fill_color=[["#fafafa"] * len(row_labels)] * (len(stat_cols) + 1),
+                font=dict(size=12),
+                align=["left"] + ["center"] * len(stat_cols),
+                line_color="#eee",
+                height=30,
+            ),
+        )
+    )
+
+    fig.update_layout(
+        title=title,
+        height=max(160, len(row_labels) * 35 + 100),
+        margin=dict(l=20, r=20, t=50, b=10),
     )
     return fig

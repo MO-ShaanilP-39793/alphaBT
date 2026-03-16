@@ -63,12 +63,9 @@ from visualization.charts.sector_analysis import (
 from visualization.charts.cross_quarter import (
     equity_curve_chart,
     drawdown_chart,
-    qoq_performance_chart,
     calendar_year_chart,
     monthly_returns_heatmap,
-    cash_trend_chart,
-    churn_chart,
-    return_distribution_charts,
+    rolling_returns_table,
 )
 from utils.quarter import get_quarter_dates
 from config.defaults import INITIAL_CAPITAL
@@ -163,11 +160,20 @@ def _render_sidebar(data: DashboardData):
 
     st.sidebar.markdown("---")
 
-    mode = st.sidebar.radio(
-        "Dashboard Mode",
-        ["Per Quarter", "Since Inception"],
-        horizontal=True,
-    )
+    if data.is_live_quarter:
+        mode = "Per Quarter"
+        st.sidebar.radio(
+            "Dashboard Mode",
+            ["Per Quarter"],
+            horizontal=True,
+            disabled=True,
+        )
+    else:
+        mode = st.sidebar.radio(
+            "Dashboard Mode",
+            ["Per Quarter", "Since Inception"],
+            horizontal=True,
+        )
 
     selected = None
     sector_filter = []
@@ -386,43 +392,34 @@ def _cached_cross_quarter_data(raw: dict) -> CrossQuarterData:
 
 
 def _tab_xq_overview(data: DashboardData, xq: CrossQuarterData):
-    """Tab 1: Summary metrics, equity curve, drawdown."""
-    pm = xq.portfolio_metrics
-    bm = xq.benchmark_metrics
+    """Tab 1: Periodic returns summary, equity curve, drawdown."""
+    pr = xq.periodic_returns
 
-    st.subheader("Summary Metrics")
-    cols = st.columns(4)
-    _metrics = [
-        ("CAGR", f"{pm.get('cagr_pct', 0):+.2f}%"),
-        ("Sharpe (ex Rf)", f"{pm.get('sharpe_ratio_ex_Rf', 0):.3f}"),
-        ("Sortino", f"{pm.get('sortino_ratio', 0):.3f}"),
-        ("Max Drawdown", f"{pm.get('max_drawdown_pct', 0):.2f}%"),
-    ]
-    for col, (label, val) in zip(cols, _metrics):
-        col.metric(label, val)
+    st.subheader("Performance Summary")
 
-    cols2 = st.columns(4)
-    _metrics2 = [
-        ("Total Return", f"{pm.get('total_return_pct', 0):+.2f}%"),
-        ("Calmar", f"{pm.get('calmar_ratio', 0):.3f}"),
-        ("VaR 95%", f"{pm.get('var_95_pct', 0):.2f}%"),
-        ("Positive Days", f"{pm.get('positive_days_pct', 0):.1f}%"),
-    ]
-    for col, (label, val) in zip(cols2, _metrics2):
-        col.metric(label, val)
+    if not pr.empty:
+        metric_labels = {
+            "AReturns": ("Ann. Return", "%"),
+            "ARisk": ("Ann. Risk", "%"),
+            "Ret/Risk": ("Sharpe", ""),
+            "DDown": ("Max Drawdown", "%"),
+        }
+        display_keys = ["AReturns", "ARisk", "Ret/Risk", "DDown"]
 
-    if bm is not None:
-        st.markdown("**Benchmark Relative**")
-        cols3 = st.columns(4)
-        _bm_metrics = [
-            ("Alpha", f"{bm.get('alpha_pct', 0):+.2f}%"),
-            ("Beta", f"{bm.get('beta', 0):.3f}"),
-            ("Info Ratio", f"{bm.get('information_ratio', 0):.3f}"),
-            ("Up / Down Capture",
-             f"{bm.get('up_capture_pct', 0):.0f}% / {bm.get('down_capture_pct', 0):.0f}%"),
-        ]
-        for col, (label, val) in zip(cols3, _bm_metrics):
-            col.metric(label, val)
+        _fmt = {
+            "AReturns": lambda v: f"{v:+.2f}%",
+            "ARisk": lambda v: f"{v:.2f}%",
+            "Ret/Risk": lambda v: f"{v:.2f}",
+            "DDown": lambda v: f"{v:+.2f}%",
+        }
+
+        for row_name in pr.index:
+            label = "Portfolio" if row_name == "Portfolio" else row_name
+            cols = st.columns(len(display_keys))
+            for col, key in zip(cols, display_keys):
+                display_label, _ = metric_labels[key]
+                val = pr.loc[row_name, key] if key in pr.columns else 0
+                col.metric(f"{label} — {display_label}", _fmt[key](val))
 
     st.markdown("---")
     st.plotly_chart(
@@ -435,12 +432,8 @@ def _tab_xq_overview(data: DashboardData, xq: CrossQuarterData):
     )
 
 
-def _tab_xq_performance(data: DashboardData, xq: CrossQuarterData):
-    """Tab 2: QoQ bar chart, calendar year performance, monthly heatmap."""
-    st.plotly_chart(
-        qoq_performance_chart(data.quarterly_alpha),
-        width='stretch',
-    )
+def _tab_xq_performance(xq: CrossQuarterData):
+    """Tab 2: Calendar year performance and monthly heatmap."""
     st.plotly_chart(
         calendar_year_chart(xq.calendar_year_df),
         width='stretch',
@@ -451,20 +444,27 @@ def _tab_xq_performance(data: DashboardData, xq: CrossQuarterData):
     )
 
 
-def _tab_xq_dynamics(xq: CrossQuarterData):
-    """Tab 3: Cash trend, churn, return distribution."""
-    st.plotly_chart(
-        cash_trend_chart(xq.cash_by_quarter),
-        width='stretch',
-    )
-    st.plotly_chart(
-        churn_chart(xq.churn_df),
-        width='stretch',
-    )
-    st.plotly_chart(
-        return_distribution_charts(xq.monthly_returns),
-        width='stretch',
-    )
+def _tab_xq_rolling(xq: CrossQuarterData):
+    """Tab 3: Rolling returns statistics for various windows."""
+    rolling_data = [
+        (xq.rolling_3m, "Rolling 3-Month Returns"),
+        (xq.rolling_6m, "Rolling 6-Month Returns"),
+        (xq.rolling_1y, "Rolling 1-Year Returns (Annualized)"),
+        (xq.rolling_3y, "Rolling 3-Year Returns (Annualized)"),
+        (xq.rolling_5y, "Rolling 5-Year Returns (Annualized)"),
+    ]
+
+    any_shown = False
+    for df, title in rolling_data:
+        if df is not None and not df.empty:
+            st.plotly_chart(
+                rolling_returns_table(df, title),
+                width='stretch',
+            )
+            any_shown = True
+
+    if not any_shown:
+        st.info("Not enough data to compute rolling returns for any window.")
 
 
 # ── Render (importable by hub.py) ─────────────────────────────────────────
@@ -483,18 +483,18 @@ def render_dashboard(run_dir: str) -> None:
     if mode == "Since Inception":
         xq = _cached_cross_quarter_data(raw)
 
-        tab_overview, tab_perf, tab_dynamics = st.tabs([
+        tab_overview, tab_rolling, tab_perf = st.tabs([
             "Overview",
+            "Rolling Returns",
             "Performance Analysis",
-            "Portfolio Dynamics",
         ])
 
         with tab_overview:
             _tab_xq_overview(data, xq)
+        with tab_rolling:
+            _tab_xq_rolling(xq)
         with tab_perf:
-            _tab_xq_performance(data, xq)
-        with tab_dynamics:
-            _tab_xq_dynamics(xq)
+            _tab_xq_performance(xq)
 
     else:
         if sector_filter:
