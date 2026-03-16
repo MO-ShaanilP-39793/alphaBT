@@ -88,26 +88,43 @@ def equity_curve_chart(
 # 2. Full-period drawdown chart
 # ---------------------------------------------------------------------------
 
-def drawdown_chart(drawdown_series: pd.DataFrame) -> go.Figure:
-    """Area chart of running drawdown percentage from peak."""
+def drawdown_chart(
+    drawdown_series: pd.DataFrame,
+    index_drawdown_series: Optional[pd.DataFrame] = None,
+) -> go.Figure:
+    """Area chart of running drawdown percentage from peak (portfolio + index)."""
     dates = pd.to_datetime(drawdown_series["date"])
     dd_pct = drawdown_series["drawdown_pct"]
 
     fig = go.Figure()
+
+    if index_drawdown_series is not None and not index_drawdown_series.empty:
+        idx_dates = pd.to_datetime(index_drawdown_series["date"])
+        idx_dd_pct = index_drawdown_series["drawdown_pct"]
+        fig.add_trace(
+            go.Scatter(
+                x=idx_dates, y=idx_dd_pct, fill="tozeroy", name="Index",
+                line=dict(color="#ff7f0e", width=1.2, dash="dot"),
+                fillcolor="rgba(255,127,14,0.12)",
+                hovertemplate="%{x|%b %Y}<br>Index DD: %{y:.2f}%<extra></extra>",
+            )
+        )
+
     fig.add_trace(
         go.Scatter(
-            x=dates, y=dd_pct, fill="tozeroy", name="Drawdown",
+            x=dates, y=dd_pct, fill="tozeroy", name="Portfolio",
             line=dict(color="#d62728", width=1.5),
             fillcolor="rgba(214,39,40,0.25)",
-            hovertemplate="%{x|%b %Y}<br>Drawdown: %{y:.2f}%<extra></extra>",
+            hovertemplate="%{x|%b %Y}<br>Portfolio DD: %{y:.2f}%<extra></extra>",
         )
     )
 
     fig.update_layout(
-        title="Portfolio Drawdown From Peak",
+        title="Drawdown From Peak — Portfolio vs Index",
         yaxis_title="Drawdown (%)", xaxis_title="Date",
         height=380, margin=dict(l=60, r=20, t=50, b=30),
         hovermode="x unified",
+        legend=dict(orientation="h", y=1.02, x=0.5, xanchor="center"),
     )
     return fig
 

@@ -52,6 +52,7 @@ class CrossQuarterData:
     monthly_returns: pd.DataFrame
     calendar_year_df: pd.DataFrame
     drawdown_series: pd.DataFrame
+    index_drawdown_series: Optional[pd.DataFrame]
     cash_by_quarter: Optional[pd.DataFrame]
 
 
@@ -97,6 +98,13 @@ def compute_cross_quarter_data(data: DashboardData) -> CrossQuarterData:
     # --- Drawdown series ---
     drawdown_series = compute_drawdown_series(daily_pf)
 
+    # --- Index drawdown series (optional) ---
+    index_drawdown_series = None
+    if data.comparison_df is not None and "index_fund_value" in data.comparison_df.columns:
+        idx = data.comparison_df[["date", "index_fund_value"]].copy()
+        idx = idx.rename(columns={"index_fund_value": "portfolio_value"})
+        index_drawdown_series = compute_drawdown_series(idx)
+
     # --- Churn analysis ---
     churn_df = compute_churn_analysis(data.trade_results)
 
@@ -133,6 +141,7 @@ def compute_cross_quarter_data(data: DashboardData) -> CrossQuarterData:
         monthly_returns=monthly_returns,
         calendar_year_df=calendar_year_df,
         drawdown_series=drawdown_series,
+        index_drawdown_series=index_drawdown_series,
         cash_by_quarter=cash_by_quarter,
     )
 

@@ -437,11 +437,11 @@ def _tab_xq_overview(data: DashboardData, xq: CrossQuarterData):
     st.markdown("---")
     st.plotly_chart(
         equity_curve_chart(data.daily_pf_values, data.comparison_df),
-        use_container_width=True,
+        width='stretch',
     )
     st.plotly_chart(
-        drawdown_chart(xq.drawdown_series),
-        use_container_width=True,
+        drawdown_chart(xq.drawdown_series, xq.index_drawdown_series),
+        width='stretch',
     )
 
 
@@ -449,15 +449,15 @@ def _tab_xq_performance(data: DashboardData, xq: CrossQuarterData):
     """Tab 2: QoQ bar chart, calendar year performance, monthly heatmap."""
     st.plotly_chart(
         qoq_performance_chart(data.quarterly_alpha),
-        use_container_width=True,
+        width='stretch',
     )
     st.plotly_chart(
         calendar_year_chart(xq.calendar_year_df),
-        use_container_width=True,
+        width='stretch',
     )
     st.plotly_chart(
         monthly_returns_heatmap(xq.monthly_returns),
-        use_container_width=True,
+        width='stretch',
     )
 
 
@@ -465,15 +465,15 @@ def _tab_xq_dynamics(xq: CrossQuarterData):
     """Tab 3: Cash trend, churn, return distribution."""
     st.plotly_chart(
         cash_trend_chart(xq.cash_by_quarter),
-        use_container_width=True,
+        width='stretch',
     )
     st.plotly_chart(
         churn_chart(xq.churn_df),
-        use_container_width=True,
+        width='stretch',
     )
     st.plotly_chart(
         return_distribution_charts(xq.monthly_returns),
-        use_container_width=True,
+        width='stretch',
     )
 
 
