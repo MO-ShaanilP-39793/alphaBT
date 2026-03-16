@@ -365,6 +365,55 @@ def _load_from_portfolio_dir(run_dir: str, config: dict) -> DashboardData:
 # Public API
 # ---------------------------------------------------------------------------
 
+def probe_run_dir(run_dir: str) -> Optional[dict]:
+    """Return lightweight metadata for a run directory without loading data.
+
+    Returns ``None`` if *run_dir* is not a valid run directory (i.e. missing
+    ``config_used.yaml`` and no recognised data files).
+
+    Returned dict keys:
+        path, name, run_type ("backtest" | "portfolio"),
+        strategy (strategy name from config), timestamp (dir mtime as ISO str).
+    """
+    run_dir = str(Path(run_dir).resolve())
+    config_path = os.path.join(run_dir, "config_used.yaml")
+    if not os.path.isfile(config_path):
+        return None
+
+    try:
+        with open(config_path, "r") as fh:
+            config = yaml.safe_load(fh) or {}
+    except Exception:
+        return None
+
+    if _find_report_xlsx(run_dir) is not None:
+        run_type = "backtest"
+    elif os.path.isfile(os.path.join(run_dir, "selection.csv")):
+        run_type = "portfolio"
+    else:
+        return None
+
+    strategy = config.get("strategy_config", config.get("strategy", ""))
+    if isinstance(strategy, str):
+        strategy_name = strategy
+    elif isinstance(strategy, dict):
+        strategy_name = strategy.get("name", "")
+    else:
+        strategy_name = str(strategy)
+
+    dir_name = os.path.basename(run_dir)
+    mtime = os.path.getmtime(config_path)
+    timestamp = pd.Timestamp.fromtimestamp(mtime).isoformat()
+
+    return {
+        "path": run_dir,
+        "name": dir_name,
+        "run_type": run_type,
+        "strategy": strategy_name,
+        "timestamp": timestamp,
+    }
+
+
 def load_from_run_dir(run_dir: str) -> DashboardData:
     """Auto-detect folder type and load dashboard data.
 

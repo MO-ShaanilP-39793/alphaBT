@@ -1,15 +1,14 @@
 """
 alphaBT — Interactive Quarter Drill-Down Dashboard
 
-Launch:
-    cd src
-    streamlit run visualization/dashboard.py -- --run-dir ../backtesting_results/run_XXX
+Launch (single run):
+    streamlit run src/visualization/dashboard.py -- --run-dir backtesting_results/run_XXX
+
+Launch (hub — browse all runs in a directory):
+    streamlit run src/visualization/hub.py
 
 Also works with get_portfolio --with-levels output:
-    streamlit run visualization/dashboard.py -- --run-dir ../selected_stocks_data/strategy_config_XXX
-
-Or from repo root:
-    streamlit run src/visualization/dashboard.py -- --run-dir backtesting_results/run_XXX
+    streamlit run src/visualization/dashboard.py -- --run-dir selected_stocks_data/strategy_config_XXX
 """
 
 from __future__ import annotations
@@ -73,15 +72,6 @@ from visualization.charts.cross_quarter import (
 )
 from utils.quarter import get_quarter_dates
 from config.defaults import INITIAL_CAPITAL
-
-# ── Page config ──────────────────────────────────────────────────────────
-
-st.set_page_config(
-    page_title="alphaBT Dashboard",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
 _CR = 1e7
 
@@ -477,17 +467,15 @@ def _tab_xq_dynamics(xq: CrossQuarterData):
     )
 
 
-# ── Main ─────────────────────────────────────────────────────────────────
+# ── Render (importable by hub.py) ─────────────────────────────────────────
 
-def main():
-    parser = argparse.ArgumentParser(description="alphaBT Dashboard")
-    parser.add_argument(
-        "--run-dir", required=True,
-        help="Path to a backtest run directory or get_portfolio --with-levels output folder",
-    )
-    args, _ = parser.parse_known_args()
+def render_dashboard(run_dir: str) -> None:
+    """Render the full dashboard for a single run directory.
 
-    raw = _load_data(args.run_dir)
+    Callable from both ``main()`` (standalone mode) and ``hub.py``.
+    The caller is responsible for calling ``st.set_page_config`` beforehand.
+    """
+    raw = _load_data(run_dir)
     data = _to_dashboard_data(raw)
 
     mode, quarter, sector_filter = _render_sidebar(data)
@@ -543,6 +531,26 @@ def main():
             _tab_stock_drilldown(data, quarter)
         with tab_agg:
             _tab_aggregate(data, quarter)
+
+
+# ── Main (standalone entry point) ─────────────────────────────────────────
+
+def main():
+    st.set_page_config(
+        page_title="alphaBT Dashboard",
+        page_icon="📊",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+
+    parser = argparse.ArgumentParser(description="alphaBT Dashboard")
+    parser.add_argument(
+        "--run-dir", required=True,
+        help="Path to a backtest run directory or get_portfolio --with-levels output folder",
+    )
+    args, _ = parser.parse_known_args()
+
+    render_dashboard(args.run_dir)
 
 
 if __name__ == "__main__":
