@@ -6,6 +6,7 @@ tuning_logs/
 prospective_strategies/
 selected_stocks_data/
 dashboards/
+dashboard_drawer/
 
 # Python
 __pycache__/
