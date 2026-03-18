@@ -323,6 +323,15 @@ def _tab_stock_drilldown(data: DashboardData, quarter: int):
 
     row = q_trades[q_trades["co_name"] == selected_stock].iloc[0]
 
+    if data.price_data is None:
+        col_info, = st.columns(1)
+        with col_info:
+            info = stock_info_card(row)
+            for label, value in info.items():
+                st.markdown(f"**{label}:** {value}")
+        st.info("Price data is not available — candlestick chart disabled.")
+        return
+
     col_chart, col_info = st.columns([3, 1])
 
     with col_chart:

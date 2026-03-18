@@ -204,12 +204,21 @@ def _load_file(path: str) -> pd.DataFrame:
 
 
 def _load_price_and_index(config: dict, run_dir: str):
-    """Load price and index data from paths stored in config_used.yaml."""
+    """Load price and index data from paths stored in config_used.yaml.
+
+    Returns (price_data, index_data) — either may be None if the
+    underlying files are unavailable (e.g. deployed without the data/ tree).
+    """
     src_dir = str(Path(run_dir).parent.parent / "src")
 
+    price_data = None
     price_path = config.get("price_data_path", "")
-    price_data = _load_file(_resolve_relative_path(price_path, src_dir))
-    price_data["date"] = pd.to_datetime(price_data["date"])
+    if price_path:
+        try:
+            price_data = _load_file(_resolve_relative_path(price_path, src_dir))
+            price_data["date"] = pd.to_datetime(price_data["date"])
+        except Exception:
+            pass
 
     index_data = None
     index_path = config.get("index_data_path", "")
