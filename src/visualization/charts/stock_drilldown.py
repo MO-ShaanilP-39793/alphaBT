@@ -100,7 +100,7 @@ def stock_candlestick_chart(
     fig = make_subplots(
         rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05,
         row_heights=[0.8, 0.2],
-        subplot_titles=(co_name, "Volume"),
+        subplot_titles=(co_name, None),
     )
 
     fig.add_trace(
@@ -215,6 +215,7 @@ def stock_candlestick_chart(
         hovermode="x unified",
     )
     fig.update_yaxes(title_text="Price (₹)", row=1, col=1)
+    fig.update_yaxes(title_text="Volume", row=2, col=1)
 
     return fig
 
