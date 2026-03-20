@@ -7,7 +7,7 @@ full interactive dashboard.
 Launch:
     streamlit run src/visualization/hub.py
 
-By default scans ./dashboards for run directories.  Override with:
+By default scans ./deployed_dash for run directories.  Override with:
     streamlit run src/visualization/hub.py -- --dashboards-dir path/to/runs
 """
 
@@ -40,7 +40,7 @@ st.set_page_config(
 
 # ── Arg parsing ───────────────────────────────────────────────────────────
 
-_DEFAULT_DASHBOARDS_DIR = os.path.join(os.getcwd(), "dashboards")
+_DEFAULT_DASHBOARDS_DIR = os.path.join(os.getcwd(), "deployed_dash")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -48,7 +48,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dashboards-dir",
         default=_DEFAULT_DASHBOARDS_DIR,
-        help="Root directory to scan for run sub-directories (default: ./dashboards)",
+        help="Root directory to scan for run sub-directories (default: ./deployed_dash)",
     )
     args, _ = parser.parse_known_args()
     return args
