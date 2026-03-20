@@ -1,0 +1,75 @@
+input_data_path: ../data/inference_data_entry_to_peak_high/low_risk_2017.02-2025.11_with_sector.csv
+price_data_path: ../data/price_data/price_data_updated_Feb_26.parquet
+index_data_path: ../data/index_data/index_data_updated_Feb_26.csv
+first_quarter: null
+last_quarter: null
+category_scheme: volatility
+selection_dimension: volatility
+weighting_dimension: volatility
+tpsl_category_dimension: selection
+run_stock_selection: true
+selection_type: top_k
+category_counts:
+- 10
+- 10
+- 10
+category_weights:
+- 0.2
+- 0.4
+- 0.4
+sort_by: risk_adjusted_probability
+min_prob_threshold: 0.45
+top_k_config:
+  k: 25
+  weighting_scheme: equal
+  category_caps: null
+category_based_selection_weighting_scheme: use_category_weights
+tp_enabled: true
+sl_enabled: true
+tp_mode: atr
+sl_mode: atr
+tiered_config:
+  tp_pct:
+    high_volatility: 0.1
+    medium_volatility: 0.05
+    low_volatility: 0.02
+  sl_pct:
+    high_volatility: 0.1
+    medium_volatility: 0.1
+    low_volatility: 0.1
+  default_tp_pct: 0.05
+  default_sl_pct: 0.05
+atr_config:
+  period: 91
+  tp_multiplier: 1.64
+  sl_multiplier: 3.37
+  quarter_overrides: null
+pivot_config:
+  lookback_days: 68
+  tp_level: R2
+  sl_level: S2
+flat_config:
+  tp_pct: 0.05
+  sl_pct: 0.05
+entry_price_window: 3
+cash_appreciation_rate: null
+index_exit:
+  regime_filter:
+    enabled: false
+    ma_period: 20
+    exit_threshold: -0.02
+  vol_adjustment:
+    enabled: true
+    lookback: 226
+    high_vol_threshold: 0.26
+    low_vol_threshold: 0.076
+    high_vol_multiplier: 2.43
+    low_vol_multiplier: 0.32
+generate_report: true
+launch_dashboard: false
+report_sub_periods:
+- - 2020
+  - 2022
+- - 2023
+  - 2025
+validate_input_data: null

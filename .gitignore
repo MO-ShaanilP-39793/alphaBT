@@ -1,5 +1,13 @@
-# Folders
-data/
+# Folders — data/ (track only listed assets; parent dir cannot be fully ignored)
+data/*
+!data/price_data/
+!data/index_data/
+data/price_data/*
+!data/price_data/price_data_updated_Feb_26.parquet
+!data/price_data/price_data_updated_March_12.parquet
+data/index_data/*
+!data/index_data/index_data_updated_Feb_26.csv
+!data/index_data/NIFTY500TRI_updated_March_13.csv
 backtesting_results/
 optimization_results/
 tuning_logs/
@@ -7,7 +15,7 @@ prospective_strategies/
 selected_stocks_data/
 dashboards/
 dashboard_drawer/
-deployed_dash/
+# deployed_dash/
 
 # Python
 __pycache__/
@@ -74,6 +82,6 @@ src/strategy_grid_config.yaml
 *.log
 
 # Data
-*.csv
-*.parquet
-*.xlsx
+# *.csv
+# *.parquet
+# *.xlsx
